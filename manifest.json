@@ -1,0 +1,55 @@
+{
+  "manifest_version": 1,
+  "name": "TT Planner Dashboard",
+  "description": "Displays TT plan intervals with live Zwift data inside Sauce4Zwift.",
+  "author": "ZwiftGopher",
+  "website_url": "https://zwiftgopher.com/",
+  "version": "0.3.0",
+  "content_js": [],
+  "content_css": [],
+  "web_root": "pages",
+  "windows": [
+    {
+      "file": "pages/tt-dashboard.html",
+      "id": "tt-interval-dashboard",
+      "name": "TT Planner Dashboard",
+      "description": "Gauge-style TT pacing overlay with offset & bias controls.",
+      "overlay": true,
+      "frame": false,
+      "default_bounds": {
+        "width": 400,
+        "height": 400,
+        "x": -520,
+        "y": 120
+      }
+    },
+    {
+      "file": "pages/tt-field-dashboard.html",
+      "id": "tt-field-dashboard",
+      "name": "TT Field Dashboard",
+      "description": "Compact leaderboard showing rival TT riders sorted by average speed.",
+      "overlay": true,
+      "frame": false,
+      "default_bounds": {
+        "width": 400,
+        "height": 500,
+        "x": -520,
+        "y": 560
+      }
+    },
+    {
+      "file": "pages/tt-interval-list.html",
+      "id": "tt-interval-list",
+      "name": "TT Interval List",
+      "description": "Scrollable list of TT plan intervals with sticky summary + W′bal projection.",
+      "overlay": true,
+      "frame": false,
+      "default_bounds": {
+        "width": 400,
+        "height": 500,
+        "x": -100,
+        "y": 120
+      }
+    }
+  ]
+}

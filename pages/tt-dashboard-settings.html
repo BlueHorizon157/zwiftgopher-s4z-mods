@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html class="settings-page" tabindex="0" data-settings-key="tt-interval-dashboard-settings">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+    <title>TT Dashboard Settings</title>
+    <link rel="icon" href="/pages/images/favicon.png">
+    <link rel="stylesheet" href="/pages/css/common.css">
+    <style>
+      #settings {
+        padding: 0 1rem 1rem;
+      }
+      #options {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+      #options label {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+      #options label key {
+        flex: 1;
+        font-weight: 600;
+      }
+      #options input[type="range"] {
+        flex: 1;
+      }
+      #options input[type="number"] {
+        width: 4rem;
+      }
+      .hint {
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.6);
+        margin-top: 0.6rem;
+      }
+    </style>
+    <script type="module">
+      import {main} from './src/tt-dashboard-settings.mjs';
+      main();
+    </script>
+  </head>
+  <body>
+    <div id="titlebar">
+      <header>
+        <div class="logo"><img src="/pages/images/icon128.png" alt="Sauce icon"></div>
+        <div class="title">TT Dashboard Settings</div>
+        <div class="filler"></div>
+        <div class="buttons">
+          <div class="button close electron-only" title="Close window"><ms>close</ms></div>
+        </div>
+      </header>
+    </div>
+    <div id="settings">
+      <form id="options" class="section">
+        <div class="title">Display &amp; Debug</div>
+        <label>
+          <key>Target band width:</key>
+          <input id="band-range" type="range" min="1" max="75" step="1">
+          <input id="band-number" type="number" min="1" max="75" step="1">
+        </label>
+        <label>
+          <key>Show debug log:</key>
+          <input id="debug-checkbox" type="checkbox">
+        </label>
+      </form>
+      <p class="hint">Changes are saved instantly and take effect in the dashboard.</p>
+    </div>
+  </body>
+</html>

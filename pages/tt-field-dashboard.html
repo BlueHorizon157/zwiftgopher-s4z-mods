@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en" tabindex="0" data-settings-key="tt-field-dashboard-settings">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TT Field Dashboard</title>
+    <link rel="stylesheet" href="/pages/css/common.css">
+    <link rel="stylesheet" href="./css/tt-field-dashboard.css" />
+    <script type="module">
+      import {main} from './src/tt-field-dashboard.mjs';
+      main();
+    </script>
+  </head>
+  <body class="transparent-bg">
+    <div id="titlebar">
+      <header>
+        <div class="logo"><img src="/pages/images/icon128.png" alt="Sauce icon"></div>
+        <div class="title">TT Field Dashboard</div>
+        <div class="filler"></div>
+        <div class="buttons">
+          <a class="button open-settings"
+             href="tt-field-dashboard-settings.html?width=360&height=200&child-window"
+             target="tt-field-dashboard-settings"
+             title="Open field dashboard settings"><ms>settings</ms></a>
+         <div class="button close electron-only" title="Close window"><ms>close</ms></div>
+        </div>
+      </header>
+    </div>
+    <div class="window">
+      <div class="table-wrapper">
+        <table id="rider-table">
+          <thead>
+            <tr>
+              <th scope="col">Rider</th>
+              <th scope="col">Av. kph</th>
+              <th scope="col">Dist</th>
+              <th scope="col">Δs</th>
+              <th scope="col">w/kg</th>
+              <th scope="col">IF%</th>
+              <th scope="col">W'bal</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="empty-state">
+        <p>Waiting for event riders…</p>
+        <p class="hint">Join an event or ensure Sauce is monitoring your TT to populate this list.</p>
+      </div>
+    </div>
+  </body>
+</html>

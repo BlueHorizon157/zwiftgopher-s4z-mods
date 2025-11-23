@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en" tabindex="0" data-settings-key="tt-interval-dashboard-settings">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+    <title>TT Interval Dashboard</title>
+    <link rel="stylesheet" href="/pages/css/common.css">
+  <link rel="stylesheet" href="./css/tt-dashboard.css">
+    <link rel="icon" href="/pages/images/favicon.png">
+    <script type="module">
+      import {main} from './src/tt-dashboard.mjs';
+      main();
+    </script>
+  </head>
+  <body class="transparent-bg">
+    <div id="titlebar">
+      <header>
+        <div class="logo"><img src="/pages/images/icon128.png" alt="Sauce icon"></div>
+        <div class="title">TT Interval Dashboard</div>
+        <div class="filler"></div>
+        <div class="buttons">
+          <a class="button open-settings"
+             href="tt-dashboard-settings.html?width=360&height=280&child-window"
+             target="tt-dashboard-settings"
+             title="Open TT dashboard settings"><ms>settings</ms></a>
+          <div class="button close electron-only" title="Close window"><ms>close</ms></div>
+        </div>
+      </header>
+    </div>
+    <div class="tt-wrapper compact">
+      <p class="event-summary" id="event-summary" hidden>
+        <span id="summary-route">Awaiting plan</span>
+        <span class="dot">•</span>
+        <span id="summary-event-distance">— km event</span>
+        <span class="distance-flag" id="distance-flag" hidden>plan Δ 0.0 km</span>
+      </p>
+      <div class="finish-glance" id="finish-glance" hidden>
+        <div class="glance-card">
+          <span class="label">Time Remaining</span>
+          <span class="value" id="finish-countdown-value">—:—</span>
+          <span class="delta-chip" id="finish-countdown-delta" hidden>Δ +0:00</span>
+        </div>
+        <div class="glance-card">
+          <span class="label">KM remaining</span>
+          <span class="value" id="finish-remaining-value">— km</span>
+          <span class="subvalue" id="finish-progress-value">Progress — km</span>
+        </div>
+      </div>
+      <p class="spectate-banner" id="spectate-banner" hidden>
+        Fan view detected — metrics paused
+      </p>
+
+      <section class="gauge-panel">
+        <div class="gauge-shell">
+          <svg viewBox="0 0 260 260" role="presentation" aria-hidden="true">
+            <path class="gauge-track" d="M 34.74 75 A 110 110 0 1 1 34.74 185"></path>
+            <path class="gauge-wbal-track" d="" id="gauge-wbal-track"></path>
+            <path class="gauge-wbal-negative" d="" id="gauge-wbal-negative"></path>
+            <path class="gauge-wbal-positive" d="" id="gauge-wbal-positive"></path>
+            <path class="gauge-current" d="" id="gauge-current"></path>
+            <path class="gauge-target" d="" id="gauge-target"></path>
+          </svg>
+          <div class="gauge-center">
+            <!-- <p class="gauge-label">Power</p> -->
+            <p class="gauge-value" id="gauge-power">—</p>
+            <p class="gauge-sub" id="gauge-wkg">— w/kg</p>
+            <p class="gauge-target-label">Target <span id="gauge-target-power">— W</span></p>
+            <p class="gauge-avg-label small-text">Avg <span id="gauge-avg-power">— W</span></p>
+          </div>
+          <div class="gauge-metric gauge-cadence" id="gauge-cadence">— rpm</div>
+          <div class="gauge-metric gauge-gradient" aria-label="Gradient">
+            <ms aria-hidden="true">landscape</ms>
+            <span id="gauge-gradient">—%</span>
+          </div>
+        </div>
+        <div class="upcoming-info">
+          <p id="next-label">Next</p>
+          <div class="upcoming-top">
+            <p class="upcoming-power" id="upcoming-target-power">— W</p>
+            <p class="upcoming-desc" id="upcoming-target-desc">load a plan</p>
+          </div>
+          <div class="upcoming-bottom">
+            <p class="upcoming-range" id="upcoming-target-range">— km</p>
+            <p class="upcoming-duration" id="upcoming-target-duration">—</p>
+          </div>
+        </div>
+        <div class="control-panel">
+          <div class="control-chip">
+            <div class="control-head">
+              <span>Offset</span>
+              <br>
+              <span class="value" id="offset-value">0 m</span>
+            </div>
+            <div class="offset-buttons">
+              <button data-action="offset-up" aria-label="Offset up">+</button>
+              <button data-action="offset-down" aria-label="Offset down">-</button>
+            </div>
+          </div>
+          <div class="control-chip">
+            <div class="control-head">
+              <span>Bias</span>
+              <span class="value" id="bias-value">100%</span>
+            </div>
+            <div class="bias-buttons">
+              <button data-action="bias-down" aria-label="Bias down">-</button>
+              <button data-action="bias-up" aria-label="Bias up">+</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <p class="distance-chip">Next in <span id="distance-to-next">— km</span></p>
+      <div class="plan-input">
+        <input type="text" id="plan-code" maxlength="6" placeholder="Plan code">
+        <button id="fetch-plan">Load</button>
+        <button id="refresh-plan" title="Reset all interval tracking data">🔄</button>
+      </div>
+
+      <section class="log" id="debug-log"></section>
+    </div>
+  </body>
+</html>

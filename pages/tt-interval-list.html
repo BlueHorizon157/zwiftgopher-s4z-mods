@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en" tabindex="0" data-settings-key="tt-interval-list-settings">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TT Interval List</title>
+    <link rel="stylesheet" href="/pages/css/common.css">
+    <link rel="stylesheet" href="./css/tt-interval-list.css" />
+    <script type="module">
+      import {main} from './src/tt-interval-list.mjs';
+      main();
+    </script>
+  </head>
+  <body class="transparent-bg">
+    <div id="titlebar">
+      <header>
+        <div class="logo"><img src="/pages/images/icon128.png" alt="Sauce icon"></div>
+        <div class="title">TT Interval List</div>
+        <div class="filler"></div>
+        <div class="buttons">
+         <div class="button close electron-only" title="Close window"><ms>close</ms></div>
+        </div>
+      </header>
+    </div>
+    <div class="window">
+      <header class="plan-summary">
+        <div class="summary-header">
+          <div>
+            <p class="plan-route" id="plan-route">Load a TT plan</p>
+            <p class="plan-distance" id="plan-distance">No plan distance</p>
+          </div>
+          <div class="offset-pill" id="offset-pill">Offset +0 m</div>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-item">
+            <label>Predicted time</label>
+            <span id="summary-duration">—</span>
+          </div>
+          <div class="summary-item">
+            <label>FTP</label>
+            <span id="summary-ftp">—</span>
+          </div>
+          <div class="summary-item">
+            <label>W′</label>
+            <span id="summary-wprime">—</span>
+          </div>
+          <div class="summary-item">
+            <label>Target avg power</label>
+            <span id="summary-avg-power">—</span>
+          </div>
+          <div class="summary-item">
+            <label>Target IF</label>
+            <span id="summary-if">—</span>
+          </div>
+        </div>
+      </header>
+      <p class="spectate-banner" id="spectate-banner" hidden>
+        Fan view detected — metrics paused
+      </p>
+      <div class="table-container">
+        <div class="table-header">
+          <div class="header-cell col-index">Int #</div>
+          <div class="header-cell col-distance">Start km</div>
+          <div class="header-cell col-distance">End km</div>
+          <div class="header-cell col-power">Power</div>
+          <div class="header-cell col-duration">Duration</div>
+          <div class="header-cell col-grade">Grade</div>
+          <div class="header-cell col-wbal">W′bal</div>
+        </div>
+        <div class="table-wrapper">
+          <table id="interval-table">
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <p class="empty-state" id="empty-state">Waiting for a TT plan…</p>
+    </div>
+  </body>
+</html>

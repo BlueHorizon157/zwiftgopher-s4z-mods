@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html class="settings-page" tabindex="0" data-settings-key="tt-field-dashboard-settings">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+    <title>TT Field Dashboard Settings</title>
+    <link rel="icon" href="/pages/images/favicon.png">
+    <link rel="stylesheet" href="/pages/css/common.css">
+    <style>
+      #settings {
+        padding: 0 1rem 1rem;
+      }
+      #options {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+      #options label {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+      #options label key {
+        flex: 1;
+        font-weight: 600;
+      }
+      .hint {
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.6);
+        margin-top: 0.6rem;
+      }
+    </style>
+    <script type="module">
+      import {main} from './src/tt-field-dashboard-settings.mjs';
+      main();
+    </script>
+  </head>
+  <body>
+    <div id="titlebar">
+      <header>
+        <div class="logo"><img src="/pages/images/icon128.png" alt="Sauce icon"></div>
+        <div class="title">TT Field Dashboard Settings</div>
+        <div class="filler"></div>
+        <div class="buttons">
+          <div class="button close electron-only" title="Close window"><ms>close</ms></div>
+        </div>
+      </header>
+    </div>
+    <div id="settings">
+      <form id="options" class="section">
+        <div class="title">Display Options</div>
+        <label>
+          <key>Show all riders (unfiltered):</key>
+          <input id="show-all-riders" type="checkbox">
+        </label>
+      </form>
+      <p class="hint">By default, only riders in your pen/category are shown. Enable this to see the entire field.</p>
+    </div>
+  </body>
+</html>
