@@ -60,7 +60,9 @@ ZIP_PATH="$DIST_DIR/$ZIP_NAME"
 
 echo "Creating zip $ZIP_PATH from tag $TAG"
 # Use git archive to ensure only tracked files are included and paths are deterministic
-git archive --format=zip --prefix="${REPO_NAME}-${TAG}/" -o "$ZIP_PATH" "$TAG"
+# Keep a stable top-level folder inside the zip so users can drop the contents
+# directly into SauceMods without renaming. The zip file name still contains the tag.
+git archive --format=zip --prefix="${REPO_NAME}/" -o "$ZIP_PATH" "$TAG"
 
 echo "Created $ZIP_PATH"
 
