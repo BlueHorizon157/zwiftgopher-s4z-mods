@@ -82,6 +82,9 @@ const state = {
     eventCompleteTimestamp: null,
     eventHasStarted: false,
     lastEventDistanceMeters: null,
+    lastAthleteId: null,
+    lastEventSubgroupId: null,
+    lastCourseId: null,
 };
 
 const els = {};
@@ -196,6 +199,10 @@ function initControls() {
         console.log('[REFRESH] Manual reset triggered - clearing all interval tracking data');
         resetIntervalTracking();
         resetAutoOffset();
+        // Also reset event detection state to allow for fresh detection
+        state.eventHasStarted = false;
+        state.lastEventDistanceMeters = null;
+        // Note: We keep lastAthleteId/lastEventSubgroupId/lastCourseId to still detect rider/event swaps
         updateDashboard();
         // Signal to interval list to clear its stats too
         persistSharedState({clearStatsTimestamp: Date.now()});
@@ -429,7 +436,10 @@ function updateFinishCountdown() {
     // Show remaining time (critical for pacing decisions)
     if (els.finishCountdownValue) {
         if (hasPrediction) {
-            els.finishCountdownValue.textContent = formatCountdown(prediction.remainingSeconds);
+            // Calculate live countdown: remaining seconds minus elapsed since prediction was made
+            const elapsedSincePrediction = prediction.updatedAt ? (Date.now() - prediction.updatedAt) / 1000 : 0;
+            const liveRemaining = Math.max(prediction.remainingSeconds - elapsedSincePrediction, 0);
+            els.finishCountdownValue.textContent = formatCountdown(liveRemaining);
         } else if (Number.isFinite(state.planDurationSeconds)) {
             els.finishCountdownValue.textContent = formatCountdown(state.planDurationSeconds);
         } else {
@@ -511,19 +521,25 @@ function handleWatching(watching) {
     if (state.plan && state.intervals.length) {
         const previousIndex = state.currentIndex;
         const nextIndex = findCurrentInterval(planDistanceKm);
+        const intervalChanged = previousIndex !== nextIndex;
         updateIntervalTracking(previousIndex, nextIndex, power, planDistanceKm);
         state.currentIndex = nextIndex;
-        const prediction = computeFinishPrediction();
-        if (prediction) {
-            state.finishPrediction = {
-                ...prediction,
-                publisherId: INSTANCE_ID,
-                updatedAt: Date.now(),
-            };
-            shareFinishPrediction(state.finishPrediction);
-        } else {
-            state.finishPrediction = null;
-            shareFinishPrediction(null);
+        
+        // Only update prediction when interval changes (not every telemetry tick)
+        // This prevents the predicted time from counting down in real-time
+        if (intervalChanged) {
+            const prediction = computeFinishPrediction();
+            if (prediction) {
+                state.finishPrediction = {
+                    ...prediction,
+                    publisherId: INSTANCE_ID,
+                    updatedAt: Date.now(),
+                };
+                shareFinishPrediction(state.finishPrediction);
+            } else {
+                state.finishPrediction = null;
+                shareFinishPrediction(null);
+            }
         }
     }
 
@@ -541,10 +557,12 @@ function handleWatching(watching) {
         : null;
     const distanceKm = actualDistanceMeters / 1000;
     const eventLine = `Event: prog=${formatNumber(eventProgressKm, 2)} km, remain=${formatNumber(eventRemainingKm, 2)} km, total=${formatNumber(eventDistanceKm, 2)} km, auto=${formatMeters(Math.round(state.autoOffset ?? 0))}`;
+    const trackingLine = `Tracking: athleteId=${state.lastAthleteId}, eventSubgroupId=${state.lastEventSubgroupId}, courseId=${state.lastCourseId}, started=${state.eventHasStarted}, lastDist=${formatNumber(state.lastEventDistanceMeters, 0)}m`;
     const message = [
         `Watching: p=${formatNumber(power, 0)}, avg=${formatNumber(avgPower, 0)}, cad=${formatNumber(cadence, 0)}, hr=${formatNumber(hr, 0)}, speed=${formatNumber(speed, 1)} km/h, grad=${formatNumber(gradient ? gradient * 100 : null, 1)}%, elapsed=${formatNumber(elapsedTime, 0)} s, dist=${formatNumber(distanceKm, 2)} km, ftp=${formatMetric(state.metrics.ftp, state.metrics.ftpSource, 'W')}, wBal=${formatMetric(state.metrics.wBal, null, 'J')} (${state.metrics.wBalPercent != null ? state.metrics.wBalPercent.toFixed(0) + '%' : '—'}), wPrime=${formatMetric(state.metrics.wPrime, state.metrics.wPrimeSource, 'J')}`,
         planWBalLine,
         eventLine,
+        trackingLine,
     ].join('\n');
     log(message);
 
@@ -947,35 +965,97 @@ function deriveEventTelemetry(watching) {
 }
 
 function detectAndHandleEventStart(watching) {
+    if (!watching) {
+        return;
+    }
+    
     const info = deriveEventTelemetry(watching);
     const currentDistance = info.progressMeters ?? 0;
+    const currentAthleteId = watching.athleteId;
+    const currentEventSubgroupId = watching.state?.eventSubgroupId;
+    const currentCourseId = watching.state?.courseId;
     
-    // Initialize lastEventDistanceMeters if null
+    // DETECTION 1: Athlete ID changed (rider swap)
+    if (state.lastAthleteId !== null && 
+        currentAthleteId !== state.lastAthleteId) {
+        console.log('[ATHLETE CHANGE] Rider swapped from', state.lastAthleteId, 'to', currentAthleteId);
+        resetIntervalTracking();
+        state.eventHasStarted = false;
+        state.lastEventDistanceMeters = null;
+        state.lastAthleteId = currentAthleteId;
+        state.lastEventSubgroupId = currentEventSubgroupId;
+        state.lastCourseId = currentCourseId;
+        return;
+    }
+    
+    // DETECTION 2: Event subgroup changed (new event joined)
+    if (state.lastEventSubgroupId !== null && 
+        currentEventSubgroupId !== state.lastEventSubgroupId &&
+        currentEventSubgroupId !== undefined) {
+        console.log('[EVENT CHANGE] New event joined. SubgroupId changed from', 
+                    state.lastEventSubgroupId, 'to', currentEventSubgroupId);
+        resetIntervalTracking();
+        state.eventHasStarted = false;
+        state.lastEventDistanceMeters = null;
+        state.lastEventSubgroupId = currentEventSubgroupId;
+        state.lastAthleteId = currentAthleteId;
+        state.lastCourseId = currentCourseId;
+        return;
+    }
+    
+    // DETECTION 3: Course changed (world/route change)
+    if (state.lastCourseId !== null && 
+        currentCourseId !== state.lastCourseId &&
+        currentCourseId !== undefined) {
+        console.log('[COURSE CHANGE] Course changed from', 
+                    state.lastCourseId, 'to', currentCourseId);
+        resetIntervalTracking();
+        state.eventHasStarted = false;
+        state.lastEventDistanceMeters = null;
+        state.lastCourseId = currentCourseId;
+        state.lastAthleteId = currentAthleteId;
+        state.lastEventSubgroupId = currentEventSubgroupId;
+        return;
+    }
+    
+    // Initialize tracking values on first run
+    if (state.lastAthleteId === null) {
+        state.lastAthleteId = currentAthleteId;
+    }
+    if (state.lastEventSubgroupId === null) {
+        state.lastEventSubgroupId = currentEventSubgroupId;
+    }
+    if (state.lastCourseId === null) {
+        state.lastCourseId = currentCourseId;
+    }
     if (state.lastEventDistanceMeters === null && Number.isFinite(currentDistance)) {
         state.lastEventDistanceMeters = currentDistance;
     }
     
-    // Detect distance reset to zero (warmup ends, event resets)
+    // DETECTION 4: Distance reset to zero (warmup ends, event resets)
     if (Number.isFinite(state.lastEventDistanceMeters) &&
         state.lastEventDistanceMeters > 0 && 
         currentDistance === 0) {
         
-        console.log('[EVENT RESET] Distance dropped to 0 (warmup ended). Resetting tracking. Previous distance:', state.lastEventDistanceMeters);
+        console.log('[EVENT RESET] Distance dropped to 0 (warmup ended). Resetting tracking. Previous distance:', 
+                    state.lastEventDistanceMeters);
         resetIntervalTracking();
         state.eventHasStarted = false;
         state.lastEventDistanceMeters = 0;
-        return; // Exit early to avoid double-processing
+        return;
     }
     
-    // Detect event start: distance changes from 0 to > 0
+    // DETECTION 5: Event start - distance changes from 0 to > 0 (crossing start line)
     if (!state.eventHasStarted && 
         Number.isFinite(state.lastEventDistanceMeters) &&
         state.lastEventDistanceMeters === 0 && 
         Number.isFinite(currentDistance) && 
         currentDistance > 0) {
         
-        console.log('[EVENT START] Detected! Distance changed from 0 to', currentDistance);
+        console.log('[EVENT START] Rider crossed start line! Distance changed from 0 to', currentDistance, 'meters');
         state.eventHasStarted = true;
+        // Ensure we start fresh from this point
+        resetIntervalTracking();
     }
     
     // Track distance for next comparison
