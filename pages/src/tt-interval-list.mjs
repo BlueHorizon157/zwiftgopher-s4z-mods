@@ -292,6 +292,9 @@ function setPlan(plan, {share=true, resetHome=true}={}) {
     if (share) {
         persistSharedState({plan: state.plan});
     }
+    // Force render immediately when plan is loaded
+    render();
+    renderTable({force: true});
 }
 
 function clearPlan({share=true, resetHome=true}={}) {
@@ -345,7 +348,6 @@ function recomputeIntervals() {
     const offsetKm = getEffectiveOffsetKm();
     const ftp = getResolvedFtp();
     const wPrime = getResolvedWPrime();
-    let wbal = Number.isFinite(wPrime) ? wPrime : null;
     const bias = getEffectivePowerBias();
 
     state.enrichedIntervals = state.intervals.map((interval, idx) => {
@@ -369,13 +371,12 @@ function recomputeIntervals() {
             ? actualAvgPower - targetPower
             : null;
 
-        const wbalPower = Number.isFinite(targetPower) ? targetPower : planPower;
-        if (wbal != null && Number.isFinite(wbalPower) && Number.isFinite(durationSec) && Number.isFinite(ftp)) {
-            wbal = advancePlanWbal(wbal, ftp, wPrime, wbalPower, durationSec);
-        }
+        // Use W'bal from plan data directly instead of recalculating
+        const planWbalKj = Number(interval?.wbal_kj);
+        const wbalJ = Number.isFinite(planWbalKj) ? planWbalKj * 1000 : null;
 
-        const wbalPercent = Number.isFinite(wPrime) && wPrime > 0 && Number.isFinite(wbal)
-            ? clamp((wbal / wPrime) * 100, -100, 200)
+        const wbalPercent = Number.isFinite(wPrime) && wPrime > 0 && Number.isFinite(wbalJ)
+            ? clamp((wbalJ / wPrime) * 100, -100, 200)
             : null;
 
         return {
@@ -387,7 +388,7 @@ function recomputeIntervals() {
             biasApplied: hasActivePowerBias(stats, bias),
             durationText: interval?.duration_text ?? formatDuration(durationSec),
             grade: Number(interval?.avg_gradient),
-            wbalJ: Number.isFinite(wbal) ? wbal : null,
+            wbalJ: wbalJ,
             wbalPercent,
             planStartKm: startPlan,
             planEndKm: endPlan,
@@ -483,6 +484,16 @@ function handleWatching(watching) {
         : NaN;
     const previousIndex = state.currentIndex;
     const nextIndex = findCurrentInterval(planDistanceKm);
+    
+    // Fallback: If we're on first interval and event has started but no tracking yet, initialize everything
+    const firstIntervalFallback = checkFirstIntervalFallback(nextIndex, eventProgressKm, distanceMeters);
+    if (firstIntervalFallback) {
+        console.log('[INTERVAL LIST] First interval fallback triggered - initializing tracking mid-interval');
+        resetAllStatsAndPredictions();
+        const now = Date.now();
+        beginIntervalStats(nextIndex, {timestamp: now, planDistanceKm});
+    }
+    
     const intervalChanged = previousIndex !== nextIndex;
     updateIntervalTracking(previousIndex, nextIndex, power, planDistanceKm);
     state.currentIndex = nextIndex;
@@ -971,6 +982,49 @@ function finalizeIntervalStats(index, {timestamp, power}) {
     }
     advanceIntervalStats(index, {timestamp, power});
     stats.finished = true;
+}
+
+function checkFirstIntervalFallback(currentIndex, eventProgressKm, distanceMeters) {
+    // Only apply fallback for first interval (index 0)
+    if (currentIndex !== 0) {
+        return false;
+    }
+    
+    // Check if we already have tracking initialized for first interval
+    const firstIntervalStats = state.intervalStats[0];
+    if (firstIntervalStats && (firstIntervalStats.startMs || firstIntervalStats.elapsedMs > 0)) {
+        return false;
+    }
+    
+    // Check if event has started (progress > 0)
+    const hasEventProgress = Number.isFinite(eventProgressKm) && eventProgressKm > 0;
+    const hasDistance = Number.isFinite(distanceMeters) && distanceMeters > 0;
+    
+    if (!hasEventProgress && !hasDistance) {
+        return false;
+    }
+    
+    // Fallback triggered: we're on first interval, event has started, but no tracking initialized
+    return true;
+}
+
+function resetAllStatsAndPredictions() {
+    // Clear all interval stats
+    state.intervalStats = [];
+    
+    // Reset current index (will be set again immediately after)
+    state.currentIndex = -1;
+    
+    // Clear finish prediction by signaling a reset
+    const resetSignal = Date.now();
+    persistSharedState({
+        finishPrediction: null,
+        clearStatsTimestamp: resetSignal,
+    });
+    state.lastClearStatsTimestamp = resetSignal;
+    
+    // Force recompute and render
+    recomputeIntervals();
 }
 
 function findCurrentInterval(distanceKm) {
