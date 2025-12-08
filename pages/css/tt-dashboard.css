@@ -102,6 +102,7 @@ body {
 .gauge-track {
   stroke: var(--gauge-track);
   stroke-width: 16px;
+  stroke-linecap: butt !important;
 }
 
 .gauge-target {
@@ -113,6 +114,7 @@ body {
   stroke: var(--gauge-current);
   opacity: 0.8;
   stroke-width: 16px;
+  stroke-linecap: butt !important;
 }
 
 .gauge-wbal-track {
