@@ -148,10 +148,17 @@ body {
   background: rgba(255, 255, 255, 0.08);
 }
 
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.summary-item span > span {
+  display: inline-block;
+  min-width: 2.5em;
 }
 
 .summary-item label {
@@ -166,6 +173,18 @@ body {
 .summary-item span {
   font-size: 1.5rem;
   font-weight: 600;
+}
+
+.summary-item .stat-line {
+  display: block;
+}
+
+.summary-item .subtext {
+  display: block;
+  margin-top: 1px;
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: var(--text-faint);
 }
 
 @media (min-width: 420px) {

@@ -281,6 +281,8 @@ function persistSharedState(patch) {
 function setPlan(plan, {share=true, resetHome=true}={}) {
     state.plan = plan ?? null;
     state.intervals = Array.isArray(plan?.intervals) ? plan.intervals : [];
+    // Reset power bias to match the online planner defaults when loading a new plan locally
+    state.powerBias = 1;
     resetEventCompletionState();
     computePlanSummaryStats();
     recomputeIntervals();
@@ -290,7 +292,7 @@ function setPlan(plan, {share=true, resetHome=true}={}) {
     state.intervalStats = [];
     state.planSignature = computePlanSignature(state.plan);
     if (share) {
-        persistSharedState({plan: state.plan});
+        persistSharedState({plan: state.plan, powerBias: state.powerBias});
     }
     // Force render immediately when plan is loaded
     render();
@@ -387,6 +389,7 @@ function recomputeIntervals() {
             planPower,
             biasApplied: hasActivePowerBias(stats, bias),
             durationText: interval?.duration_text ?? formatDuration(durationSec),
+            durationSec,
             grade: Number(interval?.avg_gradient),
             wbalJ: wbalJ,
             wbalPercent,
@@ -553,15 +556,22 @@ function updateSummary() {
     updateSummaryDuration();
     const ftp = getResolvedFtp();
     const wPrime = getResolvedWPrime();
-    els.summaryFtp.textContent = formatMetric(ftp, 'W', state.metrics.ftpSource ?? (Number.isFinite(getPlanFtp()) ? 'plan' : null));
-    els.summaryWprime.textContent = formatMetric(wPrime != null ? wPrime / 1000 : null, 'kJ', state.metrics.wPrimeSource ?? (Number.isFinite(getPlanWPrime()) ? 'plan' : null));
+    els.summaryFtp.textContent = formatMetric(ftp, 'W');
+    els.summaryWprime.textContent = formatMetric(wPrime != null ? wPrime / 1000 : null, 'kJ');
 
-    const avgPower = Number.isFinite(state.planAvgPower) ? state.planAvgPower : null;
+    const planTargetPower = Number.isFinite(state.planAvgPower) ? state.planAvgPower : null;
+    const expectedPowerStats = computeExpectedPowerSoFar();
+    const expectedAvgPower = Number.isFinite(expectedPowerStats.expectedAvgPower) ? expectedPowerStats.expectedAvgPower : null;
     const actualPowerStats = computeActualPowerStats();
     const actualAvgPower = Number.isFinite(actualPowerStats.avgPower) ? actualPowerStats.avgPower : null;
-    els.summaryAvgPower.textContent = formatTargetActualMetric(avgPower, actualAvgPower, {unit: 'W'});
 
-    const ifValue = computeIfValue(avgPower, ftp);
+    const expectedText = formatPower(expectedAvgPower);
+    const actualText = formatPower(actualAvgPower);
+    const planLine = planTargetPower != null ? `Plan target ${formatPower(planTargetPower)}` : 'Plan target —';
+    els.summaryAvgPower.innerHTML = `<span class="stat-line">${expectedText} exp / ${actualText} act</span><span class="subtext">${planLine}</span>`;
+
+    // Fix: Use planTargetPower for IF calculation
+    const ifValue = computeIfValue(planTargetPower, ftp);
     const actualIf = computeActualIf(actualAvgPower, ftp);
     els.summaryIf.textContent = formatTargetActualMetric(ifValue, actualIf, {
         formatter: value => value.toFixed(2),
@@ -1181,6 +1191,7 @@ function formatPower(value) {
 }
 
 function renderPowerCell(interval) {
+    // Show interval target power, and if finished (and not partial), delta vs actual interval avg
     const base = formatPower(interval.power);
     const showDelta = interval.intervalStats?.finished && !interval.intervalStats?.partial;
     if (!showDelta) {
@@ -1281,6 +1292,53 @@ function computeActualPowerStats() {
         };
     }
     return {avgPower: null, totalSeconds: 0};
+}
+
+function computeExpectedPowerSoFar() {
+    let totalWork = 0;
+    let totalTimeSeconds = 0;
+
+    for (const interval of state.enrichedIntervals) {
+        const stats = interval?.intervalStats;
+        const targetPower = Number(interval?.power);
+        const timeMs = Number(stats?.timeIntegral);
+        if (!Number.isFinite(targetPower) || !Number.isFinite(timeMs) || timeMs <= 0) {
+            continue;
+        }
+        const timeSeconds = timeMs / 1000;
+        totalWork += targetPower * timeSeconds;
+        totalTimeSeconds += timeSeconds;
+    }
+
+    if (totalTimeSeconds > 0) {
+        return {
+            expectedAvgPower: totalWork / totalTimeSeconds,
+            totalSeconds: totalTimeSeconds,
+        };
+    }
+    return {expectedAvgPower: null, totalSeconds: 0};
+}
+
+function computeActualCumulativeAverage(upToIntervalIndex) {
+    // Compute actual average power up to and including the specified interval
+    let totalPowerIntegral = 0;
+    let totalTimeMs = 0;
+    
+    for (let i = 0; i <= upToIntervalIndex && i < state.intervalStats.length; i++) {
+        const stats = state.intervalStats[i];
+        if (!stats) {
+            continue;
+        }
+        if (Number.isFinite(stats.powerIntegral) && Number.isFinite(stats.timeIntegral)) {
+            totalPowerIntegral += stats.powerIntegral;
+            totalTimeMs += stats.timeIntegral;
+        }
+    }
+    
+    if (totalTimeMs > 0) {
+        return totalPowerIntegral / totalTimeMs;
+    }
+    return null;
 }
 
 function computeActualIf(actualAvgPower, ftp) {

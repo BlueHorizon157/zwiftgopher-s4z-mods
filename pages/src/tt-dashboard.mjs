@@ -251,6 +251,8 @@ function setPlan(plan, {share=true, resetHome=true}={}) {
     state.planAvgPower = durationStats.totalSeconds > 0 && durationStats.totalWork > 0
         ? durationStats.totalWork / durationStats.totalSeconds
         : null;
+    // Reset user-adjustable pacing knobs to match the online planner defaults
+    state.powerBias = 1.0;
     resetMetrics();
     resetPlanWBal();
     resetAutoOffset();
@@ -260,9 +262,13 @@ function setPlan(plan, {share=true, resetHome=true}={}) {
     if (resetHome) {
         clearHomeAthleteId();
     }
+    updateBiasLabel();
     updateDashboard();
     if (share) {
-        persistSharedState({plan: state.plan});
+        persistSharedState({plan: state.plan, powerBias: state.powerBias});
+        // Signal to interval-list to clear its stats when a new plan is loaded
+        // This ensures a clean slate for interval tracking
+        persistSharedState({clearStatsTimestamp: Date.now()});
     }
 }
 
@@ -522,7 +528,11 @@ function handleWatching(watching) {
         const previousIndex = state.currentIndex;
         const nextIndex = findCurrentInterval(planDistanceKm);
         const intervalChanged = previousIndex !== nextIndex;
-        updateIntervalTracking(previousIndex, nextIndex, power, planDistanceKm);
+        // Only track interval stats after the event has started (i.e., after crossing the start line)
+        // This prevents warmup power data from being included in interval averages
+        if (state.eventHasStarted) {
+            updateIntervalTracking(previousIndex, nextIndex, power, planDistanceKm);
+        }
         state.currentIndex = nextIndex;
         
         // Only update prediction when interval changes (not every telemetry tick)
@@ -1484,8 +1494,10 @@ function updatePlanWBalFromTelemetry(power) {
         return;
     }
 
-    const cp = Number.isFinite(state.metrics.ftp) ? state.metrics.ftp : null;
-    let wPrime = Number.isFinite(state.metrics.wPrime) ? state.metrics.wPrime : null;
+    // Use the plan's FTP as CP for W'bal calculation to match plan design assumptions
+    // This ensures that hitting the plan's target power will decrease W'bal at the intended rate
+    const cp = Number.isFinite(getPlanFtp()) ? getPlanFtp() : null;
+    let wPrime = Number.isFinite(getPlanWPrime()) ? getPlanWPrime() : null;
     if (!Number.isFinite(wPrime) || wPrime <= 0) {
         wPrime = DEFAULT_WPRIME;
     }
