@@ -89,6 +89,10 @@ const state = {
     // Exponential moving average state for display power
     displayPowerEma: null,
     displayPowerEmaTsMs: null,
+    // BroadcastChannel for ephemeral shared predictions
+    predictionChan: null,
+    predictionChanName: null,
+    lastPredictionBroadcastMs: 0,
     lastAthleteId: null,
     lastEventSubgroupId: null,
     lastCourseId: null,
@@ -1394,6 +1398,8 @@ function setHomeAthleteId(athleteId, {share = true, persist = true} = {}) {
     if (persist) {
         persistState();
     }
+    // Refresh prediction channel scope when athlete changes
+    initPredictionChannel();
     if (share) {
         persistSharedState({homeAthleteId: normalized});
     }
@@ -1516,6 +1522,7 @@ export function main() {
     common.subscribe('athlete/watching', handleWatching);
     queryEls();
     loadPersistedState();
+    initPredictionChannel();
     initSharedStateSync();
     initControls();
     initPlanBridge();
@@ -1551,6 +1558,44 @@ function initSharedStateSync() {
         }
         applySharedStatePayload(ev.data.value || {});
     });
+}
+
+function getPredictionChannelName() {
+    const athleteId = normalizeAthleteId(state.homeAthleteId) || 'global';
+    return `tt:predictions:${athleteId}`;
+}
+
+function initPredictionChannel() {
+    try {
+        const name = getPredictionChannelName();
+        if (state.predictionChan && state.predictionChanName === name) {
+            return; // Already set up
+        }
+        if (state.predictionChan) {
+            try { state.predictionChan.close(); } catch (_) {}
+        }
+        const chan = new BroadcastChannel(name);
+        chan.onmessage = ev => {
+            const msg = ev?.data;
+            if (!msg || msg.type !== 'finish-prediction') return;
+            if (msg.instanceId === INSTANCE_ID) return; // ignore self
+            const athleteId = normalizeAthleteId(msg.athleteId);
+            const targetId = normalizeAthleteId(state.homeAthleteId);
+            if (athleteId && targetId && athleteId !== targetId) return;
+            if (msg.payload == null) {
+                state.finishPrediction = null;
+            } else {
+                const incoming = normalizeFinishPrediction(msg.payload);
+                if (!incoming) return;
+                state.finishPrediction = incoming;
+            }
+            updateFinishCountdown();
+        };
+        state.predictionChan = chan;
+        state.predictionChanName = name;
+    } catch (err) {
+        console.warn('[initPredictionChannel] Failed:', err);
+    }
 }
 
 function applySharedStatePayload(payload) {
@@ -2129,20 +2174,38 @@ function shareFinishPrediction(prediction) {
         return;
     }
     state.sharedPredictionSignature = signature;
-    if (!prediction) {
-        persistSharedState({finishPrediction: null});
-        return;
+    // BroadcastChannel-based sharing for ephemeral prediction state.
+    // Avoid using storage to prevent grid resets.
+    try {
+        initPredictionChannel();
+        if (!state.predictionChan) {
+            return;
+        }
+        const now = Date.now();
+        // De-dupe is already handled via signature; optional light rate cap
+        if (now - (state.lastPredictionBroadcastMs || 0) < 400) {
+            // too soon; skip burst
+        }
+        const msg = {
+            type: 'finish-prediction',
+            instanceId: INSTANCE_ID,
+            athleteId: normalizeAthleteId(state.homeAthleteId),
+            signature,
+            payload: prediction ? {
+                predictedSeconds: prediction.predictedSeconds,
+                predictedText: prediction.predictedText,
+                deltaSeconds: prediction.deltaSeconds,
+                remainingSeconds: prediction.remainingSeconds,
+                elapsedSeconds: prediction.elapsedSeconds,
+                updatedAt: now,
+                publisherId: INSTANCE_ID,
+            } : null,
+        };
+        state.predictionChan.postMessage(msg);
+        state.lastPredictionBroadcastMs = now;
+    } catch (err) {
+        console.warn('[shareFinishPrediction] Broadcast failed:', err);
     }
-    const payload = {
-        predictedSeconds: prediction.predictedSeconds,
-        predictedText: prediction.predictedText,
-        deltaSeconds: prediction.deltaSeconds,
-        remainingSeconds: prediction.remainingSeconds,
-        elapsedSeconds: prediction.elapsedSeconds,
-        updatedAt: Date.now(),
-        publisherId: INSTANCE_ID,
-    };
-    persistSharedState({finishPrediction: payload});
 }
 
 function sumDurations(intervals) {

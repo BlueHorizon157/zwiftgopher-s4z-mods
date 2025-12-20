@@ -51,6 +51,9 @@ const state = {
     lastTablePlanSignature: null,
     lastRenderedActiveIndex: -1,
     lastClearStatsTimestamp: null,
+    // BroadcastChannel for ephemeral shared predictions
+    predictionChan: null,
+    predictionChanName: null,
 };
 
 let autoCenterResumeTimer = null;
@@ -63,6 +66,7 @@ export function main() {
     initManualScrollPause();
     initTitlebarReveal();
     loadSharedState();
+    initPredictionChannel();
     initStorageSync();
     initPlanBridge();
     common.subscribe('athlete/watching', handleWatching);
@@ -1425,6 +1429,8 @@ function setHomeAthleteId(athleteId, {share = true} = {}) {
         return false;
     }
     state.homeAthleteId = normalized;
+    // Refresh prediction channel scope when athlete changes
+    initPredictionChannel();
     if (share) {
         persistSharedState({homeAthleteId: normalized});
     }
@@ -1533,6 +1539,47 @@ function normalizeSignatureNumber(value) {
         return null;
     }
     return Number(num.toFixed(3));
+}
+
+function getPredictionChannelName() {
+    const athleteId = normalizeAthleteId(state.homeAthleteId) || 'global';
+    return `tt:predictions:${athleteId}`;
+}
+
+function initPredictionChannel() {
+    try {
+        const name = getPredictionChannelName();
+        if (state.predictionChan && state.predictionChanName === name) {
+            return; // Already set up
+        }
+        if (state.predictionChan) {
+            try { state.predictionChan.close(); } catch (_) {}
+        }
+        const chan = new BroadcastChannel(name);
+        chan.onmessage = ev => {
+            const msg = ev?.data;
+            if (!msg || msg.type !== 'finish-prediction') return;
+            const athleteId = normalizeAthleteId(msg.athleteId);
+            const targetId = normalizeAthleteId(state.homeAthleteId);
+            if (athleteId && targetId && athleteId !== targetId) return;
+            // Store in persisted so existing display logic works
+            if (msg.payload == null) {
+                if (state.persisted) {
+                    state.persisted.finishPrediction = null;
+                }
+            } else {
+                if (!state.persisted) {
+                    state.persisted = {};
+                }
+                state.persisted.finishPrediction = msg.payload;
+            }
+            render();
+        };
+        state.predictionChan = chan;
+        state.predictionChanName = name;
+    } catch (err) {
+        console.warn('[initPredictionChannel] Failed:', err);
+    }
 }
 
 function clamp(value, min, max) {
