@@ -163,23 +163,9 @@ function applyStoragePayload(payload) {
             needsRender = true;
         }
     }
-    const hasSpectate = payload && (
-        Object.prototype.hasOwnProperty.call(payload, 'spectateActive')
-        || Object.prototype.hasOwnProperty.call(payload, 'spectateReason')
-        || Object.prototype.hasOwnProperty.call(payload, 'spectatingAthleteId')
-    );
-    if (hasSpectate) {
-        const prevActive = state.spectateActive;
-        const prevReason = state.spectateReason;
-        const prevAthleteId = state.spectatingAthleteId;
-        state.spectateActive = Boolean(payload.spectateActive);
-        state.spectateReason = payload.spectateReason ?? null;
-        state.spectatingAthleteId = normalizeAthleteId(payload.spectatingAthleteId);
-        if (prevActive !== state.spectateActive || prevReason !== state.spectateReason || prevAthleteId !== state.spectatingAthleteId) {
-            updateSpectateBanner();
-            needsRender = true;
-        }
-    }
+    // Note: Spectate state (spectateActive, spectateReason, spectatingAthleteId) is no longer
+    // synced via storage - each dashboard independently determines if it's spectating based on
+    // comparing homeAthleteId with the currently watched athlete ID
 
     // Check if finishPrediction changed - if so, render but don't recompute
     if (payload && Object.prototype.hasOwnProperty.call(payload, 'finishPrediction')) {
@@ -1480,11 +1466,8 @@ function setSpectateState(active, reason = null, {spectatingAthleteId = null} = 
     state.spectateReason = normalizedReason;
     state.spectatingAthleteId = normalizedSpectatingId;
     updateSpectateBanner();
-    persistSharedState({
-        spectateActive: state.spectateActive,
-        spectateReason: state.spectateReason,
-        spectatingAthleteId: state.spectatingAthleteId,
-    });
+    // Note: Spectate state is no longer shared via storage - each dashboard determines
+    // its own spectate state based on homeAthleteId vs current watching athlete
 }
 
 function updateSpectateBanner() {

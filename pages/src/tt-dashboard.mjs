@@ -535,15 +535,23 @@ function handleWatching(watching) {
         }
         state.currentIndex = nextIndex;
         
-        // Only update prediction when interval changes (not every telemetry tick)
-        // This prevents the predicted time from counting down in real-time
-        if (intervalChanged) {
+        // Keep finish prediction fresh: recompute on interval change or if stale/empty
+        const nowMs = Date.now();
+        const existingPrediction = state.finishPrediction;
+        const elapsedSincePrediction = existingPrediction?.updatedAt
+            ? (nowMs - existingPrediction.updatedAt) / 1000
+            : null;
+        const predictionStale = !existingPrediction
+            || !Number.isFinite(existingPrediction.remainingSeconds)
+            || (elapsedSincePrediction != null && elapsedSincePrediction > 5)
+            || (existingPrediction && existingPrediction.remainingSeconds <= 0);
+        if (intervalChanged || predictionStale) {
             const prediction = computeFinishPrediction();
             if (prediction) {
                 state.finishPrediction = {
                     ...prediction,
                     publisherId: INSTANCE_ID,
-                    updatedAt: Date.now(),
+                    updatedAt: nowMs,
                 };
                 shareFinishPrediction(state.finishPrediction);
             } else {
@@ -984,6 +992,7 @@ function detectAndHandleEventStart(watching) {
     const currentAthleteId = watching.athleteId;
     const currentEventSubgroupId = watching.state?.eventSubgroupId;
     const currentCourseId = watching.state?.courseId;
+    const currentTime = watching.state?.time; // Key: state.time indicates race started
     
     // DETECTION 1: Athlete ID changed (rider swap)
     if (state.lastAthleteId !== null && 
@@ -998,7 +1007,20 @@ function detectAndHandleEventStart(watching) {
         return;
     }
     
-    // DETECTION 2: Event subgroup changed (new event joined)
+    // DETECTION 2: Entering event pen (eventSubgroupId appears)
+    // This happens when you join an event and enter the pen
+    if (currentEventSubgroupId && !state.lastEventSubgroupId) {
+        console.log('[PEN ENTRY] Entered event pen. EventSubgroupId:', currentEventSubgroupId);
+        resetIntervalTracking();
+        state.eventHasStarted = false;
+        state.lastEventDistanceMeters = null;
+        state.lastEventSubgroupId = currentEventSubgroupId;
+        state.lastAthleteId = currentAthleteId;
+        state.lastCourseId = currentCourseId;
+        return;
+    }
+    
+    // DETECTION 3: Event subgroup changed (new event joined)
     if (state.lastEventSubgroupId !== null && 
         currentEventSubgroupId !== state.lastEventSubgroupId &&
         currentEventSubgroupId !== undefined) {
@@ -1013,7 +1035,17 @@ function detectAndHandleEventStart(watching) {
         return;
     }
     
-    // DETECTION 3: Course changed (world/route change)
+    // DETECTION 4: Leaving event (eventSubgroupId disappears)
+    if (state.lastEventSubgroupId && !currentEventSubgroupId) {
+        console.log('[PEN EXIT] Left event. EventSubgroupId was:', state.lastEventSubgroupId);
+        resetIntervalTracking();
+        state.eventHasStarted = false;
+        state.lastEventDistanceMeters = null;
+        state.lastEventSubgroupId = null;
+        return;
+    }
+    
+    // DETECTION 5: Course changed (world/route change)
     if (state.lastCourseId !== null && 
         currentCourseId !== state.lastCourseId &&
         currentCourseId !== undefined) {
@@ -1042,7 +1074,7 @@ function detectAndHandleEventStart(watching) {
         state.lastEventDistanceMeters = currentDistance;
     }
     
-    // DETECTION 4: Distance reset to zero (warmup ends, event resets)
+    // DETECTION 6: Distance reset to zero (warmup ends, event resets)
     if (Number.isFinite(state.lastEventDistanceMeters) &&
         state.lastEventDistanceMeters > 0 && 
         currentDistance === 0) {
@@ -1055,17 +1087,59 @@ function detectAndHandleEventStart(watching) {
         return;
     }
     
-    // DETECTION 5: Event start - distance changes from 0 to > 0 (crossing start line)
+    // DETECTION 7: Crossing start line - PRIMARY METHOD using state.time
+    // state.time is 0/null/undefined in the pen, then becomes > 0 when crossing start line
+    if (currentEventSubgroupId && !state.eventHasStarted && currentTime && currentTime > 0) {
+        console.log('[START LINE CROSSED] state.time became truthy:', currentTime, 'seconds. Event has started!');
+        state.eventHasStarted = true;
+        resetIntervalTracking();
+        
+        // CRITICAL: Initialize the first interval immediately to ensure complete tracking
+        // This creates the initial marker so the whole first interval is tracked from the start
+        if (state.plan && state.intervals.length > 0) {
+            const distanceMeters = info.progressMeters ?? 0;
+            const distanceKm = distanceMeters / 1000;
+            const planDistanceKm = resolvePlanDistanceKm(distanceKm);
+            const firstIntervalIndex = findCurrentInterval(planDistanceKm);
+            
+            if (firstIntervalIndex >= 0) {
+                console.log('[START LINE CROSSED] Creating initial marker for interval', firstIntervalIndex);
+                beginIntervalStats(firstIntervalIndex, {
+                    timestamp: Date.now(),
+                    planDistanceKm
+                });
+            }
+        }
+        // Note: Don't return here - let distance tracking continue below
+    }
+    
+    // DETECTION 8: Crossing start line - FALLBACK METHOD using distance
+    // Only use this if state.time detection didn't trigger
     if (!state.eventHasStarted && 
         Number.isFinite(state.lastEventDistanceMeters) &&
         state.lastEventDistanceMeters === 0 && 
         Number.isFinite(currentDistance) && 
         currentDistance > 0) {
         
-        console.log('[EVENT START] Rider crossed start line! Distance changed from 0 to', currentDistance, 'meters');
+        console.log('[START LINE CROSSED - FALLBACK] Distance changed from 0 to', currentDistance, 'meters');
         state.eventHasStarted = true;
-        // Ensure we start fresh from this point
         resetIntervalTracking();
+        
+        // CRITICAL: Initialize the first interval immediately to ensure complete tracking
+        if (state.plan && state.intervals.length > 0) {
+            const distanceMeters = info.progressMeters ?? 0;
+            const distanceKm = distanceMeters / 1000;
+            const planDistanceKm = resolvePlanDistanceKm(distanceKm);
+            const firstIntervalIndex = findCurrentInterval(planDistanceKm);
+            
+            if (firstIntervalIndex >= 0) {
+                console.log('[START LINE CROSSED - FALLBACK] Creating initial marker for interval', firstIntervalIndex);
+                beginIntervalStats(firstIntervalIndex, {
+                    timestamp: Date.now(),
+                    planDistanceKm
+                });
+            }
+        }
     }
     
     // Track distance for next comparison
@@ -1661,10 +1735,21 @@ function updateIntervalTracking(previousIndex, nextIndex, power, planDistanceKm)
         return;
     }
     const now = Date.now();
+    
+    // Handle interval transitions
     if (previousIndex !== nextIndex) {
         finalizeIntervalStats(previousIndex, {timestamp: now, power});
         beginIntervalStats(nextIndex, {timestamp: now, planDistanceKm});
+    } else if (nextIndex >= 0) {
+        // Even if index didn't change, ensure the interval has been initialized
+        // This handles cases where we might have missed the initial creation
+        const existing = state.intervalStats[nextIndex];
+        if (!existing) {
+            console.log('[INTERVAL INIT] Creating missing interval stats for index', nextIndex);
+            beginIntervalStats(nextIndex, {timestamp: now, planDistanceKm});
+        }
     }
+    
     advanceIntervalStats(nextIndex, {timestamp: now, power});
 }
 
@@ -1746,6 +1831,17 @@ function finalizeIntervalStats(index, {timestamp, power}) {
     }
 }
 
+// Fallback: approximate race elapsed time by summing interval durations when telemetry time is missing
+function getApproxElapsedSeconds() {
+    let totalMs = 0;
+    for (const stats of state.intervalStats) {
+        if (stats && Number.isFinite(stats.elapsedMs)) {
+            totalMs += stats.elapsedMs;
+        }
+    }
+    return totalMs > 0 ? totalMs / 1000 : null;
+}
+
 function computeFinishPrediction() {
     if (!state.plan || !Number.isFinite(state.planDurationSeconds)) {
         return null;
@@ -1766,19 +1862,23 @@ function computeFinishPrediction() {
     // If no completed intervals yet, use basic plan-based prediction
     if (baselineIndex < 0) {
         const currentElapsed = Number(state.watching?.state?.time);
-        if (!Number.isFinite(currentElapsed) || currentElapsed <= 0) {
+        const approxElapsed = getApproxElapsedSeconds();
+        const elapsedForPrediction = Number.isFinite(currentElapsed) && currentElapsed > 0
+            ? currentElapsed
+            : (Number.isFinite(approxElapsed) && approxElapsed > 0 ? approxElapsed : null);
+        if (!Number.isFinite(elapsedForPrediction) || elapsedForPrediction <= 0) {
             return null; // No elapsed time data
         }
         
         // Simple prediction: plan duration - elapsed time
-        const remainingPlan = Math.max(state.planDurationSeconds - currentElapsed, 0);
+        const remainingPlan = Math.max(state.planDurationSeconds - elapsedForPrediction, 0);
         
         return {
             predictedSeconds: state.planDurationSeconds,
             predictedText: formatCountdown(state.planDurationSeconds),
             deltaSeconds: 0, // No delta yet - on plan
             remainingDeltaSeconds: 0,
-            elapsedSeconds: currentElapsed,
+            elapsedSeconds: elapsedForPrediction,
             remainingSeconds: remainingPlan,
             remainingPlanSeconds: remainingPlan,
             pacingRatio: 1, // Assume on-pace
@@ -1786,7 +1886,12 @@ function computeFinishPrediction() {
     }
     
     if (baselineElapsed <= 0) {
-        return null; // No baseline available
+        const approxElapsed = getApproxElapsedSeconds();
+        if (Number.isFinite(approxElapsed) && approxElapsed > 0) {
+            baselineElapsed = approxElapsed;
+        } else {
+            return null; // No baseline available
+        }
     }
     
     // Calculate remaining plan duration from baseline forward
