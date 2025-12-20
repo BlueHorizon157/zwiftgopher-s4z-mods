@@ -1017,7 +1017,27 @@ function getScaledDistanceKm(value) {
     if (!Number.isFinite(planTotal) || planTotal <= 0 || !Number.isFinite(eventTotal) || eventTotal <= 0) {
         return value;
     }
-    const scale = eventTotal / planTotal;
+
+    // Target finish should account for any manual/auto offset so the last interval ends at course end
+    const targetTotal = eventTotal + getEffectiveOffsetKm();
+    const delta = targetTotal - planTotal;
+    const lastInterval = state.intervals.at(-1);
+    const lastStart = Number(lastInterval?.start_km);
+
+    // If the discrepancy is small (<1 km), adjust only the tail (last interval) to avoid warping all earlier segments
+    if (Math.abs(delta) < 1 && Number.isFinite(lastStart)) {
+        if (value >= lastStart) {
+            // Shift values in the final interval to land exactly on the event finish (with offset)
+            const adjusted = value + delta;
+            // Guard against inverted interval in extreme edge cases
+            const minEnd = lastStart + 0.01; // 10 m minimum length
+            return Math.max(adjusted, minEnd);
+        }
+        return value;
+    }
+
+    // For larger discrepancies, fall back to proportional scaling of the entire plan
+    const scale = targetTotal / planTotal;
     return value * scale;
 }
 
