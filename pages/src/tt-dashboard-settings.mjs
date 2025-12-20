@@ -16,9 +16,11 @@ export function main() {
     const bandRange = document.getElementById('band-range');
     const bandNumber = document.getElementById('band-number');
     const debugCheckbox = document.getElementById('debug-checkbox');
+    const smoothingSelect = document.getElementById('smoothing-window');
+    const smoothingValue = document.getElementById('smoothing-value');
 
     cachedState = getPersistedState();
-    applyStateToInputs(cachedState, {bandRange, bandNumber, debugCheckbox});
+    applyStateToInputs(cachedState, {bandRange, bandNumber, debugCheckbox, smoothingSelect, smoothingValue});
 
     const updateBandWidth = value => {
         const normalized = normalizeBandWidth(value);
@@ -37,13 +39,25 @@ export function main() {
         savePartial({showDebug: debugCheckbox.checked});
     });
 
+    const updateSmoothing = value => {
+        const val = normalizeSmoothing(value);
+        if (!Number.isFinite(val)) {
+            return;
+        }
+        smoothingSelect.value = String(val);
+        smoothingValue.textContent = val > 0 ? `${val.toFixed(1)}s` : 'Off';
+        savePartial({powerSmoothingSec: val});
+    };
+
+    smoothingSelect.addEventListener('change', () => updateSmoothing(parseFloat(smoothingSelect.value)));
+
     if (common.storage) {
         common.storage.addEventListener('update', ev => {
             if (!ev?.data || ev.data.key !== STORAGE_KEY) {
                 return;
             }
             cachedState = ev.data.value || {};
-            applyStateToInputs(cachedState, {bandRange, bandNumber, debugCheckbox});
+            applyStateToInputs(cachedState, {bandRange, bandNumber, debugCheckbox, smoothingSelect, smoothingValue});
         });
     }
 }
@@ -65,11 +79,25 @@ function applyStateToInputs(state, elements) {
     elements.bandRange.value = width;
     elements.bandNumber.value = width;
     elements.debugCheckbox.checked = !!state?.showDebug;
+    const smoothing = normalizeSmoothing(state?.powerSmoothingSec);
+    if (elements.smoothingSelect) {
+        elements.smoothingSelect.value = String(smoothing);
+    }
+    if (elements.smoothingValue) {
+        elements.smoothingValue.textContent = smoothing > 0 ? `${smoothing.toFixed(1)}s` : 'Off';
+    }
 }
 
 function normalizeBandWidth(value) {
     const width = Number.isFinite(value) ? value : DEFAULT_TARGET_BAND_WIDTH;
     return clamp(width, TARGET_BAND_MIN, TARGET_BAND_MAX);
+}
+
+function normalizeSmoothing(value) {
+    const raw = Number.isFinite(value) ? value : 0;
+    const clamped = clamp(raw, 0, 5);
+    // snap to 0.5s steps
+    return Math.round(clamped * 2) / 2;
 }
 
 function clamp(value, min, max) {

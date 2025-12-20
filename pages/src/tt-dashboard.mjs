@@ -82,6 +82,13 @@ const state = {
     eventCompleteTimestamp: null,
     eventHasStarted: false,
     lastEventDistanceMeters: null,
+    // Display-only power smoothing. Seconds: 0=Off, 0.5..5.0 allowed
+    powerSmoothingSec: 0,
+    // Rolling buffer of recent power samples for smoothing
+    powerSamples: [],
+    // Exponential moving average state for display power
+    displayPowerEma: null,
+    displayPowerEmaTsMs: null,
     lastAthleteId: null,
     lastEventSubgroupId: null,
     lastCourseId: null,
@@ -93,6 +100,9 @@ function loadPersistedState() {
     const persisted = common.storage.get(STORAGE_KEY) || {};
     state.distanceOffset = persisted.distanceOffset ?? 0;
     state.powerBias = persisted.powerBias ?? 1;
+    state.powerSmoothingSec = Number.isFinite(persisted.powerSmoothingSec)
+        ? clamp(persisted.powerSmoothingSec, 0, 5)
+        : 0;
     state.targetBandWidthW = normalizeTargetBandWidth(persisted.targetBandWidthW);
     state.showDebug = typeof persisted.showDebug === 'boolean' ? persisted.showDebug : false;
     if (persisted.plan) {
@@ -102,6 +112,7 @@ function loadPersistedState() {
     }
     updateBiasLabel();
     updateOffsetLabel();
+    updateSmoothingLabel();
     updateDebugVisibility();
     persistSharedState({powerBias: state.powerBias});
     setSpectateState(false);
@@ -111,6 +122,7 @@ function persistState() {
     common.storage.set(STORAGE_KEY, {
         distanceOffset: state.distanceOffset,
         powerBias: state.powerBias,
+        powerSmoothingSec: state.powerSmoothingSec,
         targetBandWidthW: getTargetBandWidth(),
         showDebug: state.showDebug,
         plan: state.plan,
@@ -146,6 +158,8 @@ function queryEls() {
     els.biasValue = document.getElementById('bias-value');
     els.biasButtons = document.querySelectorAll('[data-action^="bias"]');
     els.offsetButtons = document.querySelectorAll('[data-action^="offset"]');
+    els.smoothingSelect = document.getElementById('smoothing-window');
+    els.smoothingValue = document.getElementById('smoothing-value');
 
     els.codeInput = document.getElementById('plan-code');
     els.fetchBtn = document.getElementById('fetch-plan');
@@ -192,6 +206,22 @@ function initControls() {
         const dir = btn.dataset.action === 'offset-up' ? 1 : -1;
         updateManualOffset(state.distanceOffset + dir * 10);
     }));
+
+    if (els.smoothingSelect) {
+        // Populate select value on load
+        const initVal = Number.isFinite(state.powerSmoothingSec) ? state.powerSmoothingSec : 0;
+        els.smoothingSelect.value = String(initVal);
+        els.smoothingSelect.addEventListener('change', () => {
+            const raw = parseFloat(els.smoothingSelect.value);
+            const val = Number.isFinite(raw) ? raw : 0;
+            // Accept only steps of 0.5s within bounds
+            const stepped = Math.round(val * 2) / 2;
+            state.powerSmoothingSec = clamp(stepped, 0, 5);
+            updateSmoothingLabel();
+            persistState();
+            updateDashboard();
+        });
+    }
 
     els.fetchBtn.addEventListener('click', fetchPlanFromCode);
     
@@ -602,10 +632,12 @@ function updateDashboard() {
     const watching = state.watching;
     const power = watching?.state?.power ?? watching?.stats?.power?.cur ?? null;
     const riderWeight = state.metrics.weight ?? watching?.athlete?.weight ?? null;
-    const wkg = power && riderWeight ? power / riderWeight : null;
+    const nowMs = Date.now();
+    const displayPower = getSmoothedDisplayPower(nowMs, power);
+    const wkg = displayPower && riderWeight ? displayPower / riderWeight : null;
 
-    if (power != null) {
-        els.gaugePower.textContent = `${Math.round(power)} W`;
+    if (displayPower != null) {
+        els.gaugePower.textContent = `${Math.round(displayPower)} W`;
         els.gaugeWkg.textContent = wkg ? `${wkg.toFixed(2)} w/kg` : '— w/kg';
     } else {
         els.gaugePower.textContent = '—';
@@ -662,7 +694,7 @@ function updateDashboard() {
     const avgDisplay = state.intervalAvgPower ? Math.round(state.intervalAvgPower) : '—';
     els.gaugeAvgPower.textContent = `${avgDisplay} W`;
     updateTargetBand(adjustedTarget);
-    updateGauge(power, adjustedTarget, watching);
+    updateGauge(displayPower, adjustedTarget, watching);
     updatePlanWBalVisuals();
     updateGaugeAnnotations(watching);
 }
@@ -808,6 +840,68 @@ function formatRange(start, end) {
 
 function formatNumber(value, digits = 1) {
     return Number.isFinite(value) ? value.toFixed(digits) : '—';
+}
+
+function updateSmoothingLabel() {
+    if (els.smoothingValue) {
+        const val = state.powerSmoothingSec || 0;
+        els.smoothingValue.textContent = val > 0 ? `${val.toFixed(1)}s` : 'Off';
+    }
+}
+
+// Maintain rolling buffer of power samples for display-only smoothing
+function pushPowerSample(nowMs, power) {
+    if (power == null || !Number.isFinite(power)) return;
+    state.powerSamples.push({ tMs: nowMs, pW: power });
+    const windowMs = (state.powerSmoothingSec || 0) * 1000;
+    if (windowMs <= 0) {
+        // Limit buffer size when smoothing disabled
+        const maxLen = 128;
+        if (state.powerSamples.length > maxLen) {
+            state.powerSamples.splice(0, state.powerSamples.length - maxLen);
+        }
+        return;
+    }
+    const cutoff = nowMs - windowMs;
+    while (state.powerSamples.length && state.powerSamples[0].tMs < cutoff) {
+        state.powerSamples.shift();
+    }
+}
+
+function getSmoothedDisplayPower(nowMs, rawPower) {
+    const windowSec = state.powerSmoothingSec || 0;
+    // Always keep a short history for potential future uses
+    if (rawPower != null && Number.isFinite(rawPower)) {
+        pushPowerSample(nowMs, rawPower);
+    }
+
+    // No smoothing requested
+    if (windowSec <= 0) {
+        state.displayPowerEma = Number.isFinite(rawPower) ? rawPower : state.displayPowerEma;
+        state.displayPowerEmaTsMs = nowMs;
+        return rawPower;
+    }
+
+    // Initialize EMA on first sample
+    if (!Number.isFinite(state.displayPowerEma) || !Number.isFinite(state.displayPowerEmaTsMs)) {
+        state.displayPowerEma = Number.isFinite(rawPower) ? rawPower : state.displayPowerEma;
+        state.displayPowerEmaTsMs = nowMs;
+        return state.displayPowerEma;
+    }
+
+    // If current sample is missing, hold previous smoothed value
+    if (rawPower == null || !Number.isFinite(rawPower)) {
+        return state.displayPowerEma;
+    }
+
+    // Time-based EMA so smoothing works with low update rates
+    const dtMs = Math.max(0, nowMs - state.displayPowerEmaTsMs);
+    const tauMs = windowSec * 1000; // time constant
+    const alpha = 1 - Math.exp(-dtMs / tauMs);
+    const ema = state.displayPowerEma + alpha * (rawPower - state.displayPowerEma);
+    state.displayPowerEma = ema;
+    state.displayPowerEmaTsMs = nowMs;
+    return ema;
 }
 
 function formatCountdown(seconds) {
