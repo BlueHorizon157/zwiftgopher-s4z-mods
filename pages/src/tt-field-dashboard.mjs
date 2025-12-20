@@ -11,6 +11,7 @@ const state = {
     manualScrollHoldUntil: 0,
     checkpointTimes: new Map(),
     showAllRiders: false,
+    persistentRiders: new Map(), // athleteId -> {entry, lastSeen, metrics}
 };
 
 const els = {};
@@ -50,6 +51,7 @@ function queryEls() {
     els.tableWrapper = document.querySelector('.table-wrapper');
     els.emptyState = document.getElementById('empty-state');
     els.titlebar = document.querySelector('#titlebar');
+    els.positionCounter = document.getElementById('position-counter');
 }
 
 function initManualScrollPause() {
@@ -65,16 +67,41 @@ function initManualScrollPause() {
 }
 
 function handleNearby(payload = []) {
+    const now = Date.now();
     if (Array.isArray(payload)) {
         state.riders = payload.filter(entry => entry);
         const activeEntry = payload.find(entry => entry?.watching);
         state.activeAthleteId = getAthleteId(activeEntry);
+        
+        // Update persistent rider tracking
+        for (const entry of state.riders) {
+            const athleteId = getAthleteId(entry);
+            if (athleteId) {
+                const metrics = computeMetrics(entry);
+                state.persistentRiders.set(athleteId, {
+                    entry,
+                    metrics,
+                    lastSeen: now,
+                    inCurrentFeed: true,
+                });
+            }
+        }
+        // Mark riders not in current feed
+        for (const [athleteId, data] of state.persistentRiders) {
+            if (!state.riders.some(e => getAthleteId(e) === athleteId)) {
+                data.inCurrentFeed = false;
+            }
+        }
     } else {
         state.riders = [];
         state.activeAthleteId = null;
+        // Mark all persistent riders as not in feed
+        for (const data of state.persistentRiders.values()) {
+            data.inCurrentFeed = false;
+        }
     }
     trackCheckpointTimes(payload);
-    state.lastUpdated = Date.now();
+    state.lastUpdated = now;
     updateMeta();
     renderRows();
 }
@@ -87,19 +114,27 @@ function renderRows() {
     if (!els.tableBody || !els.window) {
         return;
     }
-    // Filter to same category as active rider (unless showAllRiders is enabled)
-    let filteredRiders = state.riders;
-    if (!state.showAllRiders) {
-        const activeEntry = state.activeAthleteId ? state.riders.find(entry => getAthleteId(entry) === state.activeAthleteId) : null;
-        const activeSubgroupId = activeEntry?.state?.eventSubgroupId;
-        filteredRiders = activeSubgroupId ? state.riders.filter(entry => entry?.state?.eventSubgroupId === activeSubgroupId) : state.riders;
+    // Build rows from persistent riders (includes both in-feed and historical)
+    const activeEntry = state.activeAthleteId 
+        ? (state.riders.find(entry => getAthleteId(entry) === state.activeAthleteId) || 
+           state.persistentRiders.get(state.activeAthleteId)?.entry)
+        : null;
+    const activeSubgroupId = activeEntry?.state?.eventSubgroupId;
+    
+    // Filter persistent riders by category if needed
+    let filteredPersistent = Array.from(state.persistentRiders.values());
+    if (!state.showAllRiders && activeSubgroupId) {
+        filteredPersistent = filteredPersistent.filter(data => 
+            data.entry?.state?.eventSubgroupId === activeSubgroupId
+        );
     }
 
-    const allRows = filteredRiders
-        .map(entry => ({
-            entry,
-            metrics: computeMetrics(entry),
-            isActive: getAthleteId(entry) === state.activeAthleteId,
+    const allRows = filteredPersistent
+        .map(data => ({
+            entry: data.entry,
+            metrics: data.metrics,
+            isActive: getAthleteId(data.entry) === state.activeAthleteId,
+            inCurrentFeed: data.inCurrentFeed,
         }))
         .filter(({metrics}) => metrics)
         .sort((a, b) => {
@@ -126,15 +161,32 @@ function renderRows() {
     if (els.emptyState) {
         els.emptyState.hidden = !isEmpty ? true : false;
     }
+    
+    // Update position counter
+    if (els.positionCounter && state.activeAthleteId) {
+        const activeIndex = riders.findIndex(r => r.isActive);
+        if (activeIndex !== -1) {
+            els.positionCounter.textContent = `Position ${activeIndex + 1} / ${riders.length}`;
+            els.positionCounter.hidden = false;
+        } else {
+            els.positionCounter.hidden = true;
+        }
+    } else if (els.positionCounter) {
+        els.positionCounter.hidden = true;
+    }
+    
     centerActiveRow();
 }
 
-function renderRow({entry, metrics}) {
+function renderRow({entry, metrics, inCurrentFeed}) {
     const tr = document.createElement('tr');
     tr.dataset.id = entry.athleteId;
     const isActive = getAthleteId(entry) === state.activeAthleteId;
     if (isActive) {
         tr.classList.add('active');
+    }
+    if (!inCurrentFeed) {
+        tr.classList.add('stale');
     }
 
     tr.append(
