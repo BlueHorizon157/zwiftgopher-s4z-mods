@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Small release helper:
 # Usage: ./scripts/release.sh <tag> [--notes "release notes"] [--push]
-# Example: ./scripts/release.sh v0.3.0-alpha.1 --notes "Alpha release" --push
+# Example: ./scripts/release.sh v0.6.0 --notes "Alpha release" --push
 
 PROG=${0##*/}
 if [[ $# -lt 1 ]]; then

@@ -246,6 +246,40 @@ body {
   color: var(--text-muted);
 }
 
+.version-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-top: 0.15rem;
+  padding: 0rem 0.4rem;
+  border: 0px solid var(--border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  font-size: 0.35rem;
+  color: var(--text-muted);
+  box-sizing: border-box;
+}
+
+.version-status {
+  font-weight: 700;
+  font-size: 0.35rem;
+}
+
+.version-status.alert {
+  color: #fcd34d;
+}
+
+.version-status[style*="cursor: pointer"]:hover {
+  text-decoration: underline;
+  opacity: 1;
+}
+
+.version-status[style*="cursor: pointer"]:hover {
+  text-decoration: underline;
+  opacity: 1;
+}
+
 .plan-input {
   display: flex;
   gap: 0.5rem;

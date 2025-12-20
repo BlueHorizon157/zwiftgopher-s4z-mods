@@ -96,6 +96,9 @@ const state = {
     lastAthleteId: null,
     lastEventSubgroupId: null,
     lastCourseId: null,
+    versionCurrent: null,
+    versionLatest: null,
+    versionStatus: 'idle', // idle|checking|ok|update|error
 };
 
 const els = {};
@@ -193,6 +196,9 @@ function queryEls() {
 
     els.log = document.getElementById('debug-log');
     els.spectateBanner = document.getElementById('spectate-banner');
+    els.versionFooter = document.getElementById('version-footer');
+    els.versionCurrent = document.getElementById('version-current');
+    els.versionStatus = document.getElementById('version-status');
     updateSpectateBanner();
 }
 
@@ -1325,6 +1331,46 @@ function updateOffsetLabel() {
     els.offsetValue.title = parts.join(' · ');
 }
 
+function updateVersionUI() {
+    if (!els.versionFooter) return;
+    const current = state.versionCurrent || '—';
+    const latest = state.versionLatest;
+    const status = state.versionStatus;
+    if (els.versionCurrent) {
+        els.versionCurrent.textContent = `v${current}`;
+    }
+    if (els.versionStatus) {
+        // Clear any existing link
+        els.versionStatus.onclick = null;
+        els.versionStatus.style.cursor = '';
+        els.versionStatus.title = '';
+        
+        if (status === 'update' && latest) {
+            els.versionStatus.textContent = `Update available: v${latest}`;
+            els.versionStatus.classList.add('alert');
+            els.versionStatus.hidden = false;
+            // Make it clickable to open releases page
+            els.versionStatus.style.cursor = 'pointer';
+            els.versionStatus.title = 'Click to download latest release';
+            els.versionStatus.onclick = () => {
+                window.open('https://github.com/BlueHorizon157/zwiftgopher-s4z-mods/releases/latest', '_blank');
+            };
+        } else if (status === 'checking') {
+            els.versionStatus.textContent = 'Checking updates…';
+            els.versionStatus.classList.remove('alert');
+            els.versionStatus.hidden = false;
+        } else if (status === 'error') {
+            els.versionStatus.textContent = 'Update check failed';
+            els.versionStatus.classList.add('alert');
+            els.versionStatus.hidden = false;
+        } else {
+            els.versionStatus.textContent = latest ? `Up to date (v${latest})` : 'Up to date';
+            els.versionStatus.classList.remove('alert');
+            els.versionStatus.hidden = false;
+        }
+    }
+}
+
 function updateManualOffset(value, {share=true, clampValue=true, persist=true}={}) {
     let next = Number(value);
     if (!Number.isFinite(next)) {
@@ -1542,6 +1588,7 @@ export function main() {
     common.subscribe('athlete/watching', handleWatching);
     queryEls();
     loadPersistedState();
+    initVersionInfo();
     initPredictionChannel();
     initSharedStateSync();
     initControls();
@@ -1578,6 +1625,66 @@ function initSharedStateSync() {
         }
         applySharedStatePayload(ev.data.value || {});
     });
+}
+
+async function initVersionInfo() {
+    state.versionStatus = 'checking';
+    updateVersionUI();
+    await loadCurrentVersion();
+    await checkLatestVersion();
+}
+
+async function loadCurrentVersion() {
+    // Hardcoded version synced with manifest.json
+    // Sauce mods don't have reliable runtime access to their manifest,
+    // so we embed the version directly. Update this when bumping version.
+    state.versionCurrent = '0.6.0';
+    console.log('[version] Using embedded version:', state.versionCurrent);
+    updateVersionUI();
+}
+
+async function checkLatestVersion() {
+    try {
+        state.versionStatus = 'checking';
+        updateVersionUI();
+        const res = await fetch('https://api.github.com/repos/BlueHorizon157/zwiftgopher-s4z-mods/releases/latest', {
+            headers: {Accept: 'application/vnd.github+json'},
+        });
+        let rawLatest = null;
+
+        if (res.ok) {
+            const body = await res.json();
+            rawLatest = body?.tag_name || body?.name || null;
+        } else {
+            console.warn(`[version] releases/latest returned ${res.status}, falling back to tags`);
+        }
+
+        if (!rawLatest) {
+            // Fallback: grab the first tag (handles repos with only pre-releases or tags)
+            const tagsRes = await fetch('https://api.github.com/repos/BlueHorizon157/zwiftgopher-s4z-mods/tags?per_page=1', {
+                headers: {Accept: 'application/vnd.github+json'},
+            });
+            if (tagsRes.ok) {
+                const tags = await tagsRes.json();
+                rawLatest = tags?.[0]?.name || null;
+            } else {
+                throw new Error(`github tags failed ${tagsRes.status}`);
+            }
+        }
+
+        const latest = rawLatest ? normalizeVersionString(rawLatest) : null;
+        state.versionLatest = latest;
+        if (latest && state.versionCurrent) {
+            const cmp = compareVersions(latest, state.versionCurrent);
+            state.versionStatus = cmp > 0 ? 'update' : 'ok';
+        } else {
+            state.versionStatus = 'ok';
+        }
+    } catch (err) {
+        console.warn('[version] Latest check failed:', err);
+        state.versionStatus = 'error';
+    }
+    updateVersionUI();
 }
 
 function getPredictionChannelName() {
@@ -2274,4 +2381,30 @@ function normalizeSignatureNumber(value) {
         return null;
     }
     return Number(num.toFixed(3));
+}
+
+function normalizeVersionString(raw) {
+    if (!raw) return null;
+    return String(raw).trim().replace(/^v/i, '');
+}
+
+function compareVersions(a, b) {
+    // Simple semver-ish compare with optional pre-release suffix
+    const parse = v => {
+        const [core, pre = ''] = v.split('-');
+        const parts = core.split('.').map(n => parseInt(n, 10) || 0);
+        return {parts, pre};
+    };
+    const va = parse(a);
+    const vb = parse(b);
+    const len = Math.max(va.parts.length, vb.parts.length);
+    for (let i = 0; i < len; i++) {
+        const da = va.parts[i] ?? 0;
+        const db = vb.parts[i] ?? 0;
+        if (da !== db) return da - db;
+    }
+    // If numeric parts equal, treat pre-release as lower precedence
+    if (va.pre && !vb.pre) return -1;
+    if (!va.pre && vb.pre) return 1;
+    return 0;
 }
