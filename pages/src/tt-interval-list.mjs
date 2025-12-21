@@ -1211,9 +1211,21 @@ function formatPower(value) {
 function renderPowerCell(interval) {
     // Show interval target power, and if finished (and not partial), delta vs actual interval avg
     const base = formatPower(interval.power);
+    // Color target power if >10% variance from plan average power
+    const planAvgPower = Number(state.planAvgPower);
+    const intervalPower = Number(interval.planPower); // use plan power before any bias
+    let classes = '';
+    if (Number.isFinite(planAvgPower) && planAvgPower > 0 && Number.isFinite(intervalPower)) {
+        const ratio = intervalPower / planAvgPower;
+        if (ratio > 1.1) {
+            classes = ' class="power-high"';
+        } else if (ratio < 0.9) {
+            classes = ' class="power-low"';
+        }
+    }
     const showDelta = interval.intervalStats?.finished && !interval.intervalStats?.partial;
     if (!showDelta) {
-        return base;
+        return classes ? `<span${classes}>${base}</span>` : base;
     }
     const deltaHtml = decorateWithDelta('', interval.powerDelta, {
         unit: ' W',
@@ -1225,7 +1237,8 @@ function renderPowerCell(interval) {
             return `${sign}${Math.abs(delta).toFixed(decimals)}${unit}`;
         }
     });
-    return deltaHtml ? `${base}<br>${deltaHtml}` : base;
+    const wrappedBase = classes ? `<span${classes}>${base}</span>` : base;
+    return deltaHtml ? `${wrappedBase}<br>${deltaHtml}` : wrappedBase;
 }
 
 function renderDurationCell(interval) {
@@ -1243,7 +1256,13 @@ function formatGrade(value) {
         return '—';
     }
     const percent = value;
-    return `${percent.toFixed(1)}%`;
+    let classes = '';
+    if (percent > 0.05) {
+        classes = ' class="grade-up"';
+    } else if (percent < -0.05) {
+        classes = ' class="grade-down"';
+    }
+    return classes ? `<span${classes}>${percent.toFixed(1)}%</span>` : `${percent.toFixed(1)}%`;
 }
 
 function formatWbal(valueJ, percent) {

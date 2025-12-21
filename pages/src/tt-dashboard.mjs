@@ -202,6 +202,8 @@ function queryEls() {
     els.upcomingTargetDuration = document.getElementById('upcoming-target-duration');
 
     els.nextLabel = document.getElementById('next-label');
+    els.distanceProgress = document.getElementById('distance-progress');
+    els.distanceProgressFill = document.getElementById('distance-progress-fill');
 
     els.log = document.getElementById('debug-log');
     els.spectateBanner = document.getElementById('spectate-banner');
@@ -691,6 +693,7 @@ function updateDashboard() {
 
     const distanceLabel = formatDistanceToNext(distanceKmForPlan, offsetKm, current, upcoming);
     els.distanceToNext.textContent = distanceLabel.label;
+    updateDistanceProgress(actualDistanceKm, offsetKm, current, upcoming);
     const intervalNumber = currentIdx === -1 ? 1 : currentIdx + 2;
     setUpcomingDetails(distanceLabel.finish ? null : upcoming, distanceLabel.finish ? 'finish strong' : 'no more intervals', intervalNumber, offsetKm);
 
@@ -780,6 +783,61 @@ function formatDistanceToNext(actualDistanceKm, offsetKm, current, upcoming) {
     return {label: '— km', finish: false};
 }
 
+function updateDistanceProgress(actualDistanceKm, offsetKm, current, upcoming) {
+    if (!els.distanceProgress || !els.distanceProgressFill) {
+        return;
+    }
+    if (!state.plan || !state.intervals.length || !Number.isFinite(actualDistanceKm)) {
+        els.distanceProgress.hidden = true;
+        if (els.distanceToNext) {
+            els.distanceToNext.classList.remove('urgent');
+        }
+        return;
+    }
+
+    const offset = Number.isFinite(offsetKm) ? offsetKm : 0;
+
+    // Determine the active span to next boundary
+    let startKm = null;
+    let endKm = null;
+
+    if (current) {
+        const startPlan = getScaledDistanceKm(current.start_km);
+        const endPlan = getScaledDistanceKm(current.end_km);
+        if (Number.isFinite(startPlan) && Number.isFinite(endPlan)) {
+            startKm = startPlan - offset;
+            endKm = endPlan - offset;
+        }
+    } else if (upcoming) {
+        // Before the first interval: progress toward its start
+        const upcomingStart = getScaledDistanceKm(upcoming.start_km);
+        if (Number.isFinite(upcomingStart)) {
+            startKm = 0;
+            endKm = upcomingStart - offset;
+        }
+    }
+
+    if (!Number.isFinite(startKm) || !Number.isFinite(endKm) || endKm <= startKm) {
+        els.distanceProgress.hidden = true;
+        if (els.distanceToNext) {
+            els.distanceToNext.classList.remove('urgent');
+        }
+        return;
+    }
+
+    const rawProgress = clamp((actualDistanceKm - startKm) / (endKm - startKm), 0, 1);
+    const remainingKm = Math.max(0, endKm - actualDistanceKm);
+    const urgent = remainingKm <= 0.1; // highlight last 100 m regardless of interval length
+    if (els.distanceToNext) {
+        els.distanceToNext.classList.toggle('urgent', urgent);
+    }
+
+    // Linear fill to keep movement proportional to distance across interval lengths
+    const eased = rawProgress;
+    els.distanceProgressFill.style.width = `${(eased * 100).toFixed(1)}%`;
+    els.distanceProgress.hidden = false;
+}
+
 function setUpcomingDetails(interval, emptyMessage = 'no more intervals', intervalNumber = null, offsetKm = 0) {
     if (!els.upcomingTargetPower) {
         return;
@@ -800,13 +858,21 @@ function setUpcomingDetails(interval, emptyMessage = 'no more intervals', interv
         : null;
     els.upcomingTargetPower.textContent = adjusted ? `${adjusted} W` : '— W';
     if (interval.avg_gradient !== undefined && interval.avg_gradient !== null) {
-        els.upcomingTargetDesc.textContent = `${formatNumber(interval.avg_gradient, 1)}%`;
+        const gradPct = Number(interval.avg_gradient);
+        els.upcomingTargetDesc.textContent = `${formatNumber(gradPct, 1)}%`;
+        els.upcomingTargetDesc.classList.remove('grade-up', 'grade-down');
+        if (gradPct > 0.05) {
+            els.upcomingTargetDesc.classList.add('grade-up');
+        } else if (gradPct < -0.05) {
+            els.upcomingTargetDesc.classList.add('grade-down');
+        }
     } else {
         const startPlan = getScaledDistanceKm(interval.start_km);
         const startActual = Number.isFinite(startPlan)
             ? Math.max(startPlan - offset, 0)
             : null;
         els.upcomingTargetDesc.textContent = `starts at ${formatKm(startActual)} km`;
+        els.upcomingTargetDesc.classList.remove('grade-up', 'grade-down');
     }
     const scaledStart = getScaledDistanceKm(interval.start_km);
     const scaledEnd = getScaledDistanceKm(interval.end_km);
@@ -1768,7 +1834,7 @@ async function loadCurrentVersion() {
     // Hardcoded version synced with manifest.json
     // Sauce mods don't have reliable runtime access to their manifest,
     // so we embed the version directly. Update this when bumping version.
-    state.versionCurrent = '0.6.0';
+    state.versionCurrent = '0.6.1';
     console.log('[version] Using embedded version:', state.versionCurrent);
     updateVersionUI();
 }
@@ -2127,10 +2193,16 @@ function updateGaugeAnnotations(watching) {
     if (els.gaugeGradient) {
         const gradient = watching?.state?.grade;
         const percent = Number.isFinite(gradient) ? gradient * 100 : null;
+        els.gaugeGradient.classList.remove('grade-up', 'grade-down');
         if (Number.isFinite(percent)) {
             const formatted = percent.toFixed(1);
             const display = formatted === "-0.0" ? "0.0" : formatted;
             els.gaugeGradient.textContent = `${display}%`;
+            if (percent > 0.05) {
+                els.gaugeGradient.classList.add('grade-up');
+            } else if (percent < -0.05) {
+                els.gaugeGradient.classList.add('grade-down');
+            }
         } else {
             els.gaugeGradient.textContent = '—%';
         }

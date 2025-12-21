@@ -312,3 +312,19 @@ body {
   color: var(--text-faint);
   margin-left: 4px;
 }
+
+.grade-up {
+  color: #f18c8c;
+}
+
+.grade-down {
+  color: #8ab8ff;
+}
+
+.power-high {
+  color: #f18c8c;
+}
+
+.power-low {
+  color: #8ab8ff;
+}
