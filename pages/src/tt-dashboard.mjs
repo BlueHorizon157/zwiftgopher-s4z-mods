@@ -1936,6 +1936,13 @@ function applyRemotePreferences(persisted) {
         state.showDebug = debugPref;
         updateDebugVisibility();
     }
+    const smoothingRaw = Number.isFinite(persisted.powerSmoothingSec) ? persisted.powerSmoothingSec : 0;
+    const smoothing = clamp(Math.round(smoothingRaw * 2) / 2, 0, 5);
+    if (smoothing !== state.powerSmoothingSec) {
+        state.powerSmoothingSec = smoothing;
+        updateSmoothingLabel();
+        updateDashboard();
+    }
 }
 
 function resolveMetric(planValue, telemetryValue) {
