@@ -19,6 +19,7 @@ const TARGET_BAND_MAX = 75;
 const MIN_PACING_SAMPLE_SECONDS = 60;
 const MIN_AVERAGE_TIME_MS = 10000;
 const INTERVAL_START_TOLERANCE_KM = 0.02;
+const DEBUG_MAX_LINES = 200; // cap the debug log size
 
 function createEmptyMetrics() {
     return {
@@ -92,12 +93,20 @@ const state = {
     // BroadcastChannel for ephemeral shared predictions
     predictionChan: null,
     predictionChanName: null,
+    intervalAvgChan: null,
+    intervalAvgChanName: null,
     lastPredictionBroadcastMs: 0,
+    lastIntervalAvgBroadcastMs: 0,
+    lastIntervalAvgSignature: null,
     lastAthleteId: null,
     lastEventSubgroupId: null,
     lastCourseId: null,
     versionCurrent: null,
     versionLatest: null,
+    // Debug buffer management
+    debugBuffer: [],
+    lastDebugMessage: null,
+    lastTrackingSnapshot: null,
     versionStatus: 'idle', // idle|checking|ok|update|error
 };
 
@@ -238,6 +247,7 @@ function initControls() {
     els.refreshBtn.addEventListener('click', () => {
         console.log('[REFRESH] Manual reset triggered - clearing all interval tracking data');
         resetIntervalTracking();
+        persistSharedState({clearStatsTimestamp: Date.now()});
         resetAutoOffset();
         // Also reset event detection state to allow for fresh detection
         state.eventHasStarted = false;
@@ -299,6 +309,7 @@ function setPlan(plan, {share=true, resetHome=true}={}) {
     state.finishPrediction = null;
     state.sharedPredictionSignature = null;
     shareFinishPrediction(null);
+    shareIntervalAvgPower(null);
     if (resetHome) {
         clearHomeAthleteId();
     }
@@ -335,6 +346,7 @@ function clearPlan({share=true, resetHome=true}={}) {
     state.finishPrediction = null;
     state.sharedPredictionSignature = null;
     shareFinishPrediction(null);
+    shareIntervalAvgPower(null);
     if (resetHome) {
         clearHomeAthleteId();
     }
@@ -575,7 +587,7 @@ function handleWatching(watching) {
         }
         state.currentIndex = nextIndex;
         
-        // Keep finish prediction fresh: recompute on interval change or if stale/empty
+        // Keep finish prediction fresh and share interval avg power
         const nowMs = Date.now();
         const existingPrediction = state.finishPrediction;
         const elapsedSincePrediction = existingPrediction?.updatedAt
@@ -601,28 +613,7 @@ function handleWatching(watching) {
         }
     }
 
-    const planWBalLine = state.planWBal.value != null
-        ? `Plan W′bal: ${formatMetric(state.planWBal.value, 'plan', 'J')} (${state.planWBalPercent != null ? state.planWBalPercent.toFixed(0) + '%' : '—'})`
-        : 'Plan W′bal: —';
-    const eventProgressKm = Number.isFinite(state.eventProgressMeters)
-        ? state.eventProgressMeters / 1000
-        : null;
-    const eventRemainingKm = Number.isFinite(state.eventRemainingMeters)
-        ? state.eventRemainingMeters / 1000
-        : null;
-    const eventDistanceKm = Number.isFinite(state.eventDistanceMeters)
-        ? state.eventDistanceMeters / 1000
-        : null;
-    const distanceKm = actualDistanceMeters / 1000;
-    const eventLine = `Event: prog=${formatNumber(eventProgressKm, 2)} km, remain=${formatNumber(eventRemainingKm, 2)} km, total=${formatNumber(eventDistanceKm, 2)} km, auto=${formatMeters(Math.round(state.autoOffset ?? 0))}`;
-    const trackingLine = `Tracking: athleteId=${state.lastAthleteId}, eventSubgroupId=${state.lastEventSubgroupId}, courseId=${state.lastCourseId}, started=${state.eventHasStarted}, lastDist=${formatNumber(state.lastEventDistanceMeters, 0)}m`;
-    const message = [
-        `Watching: p=${formatNumber(power, 0)}, avg=${formatNumber(avgPower, 0)}, cad=${formatNumber(cadence, 0)}, hr=${formatNumber(hr, 0)}, speed=${formatNumber(speed, 1)} km/h, grad=${formatNumber(gradient ? gradient * 100 : null, 1)}%, elapsed=${formatNumber(elapsedTime, 0)} s, dist=${formatNumber(distanceKm, 2)} km, ftp=${formatMetric(state.metrics.ftp, state.metrics.ftpSource, 'W')}, wBal=${formatMetric(state.metrics.wBal, null, 'J')} (${state.metrics.wBalPercent != null ? state.metrics.wBalPercent.toFixed(0) + '%' : '—'}), wPrime=${formatMetric(state.metrics.wPrime, state.metrics.wPrimeSource, 'J')}`,
-        planWBalLine,
-        eventLine,
-        trackingLine,
-    ].join('\n');
-    log(message);
+    // No more continuous tracking line - all logging is now event-based
 
     if (state.intervalStartTime && power != null && Number.isFinite(power)) {
         const now = Date.now();
@@ -634,6 +625,9 @@ function handleWatching(watching) {
         }
         state.lastUpdateTime = now;
     }
+
+    // Share interval average power via BroadcastChannel (avoid storage conflicts)
+    shareIntervalAvgPower(state.intervalAvgPower);
 
     updateDashboard();
 }
@@ -1122,25 +1116,34 @@ function detectAndHandleEventStart(watching) {
     if (state.lastAthleteId !== null && 
         currentAthleteId !== state.lastAthleteId) {
         console.log('[ATHLETE CHANGE] Rider swapped from', state.lastAthleteId, 'to', currentAthleteId);
+        logAppend(`🔄 Athlete changed: switching from ${state.lastAthleteId} to ${currentAthleteId}. Clearing all tracking data.`);
         resetIntervalTracking();
+        resetAutoOffset();
+        persistSharedState({clearStatsTimestamp: Date.now()});
         state.eventHasStarted = false;
         state.lastEventDistanceMeters = null;
         state.lastAthleteId = currentAthleteId;
         state.lastEventSubgroupId = currentEventSubgroupId;
         state.lastCourseId = currentCourseId;
+        updateDashboard();
         return;
     }
     
     // DETECTION 2: Entering event pen (eventSubgroupId appears)
     // This happens when you join an event and enter the pen
-    if (currentEventSubgroupId && !state.lastEventSubgroupId) {
+    // Only trigger if we previously saw NO subgroup (transition from out-of-event to in-event)
+    if (state.lastEventSubgroupId === null && currentEventSubgroupId && currentAthleteId === state.lastAthleteId) {
         console.log('[PEN ENTRY] Entered event pen. EventSubgroupId:', currentEventSubgroupId);
+        const subgroupPreview = typeof currentEventSubgroupId === 'string' ? currentEventSubgroupId.slice(0,12) : String(currentEventSubgroupId ?? 'null');
+        logAppend(`🚪 Entered event pen: subgroup ${subgroupPreview}... on course ${currentCourseId}. Ready to start.`);
         resetIntervalTracking();
+        resetAutoOffset();
+        persistSharedState({clearStatsTimestamp: Date.now()});
         state.eventHasStarted = false;
         state.lastEventDistanceMeters = null;
         state.lastEventSubgroupId = currentEventSubgroupId;
-        state.lastAthleteId = currentAthleteId;
         state.lastCourseId = currentCourseId;
+        updateDashboard();
         return;
     }
     
@@ -1150,22 +1153,32 @@ function detectAndHandleEventStart(watching) {
         currentEventSubgroupId !== undefined) {
         console.log('[EVENT CHANGE] New event joined. SubgroupId changed from', 
                     state.lastEventSubgroupId, 'to', currentEventSubgroupId);
+        const oldSub = typeof state.lastEventSubgroupId === 'string' ? state.lastEventSubgroupId.slice(0,8) : String(state.lastEventSubgroupId);
+        const newSub = typeof currentEventSubgroupId === 'string' ? currentEventSubgroupId.slice(0,8) : String(currentEventSubgroupId);
+        logAppend(`🔀 Event changed: switched from ${oldSub}... to ${newSub}... Resetting tracking.`);
         resetIntervalTracking();
+        resetAutoOffset();
+        persistSharedState({clearStatsTimestamp: Date.now()});
         state.eventHasStarted = false;
         state.lastEventDistanceMeters = null;
         state.lastEventSubgroupId = currentEventSubgroupId;
         state.lastAthleteId = currentAthleteId;
         state.lastCourseId = currentCourseId;
+        updateDashboard();
         return;
     }
     
     // DETECTION 4: Leaving event (eventSubgroupId disappears)
     if (state.lastEventSubgroupId && !currentEventSubgroupId) {
         console.log('[PEN EXIT] Left event. EventSubgroupId was:', state.lastEventSubgroupId);
+        logAppend(`🚪 Left event pen. Tracking cleared.`);
         resetIntervalTracking();
+        resetAutoOffset();
+        persistSharedState({clearStatsTimestamp: Date.now()});
         state.eventHasStarted = false;
         state.lastEventDistanceMeters = null;
         state.lastEventSubgroupId = null;
+        updateDashboard();
         return;
     }
     
@@ -1175,12 +1188,16 @@ function detectAndHandleEventStart(watching) {
         currentCourseId !== undefined) {
         console.log('[COURSE CHANGE] Course changed from', 
                     state.lastCourseId, 'to', currentCourseId);
+        logAppend(`🗺️ Course changed: ${state.lastCourseId} → ${currentCourseId}. Resetting tracking.`);
         resetIntervalTracking();
+        resetAutoOffset();
+        persistSharedState({clearStatsTimestamp: Date.now()});
         state.eventHasStarted = false;
         state.lastEventDistanceMeters = null;
         state.lastCourseId = currentCourseId;
         state.lastAthleteId = currentAthleteId;
         state.lastEventSubgroupId = currentEventSubgroupId;
+        updateDashboard();
         return;
     }
     
@@ -1205,9 +1222,13 @@ function detectAndHandleEventStart(watching) {
         
         console.log('[EVENT RESET] Distance dropped to 0 (warmup ended). Resetting tracking. Previous distance:', 
                     state.lastEventDistanceMeters);
+        logAppend(`⏮️ Distance reset to 0m (warmup ended, was at ${Math.round(state.lastEventDistanceMeters)}m). Clearing tracking.`);
         resetIntervalTracking();
+        resetAutoOffset();
+        persistSharedState({clearStatsTimestamp: Date.now()});
         state.eventHasStarted = false;
         state.lastEventDistanceMeters = 0;
+        updateDashboard();
         return;
     }
     
@@ -1215,8 +1236,11 @@ function detectAndHandleEventStart(watching) {
     // state.time is 0/null/undefined in the pen, then becomes > 0 when crossing start line
     if (currentEventSubgroupId && !state.eventHasStarted && currentTime && currentTime > 0) {
         console.log('[START LINE CROSSED] state.time became truthy:', currentTime, 'seconds. Event has started!');
+        logAppend(`🏁 Start line crossed! Race timer at ${Math.round(currentTime)}s. Initializing interval tracking.`);
         state.eventHasStarted = true;
         resetIntervalTracking();
+        resetAutoOffset();
+        persistSharedState({clearStatsTimestamp: Date.now()});
         
         // CRITICAL: Initialize the first interval immediately to ensure complete tracking
         // This creates the initial marker so the whole first interval is tracked from the start
@@ -1234,6 +1258,7 @@ function detectAndHandleEventStart(watching) {
                 });
             }
         }
+        updateDashboard();
         // Note: Don't return here - let distance tracking continue below
     }
     
@@ -1246,8 +1271,11 @@ function detectAndHandleEventStart(watching) {
         currentDistance > 0) {
         
         console.log('[START LINE CROSSED - FALLBACK] Distance changed from 0 to', currentDistance, 'meters');
+        logAppend(`🏁 Start line crossed (distance fallback)! Now at ${Math.round(currentDistance)}m. Initializing interval tracking.`);
         state.eventHasStarted = true;
         resetIntervalTracking();
+        resetAutoOffset();
+        persistSharedState({clearStatsTimestamp: Date.now()});
         
         // CRITICAL: Initialize the first interval immediately to ensure complete tracking
         if (state.plan && state.intervals.length > 0) {
@@ -1264,6 +1292,7 @@ function detectAndHandleEventStart(watching) {
                 });
             }
         }
+        updateDashboard();
     }
     
     // Track distance for next comparison
@@ -1272,7 +1301,7 @@ function detectAndHandleEventStart(watching) {
     }
 }
 
-function resetIntervalTracking() {
+function resetIntervalTracking({resetEventState = false} = {}) {
     console.log('[RESET] Clearing interval stats and predictions');
     state.currentIndex = -1;
     state.displayedIntervalIndex = -1;
@@ -1287,9 +1316,37 @@ function resetIntervalTracking() {
     state.finishPrediction = null;
     state.sharedPredictionSignature = null;
     shareFinishPrediction(null);
+    shareIntervalAvgPower(null);
     resetMetrics();
     resetPlanWBal();
-    // Don't reset eventHasStarted/lastEventDistanceMeters here - keep event detection state
+
+    if (resetEventState) {
+        state.eventHasStarted = false;
+        state.lastEventDistanceMeters = null;
+        state.eventProgressMeters = null;
+        state.eventRemainingMeters = null;
+        state.autoOffset = 0;
+        state.usesEventProgress = false;
+    }
+}
+
+function resetLiveDataForSimulation() {
+    resetIntervalTracking({resetEventState: true});
+    state.powerSamples = [];
+    state.displayPowerEma = null;
+    state.displayPowerEmaTsMs = null;
+    state.lastValidWatching = null;
+    state.finishPrediction = null;
+    state.sharedPredictionSignature = null;
+    state.eventComplete = false;
+    state.eventCompleteTimestamp = null;
+    state.lastUpdateTime = null;
+    state.intervalStartTime = null;
+    state.powerIntegral = 0;
+    state.timeIntegral = 0;
+    state.intervalAvgPower = null;
+    shareFinishPrediction(null);
+    shareIntervalAvgPower(null);
 }
 
 function updateEventTelemetryAndOffset(watching, distanceMeters) {
@@ -1371,6 +1428,56 @@ function updateVersionUI() {
     }
 }
 
+function initDebugSimControls() {
+    if (!els.log) {
+        return;
+    }
+
+    const container = document.createElement('div');
+    container.style.display = 'flex';
+    container.style.flexWrap = 'wrap';
+    container.style.gap = '8px';
+    container.style.marginBottom = '8px';
+
+    const mkBtn = (label, handler, variant = 'outline-warning') => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `btn btn-sm btn-${variant}`;
+        btn.textContent = label;
+        btn.addEventListener('click', handler);
+        return btn;
+    };
+
+    // Simulation buttons removed - focusing on live event detection
+
+    // Insert controls just before the debug log for easy access when debug is visible.
+    const parent = els.log.parentNode;
+    if (parent) {
+        parent.insertBefore(container, els.log);
+    }
+}
+
+function setDefaultPlanPrediction() {
+    if (!Number.isFinite(state.planDurationSeconds)) {
+        state.finishPrediction = null;
+        shareFinishPrediction(null);
+        return;
+    }
+    const seconds = Math.max(0, state.planDurationSeconds);
+    const predicted = {
+        predictedSeconds: seconds,
+        predictedText: formatCountdown(seconds),
+        deltaSeconds: 0,
+        remainingDeltaSeconds: 0,
+        elapsedSeconds: 0,
+        remainingSeconds: seconds,
+        remainingPlanSeconds: seconds,
+        pacingRatio: 1,
+    };
+    state.finishPrediction = predicted;
+    shareFinishPrediction(predicted);
+}
+
 function updateManualOffset(value, {share=true, clampValue=true, persist=true}={}) {
     let next = Number(value);
     if (!Number.isFinite(next)) {
@@ -1422,6 +1529,26 @@ function log(message) {
     els.log.textContent = `[${time}] ${message}`;
 }
 
+// Append a line to the debug log without overwriting the previous message
+function logAppend(message) {
+    if (!els.log) {
+        return;
+    }
+    // Only append if the message body changed
+    if (state.lastDebugMessage === message) {
+        return;
+    }
+    state.lastDebugMessage = message;
+    const time = new Date().toLocaleTimeString();
+    const line = `[${time}] ${message}`;
+    // Prepend latest line so newest stays visible at the top
+    state.debugBuffer.unshift(line);
+    if (state.debugBuffer.length > DEBUG_MAX_LINES) {
+        state.debugBuffer.length = DEBUG_MAX_LINES;
+    }
+    els.log.textContent = state.debugBuffer.join('\n');
+}
+
 function normalizeAthleteId(value) {
     if (value == null) {
         return null;
@@ -1466,6 +1593,7 @@ function setHomeAthleteId(athleteId, {share = true, persist = true} = {}) {
     }
     // Refresh prediction channel scope when athlete changes
     initPredictionChannel();
+    initIntervalAvgChannel();
     if (share) {
         persistSharedState({homeAthleteId: normalized});
     }
@@ -1590,8 +1718,10 @@ export function main() {
     loadPersistedState();
     initVersionInfo();
     initPredictionChannel();
+    initIntervalAvgChannel();
     initSharedStateSync();
     initControls();
+    initDebugSimControls();
     initPlanBridge();
     initStorageSync();
     updateDashboard();
@@ -1722,6 +1852,29 @@ function initPredictionChannel() {
         state.predictionChanName = name;
     } catch (err) {
         console.warn('[initPredictionChannel] Failed:', err);
+    }
+}
+
+function getIntervalAvgChannelName() {
+    const athleteId = normalizeAthleteId(state.homeAthleteId) || 'global';
+    return `tt:interval-avg:${athleteId}`;
+}
+
+function initIntervalAvgChannel() {
+    try {
+        const name = getIntervalAvgChannelName();
+        if (state.intervalAvgChan && state.intervalAvgChanName === name) {
+            return; // Already set up
+        }
+        if (state.intervalAvgChan) {
+            try { state.intervalAvgChan.close(); } catch (_) {}
+        }
+        const chan = new BroadcastChannel(name);
+        // Dashboard only publishes interval average; no listener needed
+        state.intervalAvgChan = chan;
+        state.intervalAvgChanName = name;
+    } catch (err) {
+        console.warn('[initIntervalAvgChannel] Failed:', err);
     }
 }
 
@@ -2004,7 +2157,7 @@ function updateIntervalTracking(previousIndex, nextIndex, power, planDistanceKm)
     
     // Handle interval transitions
     if (previousIndex !== nextIndex) {
-        finalizeIntervalStats(previousIndex, {timestamp: now, power});
+        finalizeIntervalStats(previousIndex, {timestamp: now, power, nextIndex});
         beginIntervalStats(nextIndex, {timestamp: now, planDistanceKm});
     } else if (nextIndex >= 0) {
         // Even if index didn't change, ensure the interval has been initialized
@@ -2027,6 +2180,8 @@ function beginIntervalStats(index, {timestamp, planDistanceKm}) {
     if (existing && existing.finished) {
         return;
     }
+    
+    const partial = detectPartialInterval(index, planDistanceKm);
     state.intervalStats[index] = {
         startMs: timestamp,
         lastUpdateMs: timestamp,
@@ -2035,8 +2190,15 @@ function beginIntervalStats(index, {timestamp, planDistanceKm}) {
         timeIntegral: 0,
         avgPower: null,
         finished: false,
-        partial: detectPartialInterval(index, planDistanceKm),
+        partial,
     };
+    
+    // Log interval start
+    const interval = state.intervals[index];
+    const targetW = interval ? Math.round(interval.power_w * state.powerBias) : '?';
+    const durationText = interval?.duration_text || '?';
+    const partialFlag = partial ? ' (partial - started mid-interval)' : '';
+    logAppend(`▶ Interval ${index + 1} started: target ${targetW}W for ${durationText}${partialFlag}`);
 }
 
 function detectPartialInterval(index, planDistanceKm) {
@@ -2079,7 +2241,7 @@ function advanceIntervalStats(index, {timestamp, power}) {
     }
 }
 
-function finalizeIntervalStats(index, {timestamp, power}) {
+function finalizeIntervalStats(index, {timestamp, power, nextIndex}) {
     if (!Number.isInteger(index) || index < 0) {
         return;
     }
@@ -2094,6 +2256,40 @@ function finalizeIntervalStats(index, {timestamp, power}) {
     const raceElapsed = Number(state.watching?.state?.time);
     if (Number.isFinite(raceElapsed) && raceElapsed > 0) {
         stats.raceElapsedSnapshot = raceElapsed;
+    }
+    
+    // Log interval completion with stats
+    const interval = state.intervals[index];
+    const targetW = interval ? Math.round(interval.power_w * state.powerBias) : null;
+    const actualW = stats.avgPower ? Math.round(stats.avgPower) : null;
+    const elapsedSec = Math.round(stats.elapsedMs / 1000);
+    const planSec = interval ? parseDurationSeconds(interval) : null;
+    const deltaW = (actualW && targetW) ? (actualW - targetW) : null;
+    const deltaSec = (planSec && Number.isFinite(planSec)) ? (elapsedSec - planSec) : null;
+    
+    const completedCount = state.intervalStats.filter(s => s?.finished && !s?.partial).length;
+    const totalIntervals = state.intervals.length;
+    const partialFlag = stats.partial ? ' (partial)' : '';
+    
+    let msg = `■ Interval ${index + 1}/${totalIntervals} completed${partialFlag}: ${actualW || '?'}W avg (target ${targetW || '?'}W`;
+    if (deltaW !== null) {
+        msg += deltaW >= 0 ? ` +${deltaW}W` : ` ${deltaW}W`;
+    }
+    msg += `), ${elapsedSec}s`;
+    if (deltaSec !== null) {
+        msg += deltaSec >= 0 ? ` +${deltaSec}s` : ` ${deltaSec}s`;
+    }
+    msg += `. Completed intervals: ${completedCount}`;
+    
+    if (Number.isFinite(raceElapsed)) {
+        msg += `, race time: ${Math.round(raceElapsed)}s`;
+    }
+    
+    logAppend(msg);
+    
+    // If this is the last interval, log finish
+    if (Number.isInteger(nextIndex) && nextIndex >= totalIntervals) {
+        logAppend(`🏁 All intervals complete! Final time: ${Math.round(raceElapsed)}s`);
     }
 }
 
@@ -2160,9 +2356,9 @@ function computeFinishPrediction() {
         }
     }
     
-    // Calculate remaining plan duration from baseline forward
+    // Calculate remaining plan duration ONLY from intervals after baseline
+    // This ensures we only project based on future intervals, not incomplete past ones
     let remainingPlanSeconds = 0;
-    let trackedPlanForRatio = 0;
     
     state.intervals.forEach((interval, idx) => {
         const planDuration = parseDurationSeconds(interval);
@@ -2175,12 +2371,10 @@ function computeFinishPrediction() {
             const stats = state.intervalStats[idx];
             const elapsed = stats && Number.isFinite(stats.elapsedMs) ? stats.elapsedMs / 1000 : 0;
             remainingPlanSeconds += Math.max(planDuration - elapsed, 0);
-            trackedPlanForRatio += planDuration;
         } 
-        // For future intervals after baseline, add full duration
-        else if (idx > Math.max(baselineIndex, state.currentIndex >= 0 ? state.currentIndex : -1)) {
+        // For future intervals after current, add full duration
+        else if (idx > state.currentIndex && state.currentIndex >= 0) {
             remainingPlanSeconds += planDuration;
-            trackedPlanForRatio += planDuration;
         }
         // For current interval at baseline, add remaining portion
         else if (idx === state.currentIndex && idx === baselineIndex) {
@@ -2201,6 +2395,7 @@ function computeFinishPrediction() {
         };
     }
     
+    // Compute pacing ratio ONLY from completed intervals (not partial ones)
     const pacingRatio = computePacingRatio();
     const ratio = Number.isFinite(pacingRatio) && pacingRatio > 0 ? pacingRatio : 1;
     const predictedRemaining = Math.max(remainingPlanSeconds * ratio, 0);
@@ -2212,19 +2407,18 @@ function computeFinishPrediction() {
     // Positive = slower than plan, Negative = faster than plan
     const remainingDeltaSeconds = predictedRemaining - remainingPlanSeconds;
     
-    // Delta for total time: how much time gained/lost vs total plan duration
-    const totalDeltaSeconds = Number.isFinite(state.planDurationSeconds)
-        ? predictedSeconds - state.planDurationSeconds
-        : remainingDeltaSeconds;
+    // Delta for total time: predicted finish vs total plan
+    // This accounts for all the time completed so far plus the projected remaining
+    const totalDeltaSeconds = predictedSeconds - state.planDurationSeconds;
     
     return {
         predictedSeconds,
         predictedText: formatCountdown(predictedSeconds),
-        deltaSeconds: totalDeltaSeconds, // Total delta for summary displays
-        remainingDeltaSeconds, // Remaining delta for countdown displays
+        deltaSeconds: totalDeltaSeconds,
+        remainingDeltaSeconds,
         elapsedSeconds: baselineElapsed,
         remainingSeconds,
-        remainingPlanSeconds, // Include for debugging
+        remainingPlanSeconds,
         pacingRatio: ratio,
     };
 }
@@ -2235,7 +2429,8 @@ function computePacingRatio() {
     state.intervals.forEach((interval, idx) => {
         const durationSec = parseDurationSeconds(interval);
         const stats = state.intervalStats[idx];
-        if (!Number.isFinite(durationSec) || !stats?.finished || !Number.isFinite(stats.elapsedMs)) {
+        // Only use completed intervals that were fully tracked (not partial/mid-race starts)
+        if (!Number.isFinite(durationSec) || !stats?.finished || !Number.isFinite(stats.elapsedMs) || stats.partial) {
             return;
         }
         planSeconds += durationSec;
@@ -2332,6 +2527,33 @@ function shareFinishPrediction(prediction) {
         state.lastPredictionBroadcastMs = now;
     } catch (err) {
         console.warn('[shareFinishPrediction] Broadcast failed:', err);
+    }
+}
+
+function shareIntervalAvgPower(avgPower) {
+    const normalized = Number.isFinite(avgPower) ? avgPower : null;
+    const signature = normalized != null ? Math.round(normalized) : 'none';
+    const now = Date.now();
+    // De-dupe identical values and rate-limit bursts
+    if (signature === state.lastIntervalAvgSignature && now - (state.lastIntervalAvgBroadcastMs || 0) < 700) {
+        return;
+    }
+    try {
+        initIntervalAvgChannel();
+        if (!state.intervalAvgChan) {
+            return;
+        }
+        state.intervalAvgChan.postMessage({
+            type: 'interval-avg',
+            instanceId: INSTANCE_ID,
+            athleteId: normalizeAthleteId(state.homeAthleteId),
+            avgPower: normalized,
+            updatedAt: now,
+        });
+        state.lastIntervalAvgSignature = signature;
+        state.lastIntervalAvgBroadcastMs = now;
+    } catch (err) {
+        console.warn('[shareIntervalAvgPower] Broadcast failed:', err);
     }
 }
 

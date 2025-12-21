@@ -54,6 +54,10 @@ const state = {
     // BroadcastChannel for ephemeral shared predictions
     predictionChan: null,
     predictionChanName: null,
+    // BroadcastChannel for dashboard interval averages
+    intervalAvgChan: null,
+    intervalAvgChanName: null,
+    dashboardIntervalAvgPower: null,
 };
 
 let autoCenterResumeTimer = null;
@@ -67,6 +71,7 @@ export function main() {
     initTitlebarReveal();
     loadSharedState();
     initPredictionChannel();
+    initIntervalAvgChannel();
     initStorageSync();
     initPlanBridge();
     common.subscribe('athlete/watching', handleWatching);
@@ -551,18 +556,41 @@ function updateSummary() {
 
     const planTargetPower = Number.isFinite(state.planAvgPower) ? state.planAvgPower : null;
     const expectedPowerStats = computeExpectedPowerSoFar();
-    const expectedAvgPower = Number.isFinite(expectedPowerStats.expectedAvgPower) ? expectedPowerStats.expectedAvgPower : null;
     const actualPowerStats = computeActualPowerStats();
-    const actualAvgPower = Number.isFinite(actualPowerStats.avgPower) ? actualPowerStats.avgPower : null;
+    let actualAvgPower = Number.isFinite(actualPowerStats.avgPower) ? actualPowerStats.avgPower : null;
+    
+    // For "act" display: prioritize sources in order
+    // 1. Completed intervals average (from interval list)
+    // 2. Current interval running average (from interval list)
+    // 3. Dashboard's live interval average (from shared state)
+    let displayActualPower = actualAvgPower;
+    if (!displayActualPower) {
+        displayActualPower = computeCurrentIntervalAvgPower();
+    }
+    if (!displayActualPower) {
+        displayActualPower = getDashboardIntervalAvgPower();
+    }
+    
+    // For "exp" display: compute time-weighted average of remaining intervals
+    // This accounts for the time already spent in the current partial interval
+    let expectedDisplay = null;
+    if (state.currentIndex >= 0 && state.currentIndex < state.enrichedIntervals.length) {
+        expectedDisplay = computeRemainingIntervalTargetPower();
+    }
+    // Fallback: show expected power from completed intervals so far
+    if (!expectedDisplay) {
+        expectedDisplay = Number.isFinite(expectedPowerStats.expectedAvgPower) ? expectedPowerStats.expectedAvgPower : null;
+    }
 
-    const expectedText = formatPower(expectedAvgPower);
-    const actualText = formatPower(actualAvgPower);
+    const expectedText = formatPower(expectedDisplay);
+    const actualText = formatPower(displayActualPower);
     const planLine = planTargetPower != null ? `Plan target ${formatPower(planTargetPower)}` : 'Plan target —';
     els.summaryAvgPower.innerHTML = `<span class="stat-line">${expectedText} exp / ${actualText} act</span><span class="subtext">${planLine}</span>`;
 
-    // Fix: Use planTargetPower for IF calculation
+    // Fix: Use actual power for IF calculation if available, otherwise use expected
+    const ifAvgPower = displayActualPower ?? expectedDisplay;
     const ifValue = computeIfValue(planTargetPower, ftp);
-    const actualIf = computeActualIf(actualAvgPower, ftp);
+    const actualIf = computeActualIf(ifAvgPower, ftp);
     els.summaryIf.textContent = formatTargetActualMetric(ifValue, actualIf, {
         formatter: value => value.toFixed(2),
         precision: 2,
@@ -1284,6 +1312,67 @@ function computeActualPowerStats() {
     return {avgPower: null, totalSeconds: 0};
 }
 
+function computeCurrentIntervalAvgPower() {
+    // Get the running average for the current active interval only
+    if (state.currentIndex < 0 || state.currentIndex >= state.intervalStats.length) {
+        return null;
+    }
+    const stats = state.intervalStats[state.currentIndex];
+    if (!stats || !Number.isFinite(stats.timeIntegral) || stats.timeIntegral <= 0) {
+        return null;
+    }
+    if (Number.isFinite(stats.powerIntegral) && stats.timeIntegral > 0) {
+        return stats.powerIntegral / stats.timeIntegral;
+    }
+    return null;
+}
+
+function getDashboardIntervalAvgPower() {
+    // Live interval average from dashboard via BroadcastChannel
+    const live = state.dashboardIntervalAvgPower;
+    if (Number.isFinite(live)) {
+        return live;
+    }
+    return null;
+}
+
+function computeRemainingIntervalTargetPower() {
+    // Compute time-weighted average power for remaining intervals
+    // Accounts for the time already spent in current (partial) interval
+    if (state.currentIndex < 0) {
+        return null;
+    }
+    
+    let totalWork = 0;
+    let totalTimeSeconds = 0;
+    
+    for (let i = state.currentIndex; i < state.enrichedIntervals.length; i++) {
+        const interval = state.enrichedIntervals[i];
+        const targetPower = Number(interval?.power);
+        const durationSec = Number(interval?.durationSec);
+        
+        if (!Number.isFinite(targetPower) || !Number.isFinite(durationSec) || durationSec <= 0) {
+            continue;
+        }
+        
+        // For current interval, subtract time already elapsed
+        let timeToUseSeconds = durationSec;
+        if (i === state.currentIndex) {
+            const stats = state.intervalStats[i];
+            const elapsedSec = stats?.elapsedMs ? stats.elapsedMs / 1000 : 0;
+            timeToUseSeconds = Math.max(durationSec - elapsedSec, 0);
+        }
+        
+        totalWork += targetPower * timeToUseSeconds;
+        totalTimeSeconds += timeToUseSeconds;
+    }
+    
+    if (totalTimeSeconds > 0) {
+        return totalWork / totalTimeSeconds;
+    }
+    return null;
+}
+
 function computeExpectedPowerSoFar() {
     let totalWork = 0;
     let totalTimeSeconds = 0;
@@ -1431,6 +1520,8 @@ function setHomeAthleteId(athleteId, {share = true} = {}) {
     state.homeAthleteId = normalized;
     // Refresh prediction channel scope when athlete changes
     initPredictionChannel();
+    initIntervalAvgChannel();
+    state.dashboardIntervalAvgPower = null;
     if (share) {
         persistSharedState({homeAthleteId: normalized});
     }
@@ -1579,6 +1670,37 @@ function initPredictionChannel() {
         state.predictionChanName = name;
     } catch (err) {
         console.warn('[initPredictionChannel] Failed:', err);
+    }
+}
+
+function getIntervalAvgChannelName() {
+    const athleteId = normalizeAthleteId(state.homeAthleteId) || 'global';
+    return `tt:interval-avg:${athleteId}`;
+}
+
+function initIntervalAvgChannel() {
+    try {
+        const name = getIntervalAvgChannelName();
+        if (state.intervalAvgChan && state.intervalAvgChanName === name) {
+            return; // Already set up
+        }
+        if (state.intervalAvgChan) {
+            try { state.intervalAvgChan.close(); } catch (_) {}
+        }
+        const chan = new BroadcastChannel(name);
+        chan.onmessage = ev => {
+            const msg = ev?.data;
+            if (!msg || msg.type !== 'interval-avg') return;
+            const athleteId = normalizeAthleteId(msg.athleteId);
+            const targetId = normalizeAthleteId(state.homeAthleteId);
+            if (athleteId && targetId && athleteId !== targetId) return;
+            state.dashboardIntervalAvgPower = Number.isFinite(msg.avgPower) ? msg.avgPower : null;
+            render();
+        };
+        state.intervalAvgChan = chan;
+        state.intervalAvgChanName = name;
+    } catch (err) {
+        console.warn('[initIntervalAvgChannel] Failed:', err);
     }
 }
 
