@@ -108,6 +108,24 @@ body {
 .gauge-target {
   stroke: var(--gauge-target);
   stroke-width: 16px;
+  transition: d 1s ease-in-out;
+}
+
+.gauge-next-target {
+  stroke: #a855f7; /* purple-500 */
+  stroke-width: 5px;
+  stroke-linecap: butt; /* straight edges */
+  fill: none;
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+}
+
+.gauge-next-target.fade-out {
+  opacity: 0;
+}
+
+.gauge-next-target.fade-in {
+  opacity: 1;
 }
 
 .gauge-current {

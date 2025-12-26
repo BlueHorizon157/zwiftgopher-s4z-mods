@@ -103,6 +103,11 @@ const state = {
     lastCourseId: null,
     versionCurrent: null,
     versionLatest: null,
+    // Target band animation state
+    targetBandTransitioning: false,
+    lastTargetPower: null,
+    intervalTransitionTime: null,
+    nextTargetFadeTimer: null,
     // Debug buffer management
     debugBuffer: [],
     lastDebugMessage: null,
@@ -186,6 +191,7 @@ function queryEls() {
     els.gaugeTargetPower = document.getElementById('gauge-target-power');
     els.gaugeTargetArc = document.getElementById('gauge-target');
     els.gaugeCurrentArc = document.getElementById('gauge-current');
+    els.gaugeNextTargetArc = document.getElementById('gauge-next-target');
     els.gaugeTargetMark = document.getElementById('gauge-target-mark');
     els.gaugeAvgPower = document.getElementById('gauge-avg-power');
     els.gaugeWbalTrack = document.getElementById('gauge-wbal-track');
@@ -589,17 +595,19 @@ function handleWatching(watching) {
         }
         state.currentIndex = nextIndex;
         
-        // Keep finish prediction fresh and share interval avg power
+        // Update finish prediction only at interval boundaries (when a complete interval finishes)
+        // This prevents prediction from constantly changing during an interval
         const nowMs = Date.now();
+        const intervalJustCompleted = intervalChanged && previousIndex >= 0 && state.intervalStats[previousIndex]?.finished;
         const existingPrediction = state.finishPrediction;
-        const elapsedSincePrediction = existingPrediction?.updatedAt
-            ? (nowMs - existingPrediction.updatedAt) / 1000
-            : null;
-        const predictionStale = !existingPrediction
-            || !Number.isFinite(existingPrediction.remainingSeconds)
-            || (elapsedSincePrediction != null && elapsedSincePrediction > 5)
-            || (existingPrediction && existingPrediction.remainingSeconds <= 0);
-        if (intervalChanged || predictionStale) {
+        const hasNoPrediction = !existingPrediction || !Number.isFinite(existingPrediction.remainingSeconds);
+        const predictionExpired = existingPrediction && existingPrediction.remainingSeconds <= 0;
+        
+        // Update prediction when:
+        // 1. An interval was just completed
+        // 2. No prediction exists yet (page load, plan load)
+        // 3. Prediction shows race is finished
+        if (intervalJustCompleted || hasNoPrediction || predictionExpired) {
             const prediction = computeFinishPrediction();
             if (prediction) {
                 state.finishPrediction = {
@@ -670,12 +678,16 @@ function updateDashboard() {
     }
 
     const currentIdx = findCurrentInterval(planDistanceKm);
-    if (currentIdx !== state.displayedIntervalIndex) {
+    const intervalChanged = currentIdx !== state.displayedIntervalIndex;
+    if (intervalChanged) {
         state.intervalStartTime = Date.now();
         state.lastUpdateTime = Date.now();
         state.powerIntegral = 0;
         state.timeIntegral = 0;
         state.intervalAvgPower = null;
+        state.intervalTransitionTime = Date.now();
+        // Trigger next target fade out immediately (before position update)
+        handleNextTargetTransition(true);
     }
     state.displayedIntervalIndex = currentIdx;
     state.currentIndex = currentIdx;
@@ -693,7 +705,7 @@ function updateDashboard() {
 
     const distanceLabel = formatDistanceToNext(distanceKmForPlan, offsetKm, current, upcoming);
     els.distanceToNext.textContent = distanceLabel.label;
-    updateDistanceProgress(actualDistanceKm, offsetKm, current, upcoming);
+    updateDistanceProgress(planDistanceKm, offsetKm, current, upcoming);
     const intervalNumber = currentIdx === -1 ? 1 : currentIdx + 2;
     setUpcomingDetails(distanceLabel.finish ? null : upcoming, distanceLabel.finish ? 'finish strong' : 'no more intervals', intervalNumber, offsetKm);
 
@@ -701,6 +713,14 @@ function updateDashboard() {
     const avgDisplay = state.intervalAvgPower ? Math.round(state.intervalAvgPower) : '—';
     els.gaugeAvgPower.textContent = `${avgDisplay} W`;
     updateTargetBand(adjustedTarget);
+    // Show next interval power target indicator (only if different from current)
+    // Don't update position during fade-out transition
+    const isFadingOut = els.gaugeNextTargetArc?.classList.contains('fade-out');
+    if (!isFadingOut) {
+        const nextTarget = upcoming ? upcoming.power_w * state.powerBias : null;
+        const showNextIndicator = nextTarget && adjustedTarget && Math.abs(nextTarget - adjustedTarget) > 5;
+        updateNextTargetIndicator(showNextIndicator ? nextTarget : null);
+    }
     updateGauge(displayPower, adjustedTarget, watching);
     updatePlanWBalVisuals();
     updateGaugeAnnotations(watching);
@@ -783,11 +803,11 @@ function formatDistanceToNext(actualDistanceKm, offsetKm, current, upcoming) {
     return {label: '— km', finish: false};
 }
 
-function updateDistanceProgress(actualDistanceKm, offsetKm, current, upcoming) {
+function updateDistanceProgress(planDistanceKm, offsetKm, current, upcoming) {
     if (!els.distanceProgress || !els.distanceProgressFill) {
         return;
     }
-    if (!state.plan || !state.intervals.length || !Number.isFinite(actualDistanceKm)) {
+    if (!state.plan || !state.intervals.length || !Number.isFinite(planDistanceKm)) {
         els.distanceProgress.hidden = true;
         if (els.distanceToNext) {
             els.distanceToNext.classList.remove('urgent');
@@ -795,25 +815,20 @@ function updateDistanceProgress(actualDistanceKm, offsetKm, current, upcoming) {
         return;
     }
 
-    const offset = Number.isFinite(offsetKm) ? offsetKm : 0;
-
     // Determine the active span to next boundary
+    // planDistanceKm already includes offset, so use scaled plan values directly
     let startKm = null;
     let endKm = null;
 
     if (current) {
-        const startPlan = getScaledDistanceKm(current.start_km);
-        const endPlan = getScaledDistanceKm(current.end_km);
-        if (Number.isFinite(startPlan) && Number.isFinite(endPlan)) {
-            startKm = startPlan - offset;
-            endKm = endPlan - offset;
-        }
+        startKm = getScaledDistanceKm(current.start_km);
+        endKm = getScaledDistanceKm(current.end_km);
     } else if (upcoming) {
         // Before the first interval: progress toward its start
         const upcomingStart = getScaledDistanceKm(upcoming.start_km);
         if (Number.isFinite(upcomingStart)) {
             startKm = 0;
-            endKm = upcomingStart - offset;
+            endKm = upcomingStart;
         }
     }
 
@@ -825,9 +840,9 @@ function updateDistanceProgress(actualDistanceKm, offsetKm, current, upcoming) {
         return;
     }
 
-    const rawProgress = clamp((actualDistanceKm - startKm) / (endKm - startKm), 0, 1);
-    const remainingKm = Math.max(0, endKm - actualDistanceKm);
-    const urgent = remainingKm <= 0.1; // highlight last 100 m regardless of interval length
+    const rawProgress = clamp((planDistanceKm - startKm) / (endKm - startKm), 0, 1);
+    const remainingKm = Math.max(0, endKm - planDistanceKm);
+    const urgent = remainingKm < 0.1; // highlight last 100 m
     if (els.distanceToNext) {
         els.distanceToNext.classList.toggle('urgent', urgent);
     }
@@ -1166,6 +1181,20 @@ function deriveEventTelemetry(watching) {
     return {totalMeters, remainingMeters, progressMeters};
 }
 
+// Helper to reset tracking state and update UI once
+function handleEventReset(logMessage) {
+    if (logMessage) {
+        logAppend(logMessage);
+    }
+    resetIntervalTracking();
+    resetAutoOffset();
+    state.eventHasStarted = false;
+    state.lastEventDistanceMeters = null;
+    // Batch the storage write and UI update
+    persistSharedState({clearStatsTimestamp: Date.now()});
+    updateDashboard();
+}
+
 function detectAndHandleEventStart(watching) {
     if (!watching) {
         return;
@@ -1182,16 +1211,10 @@ function detectAndHandleEventStart(watching) {
     if (state.lastAthleteId !== null && 
         currentAthleteId !== state.lastAthleteId) {
         console.log('[ATHLETE CHANGE] Rider swapped from', state.lastAthleteId, 'to', currentAthleteId);
-        logAppend(`🔄 Athlete changed: switching from ${state.lastAthleteId} to ${currentAthleteId}. Clearing all tracking data.`);
-        resetIntervalTracking();
-        resetAutoOffset();
-        persistSharedState({clearStatsTimestamp: Date.now()});
-        state.eventHasStarted = false;
-        state.lastEventDistanceMeters = null;
         state.lastAthleteId = currentAthleteId;
         state.lastEventSubgroupId = currentEventSubgroupId;
         state.lastCourseId = currentCourseId;
-        updateDashboard();
+        handleEventReset(`🔄 Athlete changed: switching from ${state.lastAthleteId} to ${currentAthleteId}. Clearing all tracking data.`);
         return;
     }
     
@@ -1201,15 +1224,9 @@ function detectAndHandleEventStart(watching) {
     if (state.lastEventSubgroupId === null && currentEventSubgroupId && currentAthleteId === state.lastAthleteId) {
         console.log('[PEN ENTRY] Entered event pen. EventSubgroupId:', currentEventSubgroupId);
         const subgroupPreview = typeof currentEventSubgroupId === 'string' ? currentEventSubgroupId.slice(0,12) : String(currentEventSubgroupId ?? 'null');
-        logAppend(`🚪 Entered event pen: subgroup ${subgroupPreview}... on course ${currentCourseId}. Ready to start.`);
-        resetIntervalTracking();
-        resetAutoOffset();
-        persistSharedState({clearStatsTimestamp: Date.now()});
-        state.eventHasStarted = false;
-        state.lastEventDistanceMeters = null;
         state.lastEventSubgroupId = currentEventSubgroupId;
         state.lastCourseId = currentCourseId;
-        updateDashboard();
+        handleEventReset(`🚪 Entered event pen: subgroup ${subgroupPreview}... on course ${currentCourseId}. Ready to start.`);
         return;
     }
     
@@ -1221,30 +1238,18 @@ function detectAndHandleEventStart(watching) {
                     state.lastEventSubgroupId, 'to', currentEventSubgroupId);
         const oldSub = typeof state.lastEventSubgroupId === 'string' ? state.lastEventSubgroupId.slice(0,8) : String(state.lastEventSubgroupId);
         const newSub = typeof currentEventSubgroupId === 'string' ? currentEventSubgroupId.slice(0,8) : String(currentEventSubgroupId);
-        logAppend(`🔀 Event changed: switched from ${oldSub}... to ${newSub}... Resetting tracking.`);
-        resetIntervalTracking();
-        resetAutoOffset();
-        persistSharedState({clearStatsTimestamp: Date.now()});
-        state.eventHasStarted = false;
-        state.lastEventDistanceMeters = null;
         state.lastEventSubgroupId = currentEventSubgroupId;
         state.lastAthleteId = currentAthleteId;
         state.lastCourseId = currentCourseId;
-        updateDashboard();
+        handleEventReset(`🔀 Event changed: switched from ${oldSub}... to ${newSub}... Resetting tracking.`);
         return;
     }
     
     // DETECTION 4: Leaving event (eventSubgroupId disappears)
     if (state.lastEventSubgroupId && !currentEventSubgroupId) {
         console.log('[PEN EXIT] Left event. EventSubgroupId was:', state.lastEventSubgroupId);
-        logAppend(`🚪 Left event pen. Tracking cleared.`);
-        resetIntervalTracking();
-        resetAutoOffset();
-        persistSharedState({clearStatsTimestamp: Date.now()});
-        state.eventHasStarted = false;
-        state.lastEventDistanceMeters = null;
         state.lastEventSubgroupId = null;
-        updateDashboard();
+        handleEventReset(`🚪 Left event pen. Tracking cleared.`);
         return;
     }
     
@@ -1254,31 +1259,34 @@ function detectAndHandleEventStart(watching) {
         currentCourseId !== undefined) {
         console.log('[COURSE CHANGE] Course changed from', 
                     state.lastCourseId, 'to', currentCourseId);
-        logAppend(`🗺️ Course changed: ${state.lastCourseId} → ${currentCourseId}. Resetting tracking.`);
-        resetIntervalTracking();
-        resetAutoOffset();
-        persistSharedState({clearStatsTimestamp: Date.now()});
-        state.eventHasStarted = false;
-        state.lastEventDistanceMeters = null;
         state.lastCourseId = currentCourseId;
         state.lastAthleteId = currentAthleteId;
         state.lastEventSubgroupId = currentEventSubgroupId;
-        updateDashboard();
+        handleEventReset(`🗺️ Course changed: ${state.lastCourseId} → ${currentCourseId}. Resetting tracking.`);
         return;
     }
     
-    // Initialize tracking values on first run
+    // Initialize tracking values on first run (silent - no UI updates)
+    let needsInit = false;
     if (state.lastAthleteId === null) {
         state.lastAthleteId = currentAthleteId;
+        needsInit = true;
     }
     if (state.lastEventSubgroupId === null) {
         state.lastEventSubgroupId = currentEventSubgroupId;
+        needsInit = true;
     }
     if (state.lastCourseId === null) {
         state.lastCourseId = currentCourseId;
+        needsInit = true;
     }
     if (state.lastEventDistanceMeters === null && Number.isFinite(currentDistance)) {
         state.lastEventDistanceMeters = currentDistance;
+        needsInit = true;
+    }
+    // Skip further checks if we just initialized to avoid triggering resets on first telemetry
+    if (needsInit) {
+        return;
     }
     
     // DETECTION 6: Distance reset to zero (warmup ends, event resets)
@@ -1288,13 +1296,8 @@ function detectAndHandleEventStart(watching) {
         
         console.log('[EVENT RESET] Distance dropped to 0 (warmup ended). Resetting tracking. Previous distance:', 
                     state.lastEventDistanceMeters);
-        logAppend(`⏮️ Distance reset to 0m (warmup ended, was at ${Math.round(state.lastEventDistanceMeters)}m). Clearing tracking.`);
-        resetIntervalTracking();
-        resetAutoOffset();
-        persistSharedState({clearStatsTimestamp: Date.now()});
-        state.eventHasStarted = false;
         state.lastEventDistanceMeters = 0;
-        updateDashboard();
+        handleEventReset(`⏮️ Distance reset to 0m (warmup ended, was at ${Math.round(state.lastEventDistanceMeters)}m). Clearing tracking.`);
         return;
     }
     
@@ -1324,7 +1327,7 @@ function detectAndHandleEventStart(watching) {
                 });
             }
         }
-        updateDashboard();
+        // Note: handleWatching will call updateDashboard() after this returns
         // Note: Don't return here - let distance tracking continue below
     }
     
@@ -1358,7 +1361,7 @@ function detectAndHandleEventStart(watching) {
                 });
             }
         }
-        updateDashboard();
+        // Note: handleWatching will call updateDashboard() after this returns
     }
     
     // Track distance for next comparison
@@ -2174,13 +2177,83 @@ function ensureWBalTrack() {
 function updateTargetBand(target) {
     if (!target || !Number.isFinite(target)) {
         setArc(els.gaugeTargetArc, 0, 0);
+        state.lastTargetPower = null;
         return;
     }
+    
+    // Enable smooth transition when target changes
+    const targetChanged = state.lastTargetPower !== null && Math.abs(target - state.lastTargetPower) > 1;
+    if (targetChanged && !state.targetBandTransitioning) {
+        // Trigger CSS transition by ensuring the element has transition enabled
+        if (els.gaugeTargetArc) {
+            els.gaugeTargetArc.style.transition = 'd 1s ease-in-out';
+        }
+        state.targetBandTransitioning = true;
+        setTimeout(() => {
+            state.targetBandTransitioning = false;
+        }, 1000);
+    }
+    
     const maxPower = computeGaugeMaxPower();
     const width = getTargetBandWidth();
     const minRatio = clamp((target - width) / maxPower, 0, 1);
     const maxRatio = clamp((target + width) / maxPower, 0, 1);
     setArc(els.gaugeTargetArc, minRatio, maxRatio);
+    state.lastTargetPower = target;
+}
+
+function updateNextTargetIndicator(nextTarget) {
+    if (!els.gaugeNextTargetArc) {
+        return;
+    }
+    if (!nextTarget || !Number.isFinite(nextTarget)) {
+        els.gaugeNextTargetArc.setAttribute('d', '');
+        els.gaugeNextTargetArc.classList.remove('fade-in', 'fade-out');
+        return;
+    }
+    const maxPower = computeGaugeMaxPower();
+    const ratio = clamp(nextTarget / maxPower, 0, 1);
+    // Draw a radial line across the full width of the gauge track at the target power position
+    const angle = GAUGE_START_ANGLE + ratio * GAUGE_TOTAL_DEGREES;
+    const angleRad = angle * Math.PI / 180;
+    // Line spans from inner radius to outer radius of the gauge track
+    const innerRadius = GAUGE_RADIUS - 8; // Inner edge of track
+    const outerRadius = GAUGE_RADIUS + 8; // Outer edge of track
+    const x1 = 130 + innerRadius * Math.cos(angleRad);
+    const y1 = 130 + innerRadius * Math.sin(angleRad);
+    const x2 = 130 + outerRadius * Math.cos(angleRad);
+    const y2 = 130 + outerRadius * Math.sin(angleRad);
+    const d = `M ${x1} ${y1} L ${x2} ${y2}`;
+    els.gaugeNextTargetArc.setAttribute('d', d);
+}
+
+function handleNextTargetTransition(intervalChanged) {
+    if (!els.gaugeNextTargetArc) {
+        return;
+    }
+    
+    // Clear any existing fade timer
+    if (state.nextTargetFadeTimer) {
+        clearTimeout(state.nextTargetFadeTimer);
+        state.nextTargetFadeTimer = null;
+    }
+    
+    if (intervalChanged) {
+        // Fade out immediately on interval change
+        els.gaugeNextTargetArc.classList.add('fade-out');
+        els.gaugeNextTargetArc.classList.remove('fade-in');
+        
+        // Wait for fade out to complete (0.5s), then update position and fade in after 2s total
+        state.nextTargetFadeTimer = setTimeout(() => {
+            // After fade out completes, position will be updated by normal flow
+            // Then fade back in after another 1.5s (2s total from interval change)
+            setTimeout(() => {
+                els.gaugeNextTargetArc.classList.remove('fade-out');
+                els.gaugeNextTargetArc.classList.add('fade-in');
+            }, 1500);
+            state.nextTargetFadeTimer = null;
+        }, 500);
+    }
 }
 
 function updateGaugeAnnotations(watching) {
@@ -2584,7 +2657,7 @@ function shareFinishPrediction(prediction) {
         }
         const now = Date.now();
         // De-dupe is already handled via signature; optional light rate cap
-        if (now - (state.lastPredictionBroadcastMs || 0) < 400) {
+        if (now - (state.lastPredictionBroadcastMs || 0) < 1000) {
             // too soon; skip burst
         }
         const msg = {

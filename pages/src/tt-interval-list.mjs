@@ -498,8 +498,12 @@ function handleWatching(watching) {
     // Only recompute enriched intervals when interval changes, not every tick
     if (intervalChanged) {
         recomputeIntervals();
+        // Force immediate table render on interval completion to show updated stats without delay
+        render();
+        renderTable({force: true});
+    } else {
+        render();
     }
-    render();
 }
 
 function updateResolvedMetrics(watching) {
