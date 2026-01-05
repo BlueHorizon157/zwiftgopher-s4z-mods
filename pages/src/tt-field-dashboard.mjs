@@ -4,6 +4,7 @@ const AUTO_CENTER_DELAY_MS = 5000;
 const CHECKPOINT_SPACING_METERS = 10;
 const MAX_CHECKPOINT_HISTORY = 6000;
 const SETTINGS_KEY = 'tt-field-dashboard-settings';
+const SHARED_STORAGE_KEY = '/tt-dashboards/shared-state';
 const state = {
     riders: [],
     lastUpdated: null,
@@ -12,6 +13,7 @@ const state = {
     checkpointTimes: new Map(),
     showAllRiders: false,
     persistentRiders: new Map(), // athleteId -> {entry, lastSeen, metrics}
+    lastClearStatsTimestamp: null, // Track last seen reset event
 };
 
 const els = {};
@@ -38,10 +40,35 @@ function loadSettings() {
     state.showAllRiders = settings.showAllRiders === true;
 }
 
+function clearRiderData() {
+    // Clear all rider tracking data to start fresh
+    state.persistentRiders.clear();
+    state.checkpointTimes.clear();
+    state.riders = [];
+    state.activeAthleteId = null;
+    
+    // Re-render with empty state
+    updateMeta();
+    renderRows();
+}
+
 function initStorageListener() {
+    // Listen for settings changes
     common.storage.addEventListener(SETTINGS_KEY, () => {
         loadSettings();
         renderRows();
+    });
+    
+    // Listen for shared state changes (e.g., reset events from tt-dashboard)
+    common.storage.addEventListener(SHARED_STORAGE_KEY, () => {
+        const sharedState = common.storage.get(SHARED_STORAGE_KEY) || {};
+        const clearTimestamp = sharedState.clearStatsTimestamp;
+        
+        // Only clear if this is a new reset event
+        if (Number.isFinite(clearTimestamp) && clearTimestamp !== state.lastClearStatsTimestamp) {
+            state.lastClearStatsTimestamp = clearTimestamp;
+            clearRiderData();
+        }
     });
 }
 
