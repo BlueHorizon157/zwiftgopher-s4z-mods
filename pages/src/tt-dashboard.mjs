@@ -1837,7 +1837,7 @@ async function loadCurrentVersion() {
     // Hardcoded version synced with manifest.json
     // Sauce mods don't have reliable runtime access to their manifest,
     // so we embed the version directly. Update this when bumping version.
-    state.versionCurrent = '0.6.3';
+    state.versionCurrent = '0.6.4';
     console.log('[version] Using embedded version:', state.versionCurrent);
     updateVersionUI();
 }

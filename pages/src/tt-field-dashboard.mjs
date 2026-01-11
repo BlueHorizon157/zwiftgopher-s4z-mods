@@ -59,9 +59,20 @@ function initStorageListener() {
         renderRows();
     });
     
+    // Check for existing clearStatsTimestamp on initialization
+    const initialState = common.storage.get(SHARED_STORAGE_KEY) || {};
+    const initialClearTimestamp = initialState.clearStatsTimestamp;
+    if (Number.isFinite(initialClearTimestamp) && initialClearTimestamp !== state.lastClearStatsTimestamp) {
+        state.lastClearStatsTimestamp = initialClearTimestamp;
+        clearRiderData();
+    }
+    
     // Listen for shared state changes (e.g., reset events from tt-dashboard)
-    common.storage.addEventListener(SHARED_STORAGE_KEY, () => {
-        const sharedState = common.storage.get(SHARED_STORAGE_KEY) || {};
+    common.storage.addEventListener('globalupdate', ev => {
+        if (!ev?.data || ev.data.key !== SHARED_STORAGE_KEY) {
+            return;
+        }
+        const sharedState = ev.data.value || {};
         const clearTimestamp = sharedState.clearStatsTimestamp;
         
         // Only clear if this is a new reset event
