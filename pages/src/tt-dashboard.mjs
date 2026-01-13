@@ -230,7 +230,7 @@ function initControls() {
     }));
 
     els.offsetButtons.forEach(btn => btn.addEventListener('click', () => {
-        const dir = btn.dataset.action === 'offset-up' ? 1 : -1;
+        const dir = btn.dataset.action === 'offset-up' ? -1 : 1;
         updateManualOffset(state.distanceOffset + dir * 10);
     }));
 
@@ -311,6 +311,7 @@ function setPlan(plan, {share=true, resetHome=true}={}) {
         : null;
     // Reset user-adjustable pacing knobs to match the online planner defaults
     state.powerBias = 1.0;
+    updateManualOffset(0, {share: false});
     resetMetrics();
     resetPlanWBal();
     resetAutoOffset();
