@@ -102,6 +102,66 @@ export function pacingRatio(tracking, intervals) {
     return Math.min(PACING_MAX, Math.max(PACING_MIN, actualS / planS));
 }
 
+// The finish prediction (docs/REVAMP_PLAN.md 6.1). The 2026-10-27 race: a clock that
+// started 10 s before the official timer put +11 s on a 46 s first interval, and the old
+// time ratio (actual / plan over the ridden intervals, extrapolated over the rest) turned
+// that into "2:15 behind" the moment the second interval closed. So: the clock deficit is
+// carried as the constant it is, and the rest of the race is timed from the rider's power
+// against the plan, through the physics of each interval.
+export const POWER_WINDOW_S = 300;      // the power ratio looks back this far
+export const POWER_PRIOR_S = 60;        // and counts for half after this much sample
+export const POWER_RATIO_MIN = 0.5;
+export const POWER_RATIO_MAX = 1.5;
+const BIKE_KG = 9;
+const DEFAULT_RIDER_KG = 75;
+const CRR = 0.005;
+const G = 9.81;
+
+/**
+ * Recent actual / target power, time-weighted over the last POWER_WINDOW_S of racing,
+ * shrunk towards 1 by POWER_PRIOR_S: {ratio, sampleS}. The current interval counts.
+ */
+export function powerRatio(tracking, intervals, raceS) {
+    let weighted = 0;
+    let sampleS = 0;
+    const windowStart = raceS - POWER_WINDOW_S;
+    for (const s of tracking.stats) {
+        const iv = intervals[s?.index];
+        if (!s || !(iv?.powerW > 0) || !(s.elapsedS > 0) || !Number.isFinite(s.avgPowerW)) {
+            continue;
+        }
+        const endS = s.finished && s.endRaceS != null ? s.endRaceS : raceS;
+        const overlap = Math.min(endS, raceS) - Math.max(s.startRaceS, windowStart);
+        if (overlap <= 0) {
+            continue;
+        }
+        weighted += overlap * (s.avgPowerW / iv.powerW);
+        sampleS += overlap;
+    }
+    if (sampleS <= 0) {
+        return {ratio: 1, sampleS: 0};
+    }
+    const raw = Math.min(POWER_RATIO_MAX, Math.max(POWER_RATIO_MIN, weighted / sampleS));
+    const weight = sampleS / (sampleS + POWER_PRIOR_S);
+    return {ratio: 1 + (raw - 1) * weight, sampleS};
+}
+
+/**
+ * How an interval's time answers power: t ∝ P^-e with e = 1 / (1 + 2a), a the share of
+ * the plan power that goes to the air (P = A v³ + B v). Flat: e ≈ 0.36; a steep climb
+ * approaches 1.
+ */
+export function timeExponent(iv, riderKg = DEFAULT_RIDER_KG) {
+    if (!(iv?.powerW > 0) || !(iv?.speedMs > 0)) {
+        return 1 / 3;
+    }
+    const massKg = (Number.isFinite(riderKg) && riderKg > 0 ? riderKg : DEFAULT_RIDER_KG) + BIKE_KG;
+    const grade = (Number(iv.grade) || 0) / 100;
+    const roadW = massKg * G * (grade + CRR) * iv.speedMs;
+    const aeroShare = Math.min(1, Math.max(0.1, 1 - roadW / iv.powerW));
+    return 1 / (1 + 2 * aeroShare);
+}
+
 /** Plan time at a plan metre, interpolated inside the interval. */
 export function planTimeAtMetre(intervals, planM) {
     if (!Number.isFinite(planM) || !intervals.length) {
@@ -119,29 +179,54 @@ export function planTimeAtMetre(intervals, planM) {
     return intervals.at(-1).endTimeS;
 }
 
+/** The plan's time from planM to finishM, with each interval scaled for the rider's power ratio. */
+function remainingAtRatio(intervals, planM, finishM, ratio, riderKg) {
+    let plan = 0;
+    let scaled = 0;
+    for (const iv of intervals) {
+        const from = Math.max(iv.startM, planM);
+        const to = Math.min(iv.endM, finishM);
+        if (!(to > from) || !(iv.lengthM > 0)) {
+            continue;
+        }
+        const planS = iv.durationS * (to - from) / iv.lengthM;
+        plan += planS;
+        scaled += planS * Math.pow(ratio, -timeExponent(iv, riderKg));
+    }
+    return {planS: plan, scaledS: scaled};
+}
+
 /**
- * Finish prediction from the race clock: what is left of the plan from here, scaled by
- * the pacing ratio. planTimeAtStart is the plan time at the metre where the clock
- * started, so a plan from the pen compares with a clock from the line.
+ * Finish prediction from the race clock. planTimeAtStart is the plan time at the metre
+ * where the clock started, so a plan from the pen compares with a clock from the line;
+ * finishM is where the race ends (the event's distance when it is shorter than the plan).
+ * deficitS is the clock against the plan at this metre; the rest is the plan's remaining
+ * time at the rider's recent power. pacing is that power ratio.
  */
-export function predict({tracking, plan, index, planM, raceS, planTimeAtStart = 0}) {
+export function predict({tracking, plan, index, planM, raceS, planTimeAtStart = 0, finishM = null}) {
     const intervals = plan.intervals;
     if (!Number.isFinite(raceS) || !intervals.length) {
         return null;
     }
-    const ratio = pacingRatio(tracking, intervals);
-    const remainingPlanS = Math.max(0, plan.timeS - planTimeAtMetre(intervals, planM));
-    const remainingS = remainingPlanS * ratio;
-    const planFromStartS = Math.max(0, plan.timeS - planTimeAtStart);
-    const totalS = raceS + remainingS;
-    const finished = index >= intervals.length;
+    const endM = Number.isFinite(finishM) && finishM > 0 ? Math.min(finishM, plan.lengthM) : plan.lengthM;
+    const planTotalS = Math.max(0, planTimeAtMetre(intervals, endM) - planTimeAtStart);
+    const here = Number.isFinite(planM) ? Math.min(Math.max(planM, intervals[0].startM), endM) : intervals[0].startM;
+    const deficitS = raceS - Math.max(0, planTimeAtMetre(intervals, here) - planTimeAtStart);
+    const {ratio, sampleS} = powerRatio(tracking, intervals, raceS);
+    const {planS: remainingPlanS, scaledS} = remainingAtRatio(intervals, here, endM, ratio, plan.weightKg);
+    const finished = index >= intervals.length || here >= endM;
+    const remainingS = finished ? 0 : scaledS;
+    const totalS = finished ? raceS : raceS + remainingS;
     return {
         pacing: ratio,
+        timeRatio: pacingRatio(tracking, intervals),
+        deficitS,
+        finishM: endM,
         remainingPlanS,
-        remainingS: finished ? 0 : remainingS,
-        totalS: finished ? raceS : totalS,
-        planTotalS: planFromStartS,
-        deltaS: (finished ? raceS : totalS) - planFromStartS,
-        sampleS: tracking.stats.filter(s => s?.finished && !s.partial).reduce((sum, s) => sum + (intervals[s.index]?.durationS ?? 0), 0),
+        remainingS,
+        totalS,
+        planTotalS,
+        deltaS: totalS - planTotalS,
+        sampleS,
     };
 }

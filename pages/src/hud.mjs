@@ -367,13 +367,16 @@ function setBanner(v, now) {
         } else {
             text = v.event?.inEvent ? 'ready, waiting for the start' : 'ready';
         }
-        const mm = v.event?.mismatchM;
-        if (Number.isFinite(mm)) {
-            text += `, plan ${mm > 0 ? 'shorter' : 'longer'} by ${Math.round(Math.abs(mm))} m`;
+        if (Number.isFinite(v.event?.mismatchM)) {
+            text += `, ${mismatchWords(v)}`;
         }
         name = v.plan?.routeName ? ` ${v.plan.routeName}` : '';
     } else if (v.status === 'idle' && v.plan) {
         text = `${v.plan.routeName ?? 'plan'}: ${statusWords(v)}`;
+    } else if (v.status === 'racing' && Number.isFinite(v.event?.mismatchM)) {
+        // A plan for another distance (the 2026-10-27 race: one lap planned, 16 km raced)
+        // stays flagged for the whole race; the finish is predicted to the event's end.
+        text = mismatchWords(v);
     } else if (v.status === 'racing' && v.event?.inEvent && v.event.kind === 'group') {
         text = 'clock from the gun';
     }
@@ -384,6 +387,14 @@ function setBanner(v, now) {
         els.banner.innerHTML = html;
     }
     setHidden(els.banner, !html);
+}
+
+/** "event 16.15 km, plan 22.42 km": the two lengths, the plan's second. */
+export function mismatchWords(v) {
+    const km = m => `${(m / 1000).toFixed(2)} km`;
+    const eventM = v.event?.lengthM;
+    const planM = v.plan?.lengthM ?? v.race?.lengthM;
+    return `event ${km(eventM)}, plan ${km(planM)}`;
 }
 
 // ---- dial ----

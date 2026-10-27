@@ -94,9 +94,12 @@ function render(v) {
     }
     // The strategy ridden, when the plan has the optimiser's cards: "balanced plan 14:23 ...".
     const strategy = plan.strategyLabel ? `${plan.strategyLabel.toLowerCase()} ` : '';
+    // A plan for another distance is said in both states (the finish is predicted to the event's end).
+    const mismatch = Number.isFinite(v.event?.mismatchM)
+        ? `, event ${(v.event.lengthM / 1000).toFixed(2)} km` : '';
     const facts = v.status === 'racing' || v.status === 'finished'
-        ? `${strategy}plan ${planTime}, ${race.completed} of ${plan.intervals} intervals ridden`
-        : `${strategy}plan ${planTime} over ${(plan.lengthM / 1000).toFixed(2)} km, ${statusWords(v)}`;
+        ? `${strategy}plan ${planTime}, ${race.completed} of ${plan.intervals} intervals ridden${mismatch}`
+        : `${strategy}plan ${planTime} over ${(plan.lengthM / 1000).toFixed(2)} km${mismatch}, ${statusWords(v)}`;
     setText(els.facts, facts);
     const words = (race.running && race.pacingSampleS > 0) || v.status === 'finished' ? deltaWords(race.deltaS) : '';
     setText(els.delta, words);

@@ -187,7 +187,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             const completed = state.tracking.stats.filter(s => s?.finished).length;
             // Re-predict when an interval completes, on the first tick, and once a second otherwise.
             if (!prevPrediction || prevPrediction.completed !== completed || clock.elapsedS - prevPrediction.raceS >= 1) {
-                const p = predict({tracking: state.tracking, plan, index, planM, raceS: clock.elapsedS, planTimeAtStart: state.planTimeAtStart});
+                const p = predict({tracking: state.tracking, plan, index, planM, raceS: clock.elapsedS, planTimeAtStart: state.planTimeAtStart, finishM: finishMetre(data, plan)});
                 state.lastPrediction = p ? {...p, completed, raceS: clock.elapsedS} : null;
             }
             const wMs = worldTimeOf(data, nowMs);
@@ -354,9 +354,11 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             race: {
                 running: state.clock.running, signal: state.clock.signal, elapsedS: state.clock.running ? state.clock.elapsedS : null,
                 planM: state.planM, lengthM: plan?.lengthM ?? null,
-                remainingM: plan && state.planM != null ? Math.max(0, plan.lengthM - state.planM) : null,
-                planTimeFromStartS: plan ? Math.max(0, plan.timeS - state.planTimeAtStart) : null,
+                finishM: plan ? (p?.finishM ?? finishMetre(data, plan)) : null,
+                remainingM: plan && state.planM != null ? Math.max(0, (p?.finishM ?? finishMetre(data, plan)) - state.planM) : null,
+                planTimeFromStartS: plan ? (p?.planTotalS ?? Math.max(0, planTimeAtMetre(plan.intervals, finishMetre(data, plan)) - state.planTimeAtStart)) : null,
                 remainingS: p?.remainingS ?? null, totalS: p?.totalS ?? null, deltaS: p?.deltaS ?? null, pacing: p?.pacing ?? null,
+                deficitS: p?.deficitS ?? null, timeRatio: p?.timeRatio ?? null,
                 pacingSampleS: p?.sampleS ?? 0,
                 completed: state.tracking.stats.filter(x => x?.finished).length,
             },
@@ -377,6 +379,12 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
     }
 
     return {tick, view, control, setPrefs, event, get state() { return state; }};
+}
+
+/** Where the race ends in plan metres: the event's distance when Sauce reports one shorter than the plan. */
+function finishMetre(data, plan) {
+    const eventM = eventLengthM(data);
+    return plan && eventM != null && eventM < plan.lengthM ? eventM : (plan?.lengthM ?? null);
 }
 
 function idOf(data) {
