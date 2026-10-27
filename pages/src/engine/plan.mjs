@@ -48,6 +48,7 @@ export function normalisePlan(raw, {code = null, card = null} = {}) {
         laps: num(route.laps),
         lengthM: last.endM,
         startOffsetM: num(route.start_offset_m),
+        startLineM: num(route.start_line_m),
         leadInM: km(route.lead_in_km),
         cp,
         cpUsed,

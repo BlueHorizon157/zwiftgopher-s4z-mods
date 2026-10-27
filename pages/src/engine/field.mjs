@@ -139,7 +139,8 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
             for (let k = Math.max(1, k0); k <= k1; k++) {
                 setCheckpoint(r, k, r.lastWT + dt * ((k * o.spacingM - r.lastM) / dm));
             }
-            if (r.startWT == null && kind !== 'group' && Number.isFinite(lineM) && r.lastM < lineM && m >= lineM) {
+            // Crossing the line (at the pen, metre 0, a rider leaves it at the last stationary sample).
+            if (r.startWT == null && kind !== 'group' && Number.isFinite(lineM) && r.lastM <= lineM && m > lineM) {
                 r.startWT = r.lastWT + dt * ((lineM - r.lastM) / dm);
                 r.startSource = 'line';
             }

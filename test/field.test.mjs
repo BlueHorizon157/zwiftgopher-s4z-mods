@@ -197,3 +197,20 @@ test('at the finish every rider has a sector speed, to the line they stopped on'
         assert.ok(Math.abs(r.sector.riderKmh / r.sector.homeKmh - RIVALS[r.name].factor) < 0.006, r.name);
     }
 });
+
+test('a line at the pen (metre 0): a rider starts when they leave it', () => {
+    const f = createField();
+    const base = structuredClone(nearby[0].d.find(e => !e.watching));
+    const at = (m, s) => {
+        const e = structuredClone(base);
+        Object.assign(e.state, {eventDistance: m, worldTime: EPOCH + s * 1000, time: 0, speed: m > 0 ? 30 : 0});
+        ingest(f, [e], EPOCH + s * 1000, {lineM: 0, kind: 'tt'});
+    };
+    at(0, 0);
+    at(0, 2);
+    assert.equal(f.riders.get(String(base.athleteId)).startWT, null, 'waiting in the pen');
+    at(16, 4);
+    const r = f.riders.get(String(base.athleteId));
+    assert.equal(r.startSource, 'line');
+    assert.equal(r.startWT, EPOCH + 2000, 'the last sample still in the pen');
+});

@@ -6,7 +6,7 @@
 // row's `assumptions`; a real recording (settings → Telemetry recorder) replaces it.
 //
 //   node scripts/make-synthetic-telemetry.mjs test/fixtures/plans/flat.fit.optimise.json \
-//        test/fixtures/telemetry/synthetic-flat-tt.jsonl [--pen=30] [--line=180] [--warmup=4000] [--rivals=1]
+//        test/fixtures/telemetry/synthetic-flat-tt.jsonl [--pen=30] [--line=M (default: the plan's start_line_m, else 180)] [--warmup=4000] [--rivals=1]
 //
 // With --rivals=1 (the default) six made-up riders share the event: released before and
 // after the home rider (a staggered TT start) and riding the plan's speeds scaled by a
@@ -33,7 +33,6 @@ const RIVALS = [
     {id: 900006, name: 'Joe Hart', team: 'ZG', releaseS: 25, factor: 1.0, weight: 82},
 ];
 const PEN_SECONDS = opt.pen ?? 30;          // ticks sat in the pen before release
-const LINE_M = opt.line ?? 180;             // timing line: 30 m pen-to-route + the planner's 150 m start delay
 const WARMUP_M = opt.warmup ?? 4000;        // ride distance before the event (state.distance counts it)
 const TAIL_SECONDS = 20;
 const EPOCH = Date.UTC(2026, 0, 1, 12, 0, 0);
@@ -45,6 +44,9 @@ const file = JSON.parse(readFileSync(planPath, 'utf8'));
 if (file.schema !== 'zg-tt-plan/1') {
     throw new Error('not a zg-tt-plan/1 file');
 }
+// Timing line: the file's route.start_line_m (planner 2026-10-27 on: 0, the pen, on most
+// routes), else the old rule of 30 m pen-to-route + the 150 m start delay.
+const LINE_M = Number(opt.line ?? file.route?.start_line_m ?? 180);
 const intervals = file.intervals;
 const planLengthM = intervals[intervals.length - 1].end_m;
 const cp = file.rider.cp_used;
