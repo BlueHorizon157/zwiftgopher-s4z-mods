@@ -21,6 +21,11 @@ file, 5.2 look-ahead) once they land.
 
 ## Status (2026-10-27)
 
+**Released:** 0.7.0-alpha (79d192f, with the planner deploy df64520), then 0.7.1-alpha after
+Dave's first race on it: the Phase 6 fixes 6.1 to 6.3 below (finish prediction from power,
+the timing line from the event's length, the target switching at the boundary). 139 tests;
+the page check passes in Sauce. The rest of this section is the Phase 0 to 5 record.
+
 Audit done; Dave's decisions are in §6. **Phases 0 to 5 are in**, uncommitted on the mod's
 working tree (branch `claude/plan-file-v1`, on top of 94c61a3), with a small planner change
 uncommitted on `claude/tt-planner` (below). `npm test` runs 130 tests; `scripts/page-check.mjs`

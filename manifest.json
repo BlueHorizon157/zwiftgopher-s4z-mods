@@ -5,7 +5,7 @@
   "description": "Ride a ZwiftGopher TT plan in Zwift: the target now, the next change and when, W' and the finish, as a HUD over the game.",
   "author": "ZwiftGopher",
   "website_url": "https://zwiftgopher.com/TT/",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "content_js": [],
   "content_css": [],
   "web_root": "pages",
