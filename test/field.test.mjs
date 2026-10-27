@@ -23,7 +23,7 @@ const RIVALS = {
     'Joe Hart': {releaseS: 25, factor: 1.0},
 };
 
-function playTo(seconds, ctx = {lineM: 180, kind: 'tt'}, field = createField()) {
+function playTo(seconds, ctx = {lineM: 0, kind: 'tt'}, field = createField()) {
     for (const row of nearby) {
         if (row.t > seconds * 1000) {
             break;
@@ -45,7 +45,7 @@ test('every rider is followed from the line, home is the watching rider', () => 
     assert.equal(f.riders.size, 7);
     assert.equal(f.riders.get(f.homeId).name, 'Synthetic Rider');
     for (const r of f.riders.values()) {
-        assert.equal(r.startSource, 'line', `${r.name} start seen at the line`);
+        assert.equal(r.startSource, 'time', `${r.name} start from the game's timer`);
         assert.ok(r.lastK > 50, `${r.name} has checkpoints`);
     }
 });
@@ -155,10 +155,10 @@ test('riders unseen for 2 min fade, after 10 min they go; home stays', () => {
     const f = playTo(300);
     const last = nearby.find(r => r.t >= 300_000);
     const homeOnly = last.d.filter(e => e.watching);
-    ingest(f, homeOnly, EPOCH + 300_000 + 3 * 60_000, {lineM: 180, kind: 'tt'});
+    ingest(f, homeOnly, EPOCH + 300_000 + 3 * 60_000, {lineM: 0, kind: 'tt'});
     const faded = rows(f, {nowMs: EPOCH + 300_000 + 3 * 60_000});
     assert.equal(faded.filter(r => r.stale).length, 6);
-    ingest(f, homeOnly, EPOCH + 300_000 + 11 * 60_000, {lineM: 180, kind: 'tt'});
+    ingest(f, homeOnly, EPOCH + 300_000 + 11 * 60_000, {lineM: 0, kind: 'tt'});
     assert.equal(f.riders.size, 1);
     assert.equal([...f.riders.values()][0].name, 'Synthetic Rider');
 });
@@ -167,7 +167,8 @@ test('a distance that goes back (a new event) clears the rider\'s checkpoints; r
     const f = playTo(300);
     const homeEntry = structuredClone(nearby.find(r => r.t >= 300_000).d.find(e => e.watching));
     homeEntry.state.eventDistance = 10;
-    ingest(f, [homeEntry], EPOCH + 302_000, {lineM: 180, kind: 'tt'});
+    homeEntry.state.time = 0;           // a new event: the game's clock goes back with its distance
+    ingest(f, [homeEntry], EPOCH + 302_000, {lineM: 0, kind: 'tt'});
     const home = f.riders.get(f.homeId);
     assert.equal(home.lastK, 0);
     assert.equal(home.startWT, null);
@@ -181,7 +182,7 @@ test('another category is left out unless all riders are asked for', () => {
     stranger.athleteId = 123;
     stranger.athlete.id = 123;
     stranger.state.eventSubgroupId = 999;
-    ingest(f, [stranger], EPOCH + 200_500, {lineM: 180, kind: 'tt'});
+    ingest(f, [stranger], EPOCH + 200_500, {lineM: 0, kind: 'tt'});
     assert.equal(rows(f, {nowMs: EPOCH + 200_500}).length, 7);
     assert.equal(rows(f, {nowMs: EPOCH + 200_500, allSubgroups: true}).length, 8);
 });

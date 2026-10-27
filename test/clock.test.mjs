@@ -16,13 +16,17 @@ const oldFile = {...file, route: oldRoute};
 const T0 = 1_800_000_000_000;
 const tick = (eventDistance, {time = 0, speed = 0, worldTime = T0} = {}) => ({state: {eventDistance, time, speed, worldTime}});
 
-test('the line is the file\'s start_line_m, else the pen-to-route metres + 150', () => {
+test('the line is the plan length minus the event length; else the file\'s start_line_m; else 0', () => {
     assert.equal(lineMetre(withLine(0)), 0);
     assert.equal(lineMetre(withLine(30)), 30);
     const old = normalisePlan(oldFile);
     assert.equal(old.startLineM, null);
-    assert.equal(lineMetre(old), file.route.start_offset_m + 150);
-    assert.equal(lineMetre({}), 180);
+    assert.equal(lineMetre(old), 0);
+    assert.equal(lineMetre({}), 0);
+    // The event says: 90 m shorter than the plan, so the line is 90 m in, whatever the file says.
+    const event = {remainingMetric: 'distance', remainingEnd: old.lengthM - 90};
+    assert.equal(lineMetre(withLine(0), event), 90);
+    assert.equal(lineMetre(old, event), 90);
 });
 
 test('a line at the pen: waiting in the pen does not start the clock, moving does', () => {
@@ -48,13 +52,12 @@ test('Zwift\'s own clock wins over the distance when it runs', () => {
     assert.equal(clock.elapsedS, 5);
 });
 
-test('an older file keeps the 150 m rule for the distance fallback', () => {
+test('a file without start_line_m: the distance fallback starts at the first event metre', () => {
     const plan = normalisePlan(oldFile);
-    const line = lineMetre(plan);
-    const before = advanceClock(createClock(), {kind: 'tt', rule: 'distance', prev: tick(100), tick: tick(line - 20, {speed: 36}), plan, planM: line - 20});
+    const before = advanceClock(createClock(), {kind: 'tt', rule: 'distance', prev: tick(0), tick: tick(0, {speed: 36}), plan, planM: 0});
     assert.equal(before.running, false);
-    const after = advanceClock(createClock(), {kind: 'tt', rule: 'distance', prev: tick(line - 20), tick: tick(line + 5, {speed: 36, worldTime: T0}), plan, planM: line + 5});
+    const after = advanceClock(createClock(), {kind: 'tt', rule: 'distance', prev: tick(0), tick: tick(5, {speed: 36, worldTime: T0}), plan, planM: 5});
     assert.equal(after.running, true);
-    assert.equal(after.startPlanM, line);
+    assert.equal(after.startPlanM, 0);
     assert.equal(after.startWorldMs, T0 - 500);
 });

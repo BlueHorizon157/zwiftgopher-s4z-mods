@@ -6,7 +6,7 @@
 // row's `assumptions`; a real recording (settings → Telemetry recorder) replaces it.
 //
 //   node scripts/make-synthetic-telemetry.mjs test/fixtures/plans/flat.fit.optimise.json \
-//        test/fixtures/telemetry/synthetic-flat-tt.jsonl [--pen=30] [--line=M (default: the plan's start_line_m, else 180)] [--warmup=4000] [--rivals=1]
+//        test/fixtures/telemetry/synthetic-flat-tt.jsonl [--pen=30] [--line=M (default: the plan's start_line_m, else 0)] [--warmup=4000] [--rivals=1]
 //
 // With --rivals=1 (the default) six made-up riders share the event: released before and
 // after the home rider (a staggered TT start) and riding the plan's speeds scaled by a
@@ -44,9 +44,10 @@ const file = JSON.parse(readFileSync(planPath, 'utf8'));
 if (file.schema !== 'zg-tt-plan/1') {
     throw new Error('not a zg-tt-plan/1 file');
 }
-// Timing line: the file's route.start_line_m (planner 2026-10-27 on: 0, the pen, on most
-// routes), else the old rule of 30 m pen-to-route + the 150 m start delay.
-const LINE_M = Number(opt.line ?? file.route?.start_line_m ?? 180);
+// Timing line in plan metres: --line, else the file's route.start_line_m, else the pen. The
+// game's eventDistance and clock sit at zero until it (Dave, 2026-10-27), so the event's
+// length is the plan's minus the line, and the engine finds the line from that.
+const LINE_M = Number(opt.line ?? file.route?.start_line_m ?? 0);
 const intervals = file.intervals;
 const planLengthM = intervals[intervals.length - 1].end_m;
 const cp = file.rider.cp_used;
@@ -83,7 +84,7 @@ const push = (state, extra = {}) => {
             state: {
                 worldTime: EPOCH + t * 1000,
                 distance: WARMUP_M + planM,
-                eventDistance: planM,
+                eventDistance: Math.max(0, planM - LINE_M),
                 time: raceTime,
                 speed: state.speed * 3.6,
                 power: state.power,
@@ -102,10 +103,10 @@ const push = (state, extra = {}) => {
             wBal: wbal,
             eventPosition: 12,
             eventParticipants: 40,
-            remaining: Math.max(0, planLengthM - planM),
+            remaining: Math.max(0, planLengthM - Math.max(LINE_M, planM)),
             remainingMetric: 'distance',
             remainingType: 'event',
-            remainingEnd: planLengthM,
+            remainingEnd: planLengthM - LINE_M,
             ...extra,
         },
     });
@@ -217,15 +218,15 @@ if (WITH_RIVALS) {
             return {
                 athleteId: rv.id, age: 0,
                 athlete: {id: rv.id, fullname: rv.name, sanitizedFullname: rv.name, team: rv.team, weight: rv.weight, wPrime},
-                state: {worldTime: EPOCH + tt * 1000, distance: WARMUP_M + x.m, eventDistance: x.m, time: x.race, speed: x.speed * 3.6, power: x.power, grade: x.grade, eventSubgroupId: SUBGROUP, courseId: 6, routeId: d.state.routeId},
+                state: {worldTime: EPOCH + tt * 1000, distance: WARMUP_M + x.m, eventDistance: Math.max(0, x.m - LINE_M), time: x.race, speed: x.speed * 3.6, power: x.power, grade: x.grade, eventSubgroupId: SUBGROUP, courseId: 6, routeId: d.state.routeId},
                 stats: {power: {avg: x.avgP}, speed: {avg: x.avgS * 3.6}},
                 wBal: x.wb,
-                race: x.race, m: x.m,
+                race: x.race, m: Math.max(0, x.m - LINE_M),
             };
         });
         // Standings by average race speed since the line; riders still in the pen last.
         const all = [home, ...others];
-        const pace = e => (e.race > 0 ? (e.m - LINE_M) / e.race : -1);
+        const pace = e => (e.race > 0 ? e.m / e.race : -1);
         const ranked = [...all].sort((a, b) => pace(b) - pace(a));
         for (const e of all) {
             e.eventPosition = ranked.indexOf(e) + 1;
@@ -251,11 +252,12 @@ const meta = {
         synthetic: true,
         assumptions: {
             A_time: `state.time is 0 until the timing line at plan metre ${LINE_M} and counts race seconds from there`,
-            B_eventDistance: 'state.eventDistance is the plan metre: 0 in the pen, counting from the pen release',
+            B_eventDistance: `state.eventDistance is 0 until the timing line and counts from it; remainingEnd is the plan length minus the line (${planLengthM - LINE_M} m)`,
             C_rpc: 'getEvent/getEventSubgroup shapes are guesses at the Zwift API objects Sauce returns',
             D_physics: 'the rider holds each interval\'s plan power and speed exactly; no response lag',
             E_rivals: WITH_RIVALS ? `${RIVALS.length} made-up riders released ${RIVALS.map(r => r.releaseS).join('/')} s from the home rider at ${RIVALS.map(r => r.factor).join('/')} x the plan's speed; nearby every ${NEARBY_EVERY_S} s` : 'none',
         },
+        line: LINE_M,
         rows: rows.length,
     },
 };

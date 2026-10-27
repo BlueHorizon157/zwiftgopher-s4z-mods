@@ -3,7 +3,6 @@
 // is and where the plan's sectors end; this converts those from plan metres to event metres.
 import * as sauce from '../sauce.mjs';
 import {createField, ingest, resetField} from '../engine/field.mjs';
-import {DEFAULT_PEN_M, START_DELAY_M} from '../engine/clock.mjs';
 
 export function startFieldFeed({view, onUpdate = null}) {
     const field = createField();
@@ -18,9 +17,9 @@ export function startFieldFeed({view, onUpdate = null}) {
 }
 
 export function contextOf(v) {
-    const offset = v?.controls?.offsetM ?? 0;
-    const lineM = (v?.event?.lineM ?? DEFAULT_PEN_M + START_DELAY_M) - offset;
-    return {lineM, kind: v?.event?.kind ?? null, gunMs: v?.event?.startMs ?? null};
+    // Every rider's eventDistance sits at zero until the timing line, so in event metres
+    // the line is 0, whatever the route (docs/REVAMP_PLAN.md 6.2).
+    return {lineM: 0, kind: v?.event?.kind ?? null, gunMs: v?.event?.startMs ?? null};
 }
 
 /** Sector boundaries in event metres: the plan's interval ends, when the plan is for this route. */

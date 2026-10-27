@@ -131,6 +131,12 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
         if (r.lastM != null && m < r.lastM - o.spacingM) {
             clearTrack(r);          // a new event or a rejoin: the distance went back
         }
+        // The game's timer starts at the line (as its distance does), so it places a rider's
+        // start exactly; the crossing below is the fallback for a rider without one.
+        if (r.startWT == null && kind !== 'group' && Number.isFinite(lineM) && m > lineM && num(s.time) > 0) {
+            r.startWT = wt - num(s.time) * 1000;
+            r.startSource = 'time';
+        }
         if (r.lastM != null && m > r.lastM && wt >= r.lastWT) {
             const dm = m - r.lastM;
             const dt = wt - r.lastWT;
@@ -145,15 +151,9 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
                 r.startSource = 'line';
             }
         }
-        if (r.startWT == null) {
-            if (kind === 'group' && Number.isFinite(gunMs)) {
-                r.startWT = gunMs;
-                r.startSource = 'gun';
-            } else if (Number.isFinite(lineM) && m > lineM && num(s.time) > 0) {
-                // First seen past the line: trust the game's timer for this rider's start.
-                r.startWT = wt - num(s.time) * 1000;
-                r.startSource = 'time';
-            }
+        if (r.startWT == null && kind === 'group' && Number.isFinite(gunMs)) {
+            r.startWT = gunMs;
+            r.startSource = 'gun';
         }
         // lastWT is the latest time at lastM (a rider leaving the pen leaves at the last
         // stationary sample); arrivedWT the first (a rider who stops at the finish got there then).

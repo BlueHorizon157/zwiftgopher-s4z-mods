@@ -1,3 +1,4 @@
+import {lineInPlanM} from './align.mjs';
 // The race clock (docs/REVAMP_PLAN.md 1.2). Three kinds of start, picked from the event:
 //
 //   tt     a TT event: the clock starts at the timing line. Which telemetry marks it is
@@ -13,8 +14,6 @@
 // so two windows on the same ticks read the same clock.
 
 export const START_RULES = ['auto', 'time', 'distance'];
-export const START_DELAY_M = 150;      // the old planner rule: the line 150 m after the pen-to-route metres
-export const DEFAULT_PEN_M = 30;
 const MAX_BACKDATE_S = 10;
 
 export function createClock() {
@@ -26,11 +25,9 @@ export function createClock() {
  * starts (route.start_line_m: 0, the pen, on most routes; ZwiftPower's time is the ride from
  * the pen). Older files were built on the 150 m start delay after the pen-to-route metres.
  */
-export function lineMetre(plan) {
-    if (Number.isFinite(plan?.startLineM)) {
-        return plan.startLineM;
-    }
-    return (plan?.startOffsetM ?? DEFAULT_PEN_M) + START_DELAY_M;
+export function lineMetre(plan, tick = null) {
+    // The plan metre where the clock starts: from the event's length, else the file (align.mjs).
+    return lineInPlanM(tick, plan);
 }
 
 /**

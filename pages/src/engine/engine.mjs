@@ -14,7 +14,7 @@
 import {normalisePlan} from './plan.mjs';
 import {locate, at, boundary, BEFORE} from './cursor.mjs';
 import {createClock, advanceClock, worldTimeOf, lineMetre} from './clock.mjs';
-import {inEvent, routeMatches, planMetre, rideDistanceM, mismatchM, eventLengthM} from './align.mjs';
+import {inEvent, routeMatches, planMetre, rideDistanceM, mismatchM, eventLengthM, lineInPlanM} from './align.mjs';
 import {createTracking, advance, predict, planTimeAtMetre} from './tracking.mjs';
 import {update as wbalUpdate} from './wbal.mjs';
 
@@ -137,7 +137,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             }
         }
 
-        const planM = planMetre(data, {offsetM: state.controls.offsetM, anchorDistanceM: state.anchorDistanceM});
+        const planM = planMetre(data, {offsetM: state.controls.offsetM, anchorDistanceM: state.anchorDistanceM, plan});
         state.planM = planM;
         smoothPower(data, nowMs);
         if (state.status === 'idle') {
@@ -180,7 +180,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 planM,
                 intervals: plan.intervals,
                 atStart: clock.justStarted,
-                startLineM: lineMetre(plan),
+                startLineM: lineMetre(plan, data),
             });
             state.index = index;
             const prevPrediction = state.lastPrediction;
@@ -371,7 +371,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 startMs: state.event.startMs,
                 routeMatches: routeMatches(data, plan), lengthM: eventLengthM(data), mismatchM: mismatchM(data, plan),
                 position: data.eventPosition ?? null, participants: data.eventParticipants ?? null,
-                lineM: plan ? lineMetre(plan) : null,
+                lineM: plan ? lineMetre(plan, data) : null,
             } : null,
             stats: state.tracking.stats,
             log: state.log,
@@ -383,8 +383,11 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
 
 /** Where the race ends in plan metres: the event's distance when Sauce reports one shorter than the plan. */
 function finishMetre(data, plan) {
+    if (!plan) {
+        return null;
+    }
     const eventM = eventLengthM(data);
-    return plan && eventM != null && eventM < plan.lengthM ? eventM : (plan?.lengthM ?? null);
+    return eventM == null ? plan.lengthM : Math.min(plan.lengthM, eventM + lineInPlanM(data, plan));
 }
 
 function idOf(data) {
