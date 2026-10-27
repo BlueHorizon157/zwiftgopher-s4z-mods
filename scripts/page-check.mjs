@@ -10,7 +10,7 @@
 //   node scripts/page-check.mjs [--base=http://127.0.0.1:1080] [--replay=synthetic-flat-tt]
 //        [--plan=flat.fit.optimise] [--speed=20] [--out=/tmp/zg-page-check]
 //        [--pages=hud,hud-dial,hud-stack,list,field,rivals,settings]
-//        [--replays=1|0] [--looks=1|0] [--moments=armed:20,racing:200,soon:345,finished:940] [--backgrounds=snow,jungle,night]
+//        [--replays=1|0] [--looks=1|0] [--moments=armed:20,racing:200,soon:349,finished:940] [--backgrounds=snow,jungle,night]
 // Needs Sauce running with the web server on (Settings → Web server) and the mod enabled;
 // the mod id is zwiftgopher-tt. Chrome: /usr/bin/google-chrome or $CHROME.
 import {spawn} from 'node:child_process';
@@ -42,9 +42,10 @@ const SIZES = {
 const KIND = page => (page.startsWith('hud') ? 'hud' : page);
 const PAGE_MOMENTS = {hud: null, list: ['racing', 'soon', 'finished'], field: ['racing', 'finished'], rivals: ['racing', 'finished']};
 const IDLE = {hud: '#idle', list: '#empty'};
-// Moments in the synthetic flat recording (seconds): in the pen, mid interval 1, 9 s before
-// the third boundary, after the finish. Another recording needs its own --moments=name:seek.
-const MOMENTS = Object.fromEntries(String(opt.moments || 'armed:20,racing:200,soon:345,finished:940').split(',')
+// Moments in the synthetic flat recording (seconds; released at 30): in the pen, mid
+// interval 1, 9 s before interval 3, after the finish. Another recording, or the same one
+// rebuilt from a new plan, needs its own --moments=name:seek.
+const MOMENTS = Object.fromEntries(String(opt.moments || 'armed:20,racing:200,soon:349,finished:940').split(',')
     .map(m => m.split(':')).map(([k, v]) => [k, Number(v)]));
 
 async function launch() {

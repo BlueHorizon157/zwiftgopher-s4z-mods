@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createEngine} from '../pages/src/engine/engine.mjs';
 import {normalisePlan} from '../pages/src/engine/plan.mjs';
+import {lineMetre} from '../pages/src/engine/clock.mjs';
 import {parseJsonl, metaOf} from '../pages/src/replay.mjs';
 
 const plan = JSON.parse(readFileSync(new URL('./fixtures/plans/flat.fit.optimise.json', import.meta.url), 'utf8'));
@@ -44,7 +45,9 @@ test('the first interval opens on the start tick and is not partial', () => {
     assert.ok(first, 'interval 1 has statistics from the first racing tick');
     assert.equal(first.partial, false);
     assert.equal(startView.target.number, 1);
-    assert.ok(startView.race.planM >= 150 && startView.race.planM < 260, `clock started at plan metre ${startView.race.planM}`);
+    // The start is the first tick past the file's timing line: within a second's riding of it.
+    const line = lineMetre(normalisePlan(plan));
+    assert.ok(startView.race.planM >= line && startView.race.planM < line + 20, `clock started at plan metre ${startView.race.planM}, line ${line}`);
 });
 
 test('riding the plan exactly predicts the plan: delta within 2 s, pacing 1', () => {

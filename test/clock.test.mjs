@@ -10,13 +10,16 @@ import {createClock, advanceClock, lineMetre} from '../pages/src/engine/clock.mj
 
 const file = JSON.parse(readFileSync(new URL('./fixtures/plans/flat.fit.optimise.json', import.meta.url), 'utf8'));
 const withLine = m => normalisePlan({...file, route: {...file.route, start_line_m: m}});
+// The same plan as a file from before the planner wrote start_line_m.
+const {start_line_m: _line, ...oldRoute} = file.route;
+const oldFile = {...file, route: oldRoute};
 const T0 = 1_800_000_000_000;
 const tick = (eventDistance, {time = 0, speed = 0, worldTime = T0} = {}) => ({state: {eventDistance, time, speed, worldTime}});
 
 test('the line is the file\'s start_line_m, else the pen-to-route metres + 150', () => {
     assert.equal(lineMetre(withLine(0)), 0);
     assert.equal(lineMetre(withLine(30)), 30);
-    const old = normalisePlan(file);
+    const old = normalisePlan(oldFile);
     assert.equal(old.startLineM, null);
     assert.equal(lineMetre(old), file.route.start_offset_m + 150);
     assert.equal(lineMetre({}), 180);
@@ -46,7 +49,7 @@ test('Zwift\'s own clock wins over the distance when it runs', () => {
 });
 
 test('an older file keeps the 150 m rule for the distance fallback', () => {
-    const plan = normalisePlan(file);
+    const plan = normalisePlan(oldFile);
     const line = lineMetre(plan);
     const before = advanceClock(createClock(), {kind: 'tt', rule: 'distance', prev: tick(100), tick: tick(line - 20, {speed: 36}), plan, planM: line - 20});
     assert.equal(before.running, false);

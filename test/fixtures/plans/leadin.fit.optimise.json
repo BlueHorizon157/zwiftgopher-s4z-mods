@@ -7,10 +7,11 @@
         "name": "Seaside Sprint",
         "laps": null,
         "target_distance_km": null,
-        "distance_km": 9.13,
+        "distance_km": 9.24,
         "lead_in_km": 2.954,
         "elevation_m": 82.9,
-        "start_offset_m": -110.0,
+        "start_offset_m": 0.0,
+        "start_line_m": 0.0,
         "points_count": 1295
     },
     "rider": {
@@ -52,7 +53,7 @@
         "raceDayMarginPct": 0.0,
         "fitnessLevel": "competitive",
         "momentumFactor": 0.0,
-        "useInertia": false,
+        "useInertia": true,
         "bikeType": "tt",
         "strategyPreset": "fastest",
         "startProfile": "auto",
@@ -74,16 +75,16 @@
         "solver": "dp"
     },
     "summary": {
-        "time_seconds": 817.1,
-        "time_text": "13:37",
+        "time_seconds": 784.0,
+        "time_text": "13:04",
         "distance_km": 9.24,
-        "avg_speed_kmh": 40.72,
-        "avg_power_w": 296.0,
-        "normalized_power_w": 311.0,
-        "variability_index": 1.051,
-        "intensity_factor": 1.072,
-        "tss": 26.1,
-        "min_wbal_kj": 0.04
+        "avg_speed_kmh": 42.44,
+        "avg_power_w": 293.9,
+        "normalized_power_w": 307.0,
+        "variability_index": 1.045,
+        "intensity_factor": 1.059,
+        "tss": 24.4,
+        "min_wbal_kj": 2.45
     },
     "intervals": [
         {
@@ -95,14 +96,14 @@
             "distance_km": 0.566,
             "point_start": 0,
             "point_end": 85,
-            "power_w": 277.5,
+            "power_w": 272.5,
             "avg_gradient": 0.02,
             "surface": "pavement_sand",
             "start_time_s": 0.0,
-            "duration_s": 47.1,
+            "duration_s": 47.7,
             "duration_text": "0:47",
-            "speed_kmh": 43.28,
-            "wbal_kj": 19.44
+            "speed_kmh": 42.74,
+            "wbal_kj": 19.67
         },
         {
             "index": 2,
@@ -113,53 +114,35 @@
             "distance_km": 1.624,
             "point_start": 85,
             "point_end": 304,
-            "power_w": 375.0,
+            "power_w": 360.0,
             "avg_gradient": 1.12,
             "surface": "pavement_sand",
-            "start_time_s": 47.1,
-            "duration_s": 148.4,
-            "duration_text": "2:28",
-            "speed_kmh": 39.4,
-            "wbal_kj": 4.14
+            "start_time_s": 47.7,
+            "duration_s": 138.6,
+            "duration_text": "2:18",
+            "speed_kmh": 42.19,
+            "wbal_kj": 7.46
         },
         {
             "index": 3,
             "start_m": 2190.0,
-            "end_m": 2628.0,
+            "end_m": 3538.0,
             "start_km": 2.19,
-            "end_km": 2.628,
-            "distance_km": 0.438,
+            "end_km": 3.538,
+            "distance_km": 1.348,
             "point_start": 304,
-            "point_end": 360,
-            "power_w": 277.5,
-            "avg_gradient": -2.17,
+            "point_end": 504,
+            "power_w": 260.0,
+            "avg_gradient": -0.66,
             "surface": "pavement_sand",
-            "start_time_s": 195.5,
-            "duration_s": 34.0,
-            "duration_text": "0:34",
-            "speed_kmh": 46.45,
-            "wbal_kj": 3.95
+            "start_time_s": 186.3,
+            "duration_s": 111.4,
+            "duration_text": "1:51",
+            "speed_kmh": 43.58,
+            "wbal_kj": 8.79
         },
         {
             "index": 4,
-            "start_m": 2628.0,
-            "end_m": 3538.0,
-            "start_km": 2.628,
-            "end_km": 3.538,
-            "distance_km": 0.91,
-            "point_start": 360,
-            "point_end": 504,
-            "power_w": 235.0,
-            "avg_gradient": 0.06,
-            "surface": "pavement_sand",
-            "start_time_s": 229.5,
-            "duration_s": 82.9,
-            "duration_text": "1:22",
-            "speed_kmh": 39.49,
-            "wbal_kj": 7.01
-        },
-        {
-            "index": 5,
             "start_m": 3538.0,
             "end_m": 3896.0,
             "start_km": 3.538,
@@ -167,17 +150,17 @@
             "distance_km": 0.358,
             "point_start": 504,
             "point_end": 557,
-            "power_w": 150.0,
+            "power_w": 160.0,
             "avg_gradient": -2.51,
             "surface": "dirt",
-            "start_time_s": 312.4,
-            "duration_s": 30.1,
-            "duration_text": "0:30",
-            "speed_kmh": 42.81,
-            "wbal_kj": 10.68
+            "start_time_s": 297.7,
+            "duration_s": 31.2,
+            "duration_text": "0:31",
+            "speed_kmh": 41.3,
+            "wbal_kj": 12.29
         },
         {
-            "index": 6,
+            "index": 5,
             "start_m": 3896.0,
             "end_m": 5001.0,
             "start_km": 3.896,
@@ -185,17 +168,17 @@
             "distance_km": 1.104,
             "point_start": 557,
             "point_end": 694,
-            "power_w": 250.0,
+            "power_w": 252.5,
             "avg_gradient": 0.19,
             "surface": "pavement_sand",
-            "start_time_s": 342.5,
-            "duration_s": 101.6,
-            "duration_text": "1:41",
-            "speed_kmh": 39.14,
-            "wbal_kj": 12.91
+            "start_time_s": 328.9,
+            "duration_s": 97.6,
+            "duration_text": "1:37",
+            "speed_kmh": 40.75,
+            "wbal_kj": 14.18
         },
         {
-            "index": 7,
+            "index": 6,
             "start_m": 5001.0,
             "end_m": 5710.0,
             "start_km": 5.001,
@@ -203,17 +186,17 @@
             "distance_km": 0.709,
             "point_start": 694,
             "point_end": 788,
-            "power_w": 350.0,
+            "power_w": 342.5,
             "avg_gradient": 1.45,
             "surface": "pavement_sand",
-            "start_time_s": 444.1,
-            "duration_s": 67.4,
+            "start_time_s": 426.5,
+            "duration_s": 67.7,
             "duration_text": "1:07",
-            "speed_kmh": 37.87,
-            "wbal_kj": 7.65
+            "speed_kmh": 37.67,
+            "wbal_kj": 9.4
         },
         {
-            "index": 8,
+            "index": 7,
             "start_m": 5710.0,
             "end_m": 7170.0,
             "start_km": 5.71,
@@ -221,32 +204,50 @@
             "distance_km": 1.461,
             "point_start": 788,
             "point_end": 1003,
-            "power_w": 250.0,
+            "power_w": 242.5,
             "avg_gradient": -0.27,
             "surface": "pavement_sand",
-            "start_time_s": 511.5,
-            "duration_s": 125.0,
-            "duration_text": "2:05",
-            "speed_kmh": 42.06,
-            "wbal_kj": 10.38
+            "start_time_s": 494.2,
+            "duration_s": 123.7,
+            "duration_text": "2:03",
+            "speed_kmh": 42.52,
+            "wbal_kj": 13.03
+        },
+        {
+            "index": 8,
+            "start_m": 7170.0,
+            "end_m": 7934.0,
+            "start_km": 7.17,
+            "end_km": 7.934,
+            "distance_km": 0.764,
+            "point_start": 1003,
+            "point_end": 1116,
+            "power_w": 340.0,
+            "avg_gradient": 0.28,
+            "surface": "pavement_sand",
+            "start_time_s": 617.9,
+            "duration_s": 64.5,
+            "duration_text": "1:04",
+            "speed_kmh": 42.63,
+            "wbal_kj": 8.64
         },
         {
             "index": 9,
-            "start_m": 7170.0,
+            "start_m": 7934.0,
             "end_m": 8581.0,
-            "start_km": 7.17,
+            "start_km": 7.934,
             "end_km": 8.581,
-            "distance_km": 1.411,
-            "point_start": 1003,
+            "distance_km": 0.647,
+            "point_start": 1116,
             "point_end": 1202,
-            "power_w": 350.0,
-            "avg_gradient": 0.9,
+            "power_w": 380.0,
+            "avg_gradient": 1.63,
             "surface": "pavement_sand",
-            "start_time_s": 636.5,
-            "duration_s": 132.1,
-            "duration_text": "2:12",
-            "speed_kmh": 38.44,
-            "wbal_kj": 0.07
+            "start_time_s": 682.4,
+            "duration_s": 53.7,
+            "duration_text": "0:53",
+            "speed_kmh": 43.38,
+            "wbal_kj": 2.84
         },
         {
             "index": 10,
@@ -257,36 +258,36 @@
             "distance_km": 0.662,
             "point_start": 1202,
             "point_end": 1295,
-            "power_w": 272.5,
+            "power_w": 280.0,
             "avg_gradient": -1.88,
             "surface": "pavement_sand",
-            "start_time_s": 768.6,
-            "duration_s": 48.5,
-            "duration_text": "0:48",
-            "speed_kmh": 49.15,
-            "wbal_kj": 0.04
+            "start_time_s": 736.1,
+            "duration_s": 47.9,
+            "duration_text": "0:47",
+            "speed_kmh": 49.73,
+            "wbal_kj": 2.45
         }
     ],
     "cards": [
         {
             "key": "fastest",
             "label": "Fastest",
-            "time_seconds": 817.1,
-            "time_text": "13:37",
-            "avg_power_w": 296.0,
-            "normalized_power_w": 311.0,
-            "min_wbal_kj": 0.04,
+            "time_seconds": 784.0,
+            "time_text": "13:04",
+            "avg_power_w": 293.9,
+            "normalized_power_w": 307.0,
+            "min_wbal_kj": 2.45,
             "min_wbal_rider_kj": null,
             "target_wbal_floor_kj": 0.0,
             "constraint_satisfied": true,
-            "time_vs_constant_seconds": 11.0,
+            "time_vs_constant_seconds": 3.3,
             "comparison_basis": "same_avg_power",
-            "comparison_power_w": 296.0,
+            "comparison_power_w": 293.9,
             "pd_envelope": {
-                "duration_s": 817,
-                "planned_w": 295.9,
-                "best_w": 298.9,
-                "ratio": 0.99,
+                "duration_s": 783,
+                "planned_w": 294.0,
+                "best_w": 300.1,
+                "ratio": 0.9796,
                 "ok": true
             },
             "settings": {
@@ -300,7 +301,7 @@
                 "raceDayMarginPct": 0.0,
                 "fitnessLevel": "competitive",
                 "momentumFactor": 0.0,
-                "useInertia": false,
+                "useInertia": true,
                 "bikeType": "tt",
                 "strategyPreset": "fastest",
                 "startProfile": "auto",
@@ -313,176 +314,176 @@
                 [
                     0,
                     85,
-                    277.5
+                    272.5
                 ],
                 [
                     85,
                     304,
-                    375.0
+                    360.0
                 ],
                 [
                     304,
-                    360,
-                    277.5
-                ],
-                [
-                    360,
                     504,
-                    235.0
+                    260.0
                 ],
                 [
                     504,
                     557,
-                    150.0
+                    160.0
                 ],
                 [
                     557,
                     694,
-                    250.0
+                    252.5
                 ],
                 [
                     694,
                     788,
-                    350.0
+                    342.5
                 ],
                 [
                     788,
                     1003,
-                    250.0
+                    242.5
                 ],
                 [
                     1003,
+                    1116,
+                    340.0
+                ],
+                [
+                    1116,
                     1202,
-                    350.0
+                    380.0
                 ],
                 [
                     1202,
                     1295,
-                    272.5
+                    280.0
                 ]
             ],
             "plan_intervals": [
                 {
                     "start_m": 0.0,
                     "end_m": 566.0,
-                    "power_w": 277.5,
+                    "power_w": 272.5,
                     "avg_gradient": 0.02,
                     "start_time_s": 0.0,
-                    "duration_s": 47.1,
-                    "speed_kmh": 43.28,
-                    "wbal_kj": 19.44
+                    "duration_s": 47.7,
+                    "speed_kmh": 42.74,
+                    "wbal_kj": 19.67
                 },
                 {
                     "start_m": 566.0,
                     "end_m": 2190.0,
-                    "power_w": 375.0,
+                    "power_w": 360.0,
                     "avg_gradient": 1.12,
-                    "start_time_s": 47.1,
-                    "duration_s": 148.4,
-                    "speed_kmh": 39.4,
-                    "wbal_kj": 4.14
+                    "start_time_s": 47.7,
+                    "duration_s": 138.6,
+                    "speed_kmh": 42.19,
+                    "wbal_kj": 7.46
                 },
                 {
                     "start_m": 2190.0,
-                    "end_m": 2628.0,
-                    "power_w": 277.5,
-                    "avg_gradient": -2.17,
-                    "start_time_s": 195.5,
-                    "duration_s": 34.0,
-                    "speed_kmh": 46.45,
-                    "wbal_kj": 3.95
-                },
-                {
-                    "start_m": 2628.0,
                     "end_m": 3538.0,
-                    "power_w": 235.0,
-                    "avg_gradient": 0.06,
-                    "start_time_s": 229.5,
-                    "duration_s": 82.9,
-                    "speed_kmh": 39.49,
-                    "wbal_kj": 7.01
+                    "power_w": 260.0,
+                    "avg_gradient": -0.66,
+                    "start_time_s": 186.3,
+                    "duration_s": 111.4,
+                    "speed_kmh": 43.58,
+                    "wbal_kj": 8.79
                 },
                 {
                     "start_m": 3538.0,
                     "end_m": 3896.0,
-                    "power_w": 150.0,
+                    "power_w": 160.0,
                     "avg_gradient": -2.51,
-                    "start_time_s": 312.4,
-                    "duration_s": 30.1,
-                    "speed_kmh": 42.81,
-                    "wbal_kj": 10.68
+                    "start_time_s": 297.7,
+                    "duration_s": 31.2,
+                    "speed_kmh": 41.3,
+                    "wbal_kj": 12.29
                 },
                 {
                     "start_m": 3896.0,
                     "end_m": 5001.0,
-                    "power_w": 250.0,
+                    "power_w": 252.5,
                     "avg_gradient": 0.19,
-                    "start_time_s": 342.5,
-                    "duration_s": 101.6,
-                    "speed_kmh": 39.14,
-                    "wbal_kj": 12.91
+                    "start_time_s": 328.9,
+                    "duration_s": 97.6,
+                    "speed_kmh": 40.75,
+                    "wbal_kj": 14.18
                 },
                 {
                     "start_m": 5001.0,
                     "end_m": 5710.0,
-                    "power_w": 350.0,
+                    "power_w": 342.5,
                     "avg_gradient": 1.45,
-                    "start_time_s": 444.1,
-                    "duration_s": 67.4,
-                    "speed_kmh": 37.87,
-                    "wbal_kj": 7.65
+                    "start_time_s": 426.5,
+                    "duration_s": 67.7,
+                    "speed_kmh": 37.67,
+                    "wbal_kj": 9.4
                 },
                 {
                     "start_m": 5710.0,
                     "end_m": 7170.0,
-                    "power_w": 250.0,
+                    "power_w": 242.5,
                     "avg_gradient": -0.27,
-                    "start_time_s": 511.5,
-                    "duration_s": 125.0,
-                    "speed_kmh": 42.06,
-                    "wbal_kj": 10.38
+                    "start_time_s": 494.2,
+                    "duration_s": 123.7,
+                    "speed_kmh": 42.52,
+                    "wbal_kj": 13.03
                 },
                 {
                     "start_m": 7170.0,
+                    "end_m": 7934.0,
+                    "power_w": 340.0,
+                    "avg_gradient": 0.28,
+                    "start_time_s": 617.9,
+                    "duration_s": 64.5,
+                    "speed_kmh": 42.63,
+                    "wbal_kj": 8.64
+                },
+                {
+                    "start_m": 7934.0,
                     "end_m": 8581.0,
-                    "power_w": 350.0,
-                    "avg_gradient": 0.9,
-                    "start_time_s": 636.5,
-                    "duration_s": 132.1,
-                    "speed_kmh": 38.44,
-                    "wbal_kj": 0.07
+                    "power_w": 380.0,
+                    "avg_gradient": 1.63,
+                    "start_time_s": 682.4,
+                    "duration_s": 53.7,
+                    "speed_kmh": 43.38,
+                    "wbal_kj": 2.84
                 },
                 {
                     "start_m": 8581.0,
                     "end_m": 9243.0,
-                    "power_w": 272.5,
+                    "power_w": 280.0,
                     "avg_gradient": -1.88,
-                    "start_time_s": 768.6,
-                    "duration_s": 48.5,
-                    "speed_kmh": 49.15,
-                    "wbal_kj": 0.04
+                    "start_time_s": 736.1,
+                    "duration_s": 47.9,
+                    "speed_kmh": 49.73,
+                    "wbal_kj": 2.45
                 }
             ]
         },
         {
             "key": "balanced",
             "label": "Balanced",
-            "time_seconds": 827.8,
-            "time_text": "13:48",
-            "avg_power_w": 287.6,
-            "normalized_power_w": 299.4,
-            "min_wbal_kj": 6.7,
+            "time_seconds": 793.1,
+            "time_text": "13:13",
+            "avg_power_w": 285.5,
+            "normalized_power_w": 298.6,
+            "min_wbal_kj": 8.09,
             "min_wbal_rider_kj": null,
             "target_wbal_floor_kj": 0.0,
             "constraint_satisfied": true,
-            "time_vs_constant_seconds": 11.4,
+            "time_vs_constant_seconds": 3.6,
             "comparison_basis": "same_avg_power",
-            "comparison_power_w": 287.6,
+            "comparison_power_w": 285.5,
             "pd_envelope": {
-                "duration_s": 827,
-                "planned_w": 287.5,
-                "best_w": 298.5,
-                "ratio": 0.9631,
+                "duration_s": 793,
+                "planned_w": 285.6,
+                "best_w": 299.7,
+                "ratio": 0.9527,
                 "ok": true
             },
             "settings": {
@@ -496,7 +497,7 @@
                 "raceDayMarginPct": 0.0,
                 "fitnessLevel": "competitive",
                 "momentumFactor": 0.0,
-                "useInertia": false,
+                "useInertia": true,
                 "bikeType": "tt",
                 "strategyPreset": "balanced",
                 "startProfile": "auto",
@@ -529,7 +530,7 @@
                 [
                     557,
                     694,
-                    250.0
+                    245.0
                 ],
                 [
                     694,
@@ -543,18 +544,18 @@
                 ],
                 [
                     1003,
-                    1172,
-                    325.0
+                    1116,
+                    307.5
                 ],
                 [
-                    1172,
+                    1116,
                     1202,
-                    377.5
+                    375.0
                 ],
                 [
                     1202,
                     1295,
-                    277.5
+                    275.0
                 ]
             ],
             "plan_intervals": [
@@ -564,8 +565,8 @@
                     "power_w": 272.5,
                     "avg_gradient": 0.02,
                     "start_time_s": 0.0,
-                    "duration_s": 47.4,
-                    "speed_kmh": 42.98,
+                    "duration_s": 47.7,
+                    "speed_kmh": 42.74,
                     "wbal_kj": 19.67
                 },
                 {
@@ -573,112 +574,112 @@
                     "end_m": 2190.0,
                     "power_w": 355.0,
                     "avg_gradient": 1.12,
-                    "start_time_s": 47.4,
-                    "duration_s": 152.9,
-                    "speed_kmh": 38.23,
-                    "wbal_kj": 6.97
+                    "start_time_s": 47.7,
+                    "duration_s": 139.4,
+                    "speed_kmh": 41.95,
+                    "wbal_kj": 8.09
                 },
                 {
                     "start_m": 2190.0,
                     "end_m": 3538.0,
                     "power_w": 255.0,
                     "avg_gradient": -0.66,
-                    "start_time_s": 200.3,
-                    "duration_s": 115.5,
-                    "speed_kmh": 42.01,
-                    "wbal_kj": 8.92
+                    "start_time_s": 187.1,
+                    "duration_s": 112.1,
+                    "speed_kmh": 43.28,
+                    "wbal_kj": 9.99
                 },
                 {
                     "start_m": 3538.0,
                     "end_m": 3896.0,
                     "power_w": 155.0,
                     "avg_gradient": -2.51,
-                    "start_time_s": 315.8,
-                    "duration_s": 29.9,
-                    "speed_kmh": 43.17,
-                    "wbal_kj": 12.41
+                    "start_time_s": 299.2,
+                    "duration_s": 31.5,
+                    "speed_kmh": 40.97,
+                    "wbal_kj": 13.67
                 },
                 {
                     "start_m": 3896.0,
                     "end_m": 5001.0,
-                    "power_w": 250.0,
+                    "power_w": 245.0,
                     "avg_gradient": 0.19,
-                    "start_time_s": 345.7,
-                    "duration_s": 101.6,
-                    "speed_kmh": 39.14,
-                    "wbal_kj": 14.64
+                    "start_time_s": 330.7,
+                    "duration_s": 98.7,
+                    "speed_kmh": 40.3,
+                    "wbal_kj": 16.31
                 },
                 {
                     "start_m": 5001.0,
                     "end_m": 5710.0,
                     "power_w": 332.5,
                     "avg_gradient": 1.45,
-                    "start_time_s": 447.3,
-                    "duration_s": 69.3,
-                    "speed_kmh": 36.82,
-                    "wbal_kj": 10.44
+                    "start_time_s": 429.4,
+                    "duration_s": 68.8,
+                    "speed_kmh": 37.1,
+                    "wbal_kj": 12.15
                 },
                 {
                     "start_m": 5710.0,
                     "end_m": 7170.0,
                     "power_w": 232.5,
                     "avg_gradient": -0.27,
-                    "start_time_s": 516.6,
-                    "duration_s": 128.5,
-                    "speed_kmh": 40.91,
-                    "wbal_kj": 15.5
+                    "start_time_s": 498.2,
+                    "duration_s": 125.4,
+                    "speed_kmh": 41.92,
+                    "wbal_kj": 16.84
                 },
                 {
                     "start_m": 7170.0,
-                    "end_m": 8372.0,
-                    "power_w": 325.0,
-                    "avg_gradient": 0.3,
-                    "start_time_s": 645.1,
-                    "duration_s": 108.1,
-                    "speed_kmh": 40.01,
-                    "wbal_kj": 9.76
+                    "end_m": 7934.0,
+                    "power_w": 307.5,
+                    "avg_gradient": 0.28,
+                    "start_time_s": 623.6,
+                    "duration_s": 66.8,
+                    "speed_kmh": 41.12,
+                    "wbal_kj": 14.46
                 },
                 {
-                    "start_m": 8372.0,
+                    "start_m": 7934.0,
                     "end_m": 8581.0,
-                    "power_w": 377.5,
-                    "avg_gradient": 4.33,
-                    "start_time_s": 753.2,
-                    "duration_s": 26.4,
-                    "speed_kmh": 28.53,
-                    "wbal_kj": 6.97
+                    "power_w": 375.0,
+                    "avg_gradient": 1.63,
+                    "start_time_s": 690.4,
+                    "duration_s": 54.5,
+                    "speed_kmh": 42.75,
+                    "wbal_kj": 8.85
                 },
                 {
                     "start_m": 8581.0,
                     "end_m": 9243.0,
-                    "power_w": 277.5,
+                    "power_w": 275.0,
                     "avg_gradient": -1.88,
-                    "start_time_s": 779.6,
+                    "start_time_s": 744.9,
                     "duration_s": 48.2,
-                    "speed_kmh": 49.44,
-                    "wbal_kj": 6.7
+                    "speed_kmh": 49.48,
+                    "wbal_kj": 8.7
                 }
             ]
         },
         {
             "key": "safe_finish",
             "label": "Safe Finish",
-            "time_seconds": 842.8,
-            "time_text": "14:03",
-            "avg_power_w": 279.6,
-            "normalized_power_w": 283.1,
-            "min_wbal_kj": 13.2,
+            "time_seconds": 801.9,
+            "time_text": "13:22",
+            "avg_power_w": 278.5,
+            "normalized_power_w": 281.8,
+            "min_wbal_kj": 14.06,
             "min_wbal_rider_kj": null,
             "target_wbal_floor_kj": 0.0,
             "constraint_satisfied": true,
-            "time_vs_constant_seconds": 7.6,
+            "time_vs_constant_seconds": 3.0,
             "comparison_basis": "same_avg_power",
-            "comparison_power_w": 279.6,
+            "comparison_power_w": 278.5,
             "pd_envelope": {
-                "duration_s": 842,
-                "planned_w": 279.6,
-                "best_w": 298.0,
-                "ratio": 0.9385,
+                "duration_s": 801,
+                "planned_w": 278.5,
+                "best_w": 299.4,
+                "ratio": 0.93,
                 "ok": true
             },
             "settings": {
@@ -692,7 +693,7 @@
                 "raceDayMarginPct": 0.0,
                 "fitnessLevel": "competitive",
                 "momentumFactor": 0.0,
-                "useInertia": false,
+                "useInertia": true,
                 "bikeType": "tt",
                 "strategyPreset": "safe_finish",
                 "startProfile": "auto",
@@ -720,7 +721,7 @@
                 [
                     694,
                     722,
-                    355.0
+                    357.5
                 ],
                 [
                     722,
@@ -730,17 +731,17 @@
                 [
                     1063,
                     1172,
-                    287.5
+                    282.5
                 ],
                 [
                     1172,
                     1202,
-                    372.5
+                    377.5
                 ],
                 [
                     1202,
                     1295,
-                    272.5
+                    277.5
                 ]
             ],
             "plan_intervals": [
@@ -750,8 +751,8 @@
                     "power_w": 272.5,
                     "avg_gradient": 0.02,
                     "start_time_s": 0.0,
-                    "duration_s": 47.4,
-                    "speed_kmh": 42.98,
+                    "duration_s": 47.7,
+                    "speed_kmh": 42.74,
                     "wbal_kj": 19.67
                 },
                 {
@@ -759,70 +760,70 @@
                     "end_m": 2190.0,
                     "power_w": 310.0,
                     "avg_gradient": 1.12,
-                    "start_time_s": 47.4,
-                    "duration_s": 165.0,
-                    "speed_kmh": 35.43,
-                    "wbal_kj": 13.38
+                    "start_time_s": 47.7,
+                    "duration_s": 147.3,
+                    "speed_kmh": 39.69,
+                    "wbal_kj": 14.06
                 },
                 {
                     "start_m": 2190.0,
                     "end_m": 5001.0,
                     "power_w": 257.5,
                     "avg_gradient": -0.56,
-                    "start_time_s": 212.4,
-                    "duration_s": 241.5,
-                    "speed_kmh": 41.9,
-                    "wbal_kj": 16.86
+                    "start_time_s": 195.0,
+                    "duration_s": 237.3,
+                    "speed_kmh": 42.65,
+                    "wbal_kj": 17.38
                 },
                 {
                     "start_m": 5001.0,
                     "end_m": 5220.0,
-                    "power_w": 355.0,
+                    "power_w": 357.5,
                     "avg_gradient": 2.9,
-                    "start_time_s": 453.9,
-                    "duration_s": 24.9,
-                    "speed_kmh": 31.67,
-                    "wbal_kj": 14.79
+                    "start_time_s": 432.3,
+                    "duration_s": 24.3,
+                    "speed_kmh": 32.45,
+                    "wbal_kj": 15.3
                 },
                 {
                     "start_m": 5220.0,
                     "end_m": 7487.0,
                     "power_w": 260.0,
                     "avg_gradient": 0.21,
-                    "start_time_s": 478.8,
-                    "duration_s": 205.7,
-                    "speed_kmh": 39.68,
-                    "wbal_kj": 17.21
+                    "start_time_s": 456.6,
+                    "duration_s": 199.2,
+                    "speed_kmh": 40.96,
+                    "wbal_kj": 17.57
                 },
                 {
                     "start_m": 7487.0,
                     "end_m": 8372.0,
-                    "power_w": 287.5,
+                    "power_w": 282.5,
                     "avg_gradient": -0.13,
-                    "start_time_s": 684.5,
-                    "duration_s": 83.1,
-                    "speed_kmh": 38.3,
-                    "wbal_kj": 15.91
+                    "start_time_s": 655.8,
+                    "duration_s": 75.8,
+                    "speed_kmh": 42.0,
+                    "wbal_kj": 16.76
                 },
                 {
                     "start_m": 8372.0,
                     "end_m": 8581.0,
-                    "power_w": 372.5,
+                    "power_w": 377.5,
                     "avg_gradient": 4.33,
-                    "start_time_s": 767.6,
-                    "duration_s": 26.7,
-                    "speed_kmh": 28.25,
-                    "wbal_kj": 13.23
+                    "start_time_s": 731.6,
+                    "duration_s": 21.9,
+                    "speed_kmh": 34.38,
+                    "wbal_kj": 14.45
                 },
                 {
                     "start_m": 8581.0,
                     "end_m": 9243.0,
-                    "power_w": 272.5,
+                    "power_w": 277.5,
                     "avg_gradient": -1.88,
-                    "start_time_s": 794.3,
-                    "duration_s": 48.5,
-                    "speed_kmh": 49.15,
-                    "wbal_kj": 13.2
+                    "start_time_s": 753.5,
+                    "duration_s": 48.4,
+                    "speed_kmh": 49.31,
+                    "wbal_kj": 14.18
                 }
             ]
         }

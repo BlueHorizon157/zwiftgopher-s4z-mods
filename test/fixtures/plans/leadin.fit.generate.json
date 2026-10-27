@@ -7,10 +7,11 @@
         "name": "Seaside Sprint",
         "laps": null,
         "target_distance_km": null,
-        "distance_km": 9.13,
+        "distance_km": 9.24,
         "lead_in_km": 2.954,
         "elevation_m": 82.9,
-        "start_offset_m": -110.0,
+        "start_offset_m": 0.0,
+        "start_line_m": 0.0,
         "points_count": 1295
     },
     "rider": {
@@ -52,7 +53,7 @@
         "raceDayMarginPct": 0.0,
         "fitnessLevel": "competitive",
         "momentumFactor": 0.0,
-        "useInertia": false,
+        "useInertia": true,
         "bikeType": "tt",
         "strategyPreset": "fastest",
         "startProfile": "auto",
@@ -74,16 +75,16 @@
         "solver": "advanced_preview"
     },
     "summary": {
-        "time_seconds": 827.0,
-        "time_text": "13:47",
+        "time_seconds": 786.1,
+        "time_text": "13:06",
         "distance_km": 9.24,
-        "avg_speed_kmh": 40.23,
-        "avg_power_w": 293.2,
-        "normalized_power_w": 294.4,
+        "avg_speed_kmh": 42.32,
+        "avg_power_w": 292.8,
+        "normalized_power_w": 293.9,
         "variability_index": 1.004,
-        "intensity_factor": 1.015,
-        "tss": 23.7,
-        "min_wbal_kj": 2.08
+        "intensity_factor": 1.014,
+        "tss": 22.4,
+        "min_wbal_kj": 3.25
     },
     "intervals": [
         {
@@ -95,14 +96,14 @@
             "distance_km": 1.046,
             "point_start": 0,
             "point_end": 156,
-            "power_w": 306.1,
+            "power_w": 306.0,
             "avg_gradient": 1.13,
             "surface": "pavement_sand",
             "start_time_s": 0.0,
-            "duration_s": 98.4,
-            "duration_text": "1:38",
-            "speed_kmh": 38.27,
-            "wbal_kj": 16.34
+            "duration_s": 93.8,
+            "duration_text": "1:33",
+            "speed_kmh": 40.14,
+            "wbal_kj": 16.5
         },
         {
             "index": 2,
@@ -113,14 +114,14 @@
             "distance_km": 0.428,
             "point_start": 156,
             "point_end": 220,
-            "power_w": 281.8,
+            "power_w": 281.7,
             "avg_gradient": -0.14,
             "surface": "pavement_sand",
-            "start_time_s": 98.4,
-            "duration_s": 37.7,
-            "duration_text": "0:37",
-            "speed_kmh": 40.93,
-            "wbal_kj": 15.96
+            "start_time_s": 93.8,
+            "duration_s": 40.1,
+            "duration_text": "0:40",
+            "speed_kmh": 38.46,
+            "wbal_kj": 16.11
         },
         {
             "index": 3,
@@ -131,14 +132,14 @@
             "distance_km": 0.507,
             "point_start": 220,
             "point_end": 277,
-            "power_w": 288.9,
+            "power_w": 288.8,
             "avg_gradient": 0.25,
             "surface": "pavement_sand",
-            "start_time_s": 136.1,
-            "duration_s": 51.5,
-            "duration_text": "0:51",
-            "speed_kmh": 35.44,
-            "wbal_kj": 15.09
+            "start_time_s": 133.9,
+            "duration_s": 43.2,
+            "duration_text": "0:43",
+            "speed_kmh": 42.25,
+            "wbal_kj": 15.38
         },
         {
             "index": 4,
@@ -152,11 +153,11 @@
             "power_w": 313.2,
             "avg_gradient": 2.78,
             "surface": "pavement_sand",
-            "start_time_s": 187.6,
-            "duration_s": 26.6,
-            "duration_text": "0:26",
-            "speed_kmh": 28.28,
-            "wbal_kj": 13.99
+            "start_time_s": 177.1,
+            "duration_s": 18.1,
+            "duration_text": "0:18",
+            "speed_kmh": 41.62,
+            "wbal_kj": 14.64
         },
         {
             "index": 5,
@@ -167,14 +168,14 @@
             "distance_km": 0.438,
             "point_start": 304,
             "point_end": 360,
-            "power_w": 268.7,
+            "power_w": 278.4,
             "avg_gradient": -2.17,
             "surface": "pavement_sand",
-            "start_time_s": 214.2,
-            "duration_s": 34.4,
-            "duration_text": "0:34",
-            "speed_kmh": 45.81,
-            "wbal_kj": 14.1
+            "start_time_s": 195.2,
+            "duration_s": 38.5,
+            "duration_text": "0:38",
+            "speed_kmh": 40.99,
+            "wbal_kj": 14.39
         },
         {
             "index": 6,
@@ -188,11 +189,11 @@
             "power_w": 292.9,
             "avg_gradient": 0.06,
             "surface": "pavement_sand",
-            "start_time_s": 248.6,
-            "duration_s": 76.0,
-            "duration_text": "1:16",
-            "speed_kmh": 43.07,
-            "wbal_kj": 12.5
+            "start_time_s": 233.7,
+            "duration_s": 71.2,
+            "duration_text": "1:11",
+            "speed_kmh": 45.98,
+            "wbal_kj": 12.89
         },
         {
             "index": 7,
@@ -206,11 +207,11 @@
             "power_w": 256.7,
             "avg_gradient": -2.51,
             "surface": "dirt",
-            "start_time_s": 324.6,
-            "duration_s": 26.2,
-            "duration_text": "0:26",
-            "speed_kmh": 49.33,
-            "wbal_kj": 12.9
+            "start_time_s": 304.9,
+            "duration_s": 28.5,
+            "duration_text": "0:28",
+            "speed_kmh": 45.25,
+            "wbal_kj": 13.32
         },
         {
             "index": 8,
@@ -224,11 +225,11 @@
             "power_w": 290.0,
             "avg_gradient": -0.02,
             "surface": "pavement_sand",
-            "start_time_s": 350.8,
-            "duration_s": 75.6,
-            "duration_text": "1:15",
-            "speed_kmh": 42.79,
-            "wbal_kj": 11.53
+            "start_time_s": 333.4,
+            "duration_s": 73.5,
+            "duration_text": "1:13",
+            "speed_kmh": 43.98,
+            "wbal_kj": 11.99
         },
         {
             "index": 9,
@@ -242,11 +243,11 @@
             "power_w": 298.2,
             "avg_gradient": 1.11,
             "surface": "pavement_sand",
-            "start_time_s": 426.4,
-            "duration_s": 19.6,
-            "duration_text": "0:19",
-            "speed_kmh": 37.81,
-            "wbal_kj": 11.02
+            "start_time_s": 406.9,
+            "duration_s": 17.8,
+            "duration_text": "0:17",
+            "speed_kmh": 41.69,
+            "wbal_kj": 11.53
         },
         {
             "index": 10,
@@ -260,11 +261,11 @@
             "power_w": 324.8,
             "avg_gradient": 2.9,
             "surface": "pavement_sand",
-            "start_time_s": 446.0,
-            "duration_s": 26.5,
-            "duration_text": "0:26",
-            "speed_kmh": 29.82,
-            "wbal_kj": 9.62
+            "start_time_s": 424.7,
+            "duration_s": 24.2,
+            "duration_text": "0:24",
+            "speed_kmh": 32.62,
+            "wbal_kj": 10.25
         },
         {
             "index": 11,
@@ -278,11 +279,11 @@
             "power_w": 287.1,
             "avg_gradient": -0.07,
             "surface": "pavement_sand",
-            "start_time_s": 472.5,
-            "duration_s": 21.1,
-            "duration_text": "0:21",
-            "speed_kmh": 44.34,
-            "wbal_kj": 9.3
+            "start_time_s": 448.9,
+            "duration_s": 23.3,
+            "duration_text": "0:23",
+            "speed_kmh": 40.2,
+            "wbal_kj": 9.89
         },
         {
             "index": 12,
@@ -296,11 +297,11 @@
             "power_w": 313.2,
             "avg_gradient": 1.79,
             "surface": "pavement_sand",
-            "start_time_s": 493.6,
-            "duration_s": 24.1,
-            "duration_text": "0:24",
-            "speed_kmh": 34.36,
-            "wbal_kj": 8.3
+            "start_time_s": 472.2,
+            "duration_s": 21.7,
+            "duration_text": "0:21",
+            "speed_kmh": 38.11,
+            "wbal_kj": 9.0
         },
         {
             "index": 13,
@@ -314,11 +315,11 @@
             "power_w": 287.3,
             "avg_gradient": -0.37,
             "surface": "pavement_sand",
-            "start_time_s": 517.7,
-            "duration_s": 17.6,
-            "duration_text": "0:17",
-            "speed_kmh": 45.12,
-            "wbal_kj": 8.03
+            "start_time_s": 493.9,
+            "duration_s": 18.5,
+            "duration_text": "0:18",
+            "speed_kmh": 42.88,
+            "wbal_kj": 8.71
         },
         {
             "index": 14,
@@ -332,11 +333,11 @@
             "power_w": 266.7,
             "avg_gradient": -1.36,
             "surface": "pavement_sand",
-            "start_time_s": 535.3,
-            "duration_s": 17.4,
+            "start_time_s": 512.4,
+            "duration_s": 17.5,
             "duration_text": "0:17",
-            "speed_kmh": 47.54,
-            "wbal_kj": 8.12
+            "speed_kmh": 47.19,
+            "wbal_kj": 8.8
         },
         {
             "index": 15,
@@ -350,11 +351,11 @@
             "power_w": 290.6,
             "avg_gradient": -0.0,
             "surface": "pavement_sand",
-            "start_time_s": 552.7,
-            "duration_s": 83.7,
-            "duration_text": "1:23",
-            "speed_kmh": 43.48,
-            "wbal_kj": 6.56
+            "start_time_s": 529.9,
+            "duration_s": 82.3,
+            "duration_text": "1:22",
+            "speed_kmh": 44.22,
+            "wbal_kj": 7.26
         },
         {
             "index": 16,
@@ -365,14 +366,14 @@
             "distance_km": 0.317,
             "point_start": 1003,
             "point_end": 1063,
-            "power_w": 303.0,
+            "power_w": 317.6,
             "avg_gradient": 1.5,
             "surface": "pavement_sand",
-            "start_time_s": 636.4,
-            "duration_s": 31.1,
-            "duration_text": "0:31",
-            "speed_kmh": 36.68,
-            "wbal_kj": 5.59
+            "start_time_s": 612.2,
+            "duration_s": 28.0,
+            "duration_text": "0:28",
+            "speed_kmh": 40.71,
+            "wbal_kj": 5.98
         },
         {
             "index": 17,
@@ -386,11 +387,11 @@
             "power_w": 269.7,
             "avg_gradient": -1.35,
             "surface": "pavement_sand",
-            "start_time_s": 667.5,
-            "duration_s": 16.5,
-            "duration_text": "0:16",
-            "speed_kmh": 47.66,
-            "wbal_kj": 5.63
+            "start_time_s": 640.2,
+            "duration_s": 19.3,
+            "duration_text": "0:19",
+            "speed_kmh": 40.68,
+            "wbal_kj": 6.03
         },
         {
             "index": 18,
@@ -401,14 +402,14 @@
             "distance_km": 0.667,
             "point_start": 1093,
             "point_end": 1172,
-            "power_w": 291.9,
+            "power_w": 292.0,
             "avg_gradient": 0.28,
             "surface": "pavement_sand",
-            "start_time_s": 684.0,
-            "duration_s": 66.5,
-            "duration_text": "1:06",
-            "speed_kmh": 36.11,
-            "wbal_kj": 4.3
+            "start_time_s": 659.5,
+            "duration_s": 55.1,
+            "duration_text": "0:55",
+            "speed_kmh": 43.58,
+            "wbal_kj": 4.92
         },
         {
             "index": 19,
@@ -422,11 +423,11 @@
             "power_w": 340.8,
             "avg_gradient": 4.33,
             "surface": "pavement_sand",
-            "start_time_s": 750.5,
-            "duration_s": 28.5,
-            "duration_text": "0:28",
-            "speed_kmh": 26.44,
-            "wbal_kj": 2.33
+            "start_time_s": 714.6,
+            "duration_s": 22.5,
+            "duration_text": "0:22",
+            "speed_kmh": 33.46,
+            "wbal_kj": 3.37
         },
         {
             "index": 20,
@@ -440,11 +441,11 @@
             "power_w": 255.2,
             "avg_gradient": -4.68,
             "surface": "pavement_sand",
-            "start_time_s": 779.0,
-            "duration_s": 11.3,
-            "duration_text": "0:11",
-            "speed_kmh": 66.35,
-            "wbal_kj": 2.52
+            "start_time_s": 737.1,
+            "duration_s": 16.9,
+            "duration_text": "0:16",
+            "speed_kmh": 44.52,
+            "wbal_kj": 3.65
         },
         {
             "index": 21,
@@ -458,11 +459,11 @@
             "power_w": 275.5,
             "avg_gradient": -1.34,
             "surface": "wood",
-            "start_time_s": 790.3,
-            "duration_s": 17.2,
-            "duration_text": "0:17",
-            "speed_kmh": 45.88,
-            "wbal_kj": 2.46
+            "start_time_s": 754.0,
+            "duration_s": 14.3,
+            "duration_text": "0:14",
+            "speed_kmh": 55.12,
+            "wbal_kj": 3.6
         },
         {
             "index": 22,
@@ -476,11 +477,11 @@
             "power_w": 291.5,
             "avg_gradient": 0.11,
             "surface": "pavement_sand",
-            "start_time_s": 807.5,
-            "duration_s": 19.5,
-            "duration_text": "0:19",
-            "speed_kmh": 43.25,
-            "wbal_kj": 2.08
+            "start_time_s": 768.3,
+            "duration_s": 17.8,
+            "duration_text": "0:17",
+            "speed_kmh": 47.38,
+            "wbal_kj": 3.25
         }
     ],
     "cards": []
