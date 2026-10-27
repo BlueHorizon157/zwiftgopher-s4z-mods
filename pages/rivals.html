@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en" tabindex="0" data-settings-key="zg-tt-rivals" data-bg="smoke" data-halo="normal">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+    <title>TT rivals</title>
+    <link rel="stylesheet" href="/pages/css/common.css">
+    <link rel="stylesheet" href="./css/tokens.css">
+    <link rel="stylesheet" href="./css/rivals.css">
+    <link rel="icon" href="/pages/images/favicon.png">
+    <script type="module">
+      import {main} from './src/rivals.mjs';
+      main();
+    </script>
+  </head>
+  <body class="transparent-bg">
+    <div id="titlebar">
+      <header>
+        <div class="logo"><img src="/pages/images/icon128.png" alt="Sauce icon"></div>
+        <div class="title">TT rivals</div>
+        <div class="filler"></div>
+        <div class="buttons">
+          <a class="button open-settings" href="settings.html?for=rivals&width=420&height=720&child-window" target="zg-tt-settings" title="Settings"><ms>settings</ms></a>
+          <div class="button minimize electron-only" title="Minimize"><ms>minimize</ms></div>
+          <div class="button close electron-only" title="Close window"><ms>close</ms></div>
+        </div>
+      </header>
+    </div>
+
+    <main class="rivals panel halo" id="rivals">
+      <div class="sides">
+        <ol class="side behind" id="behind" aria-label="Riders behind you on the road"></ol>
+        <div class="me"><span class="me-label">you</span><b class="tnum" id="me-speed">—</b><small>km/h</small></div>
+        <ol class="side ahead" id="ahead" aria-label="Riders ahead of you on the road"></ol>
+      </div>
+      <div class="track" id="track" aria-hidden="true">
+        <span class="end left tnum" id="range-left"></span>
+        <div class="lane" id="lane"><span class="line"></span><i class="you"></i></div>
+        <span class="end right tnum" id="range-right"></span>
+      </div>
+      <div class="empty" id="empty">Riders around you appear here once the event starts.</div>
+    </main>
+  </body>
+</html>

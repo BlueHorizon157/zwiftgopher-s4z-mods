@@ -1,0 +1,200 @@
+/* The interval list (docs/REVAMP_PLAN.md 4.5, Phase 4.1): a compact plan table over the
+ * game, on the shared tokens. Sizes come from --u with the 11 px floor. */
+html {
+  padding: 0;
+  overflow: hidden;
+}
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+  font-family: var(--font);
+  line-height: 1.2;
+}
+html.replay-mode body { background: var(--replay-bg, transparent); }
+
+.list {
+  --u: max(11px, calc(var(--hud-scale) * min(3.4cqw, 2.9cqh)));
+  font-size: var(--u);
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0.6em;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ---- header ---- */
+.head {
+  flex: 0 0 auto;
+  padding: 0.55em 0.9em 0.45em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+}
+.head .line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1em;
+  min-width: 0;
+}
+.head .line[hidden] { display: none; }
+.head .route {
+  font-size: 1.3em;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.head .finish {
+  font-size: 1.3em;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.head .fact {
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.head .fact b { color: var(--ink); font-weight: 700; }
+.head .controls { flex: 0 0 auto; color: var(--soon); }
+.head .delta { font-weight: 700; white-space: nowrap; }
+.head .delta.ahead { color: var(--on); }
+.head .delta.behind { color: var(--over); }
+.head .spectating { color: var(--soon); font-weight: 600; }
+
+/* ---- the table: a grid per row so columns line up with the header ---- */
+.cols,
+.row {
+  display: grid;
+  grid-template-columns: 1.9em 3.4em minmax(0, 1.25fr) minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.05fr);
+  column-gap: 0.6em;
+  align-items: baseline;
+  padding: 0 0.9em 0 1.1em;
+}
+.cols {
+  flex: 0 0 auto;
+  padding-top: 0.25em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--ink-line);
+  color: var(--ink-3);
+  font-size: max(11px, 0.9em);
+}
+.c { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c.n, .c.to { text-align: right; }
+.c.w, .c.t, .c.wb { text-align: right; }
+.c.g { text-align: right; }
+
+.rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding-bottom: 0.4em;
+}
+.rows::-webkit-scrollbar { display: none; }
+.row {
+  position: relative;
+  padding-top: 0.32em;
+  padding-bottom: 0.32em;
+  font-variant-numeric: tabular-nums;
+}
+.row + .row { border-top: 1px solid rgba(245, 247, 250, 0.08); }
+.row b { font-weight: 600; }
+.row small {
+  font-size: max(11px, 0.82em);
+  font-weight: 600;
+  margin-left: 0.3em;
+}
+.row .c.n { color: var(--ink-3); }
+
+/* ridden intervals step back; the current one leads with a bar and its progress */
+.row.done { color: var(--ink-2); }
+.row.done small { opacity: 1; }
+.row.now {
+  background: linear-gradient(90deg, rgba(245, 247, 250, 0.16) var(--p, 0%), rgba(245, 247, 250, 0.05) var(--p, 0%));
+}
+.row.now::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0.28em;
+  background: var(--ink);
+}
+.row.now b { font-weight: 800; }
+.row.now .c.n { color: var(--ink); font-weight: 700; }
+.row.soon::before { background: var(--soon); }
+
+.grade-up { color: var(--over); }
+.grade-down { color: var(--under); }
+.d-under { color: var(--under); }
+.d-on { color: var(--on); }
+.d-over { color: var(--over); }
+.d-time { color: var(--ink-2); }
+
+/* ---- no plan: the code box ---- */
+.list.choosing .cols, .list.choosing .rows { display: none; }
+.empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  padding: 1em;
+  text-align: center;
+}
+.empty[hidden] { display: none; }
+.empty .title { font-size: 1.3em; font-weight: 700; }
+.empty .hint { color: var(--ink-2); max-width: 30ch; }
+.empty .message { color: var(--soon); min-height: 1.2em; }
+.empty .message.ok { color: var(--on); }
+.code-row { display: flex; gap: 0.4em; }
+.code-row input {
+  width: 9ch;
+  font: inherit;
+  font-size: 1.3em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--ink);
+  background: rgba(8, 12, 18, 0.6);
+  border: 1px solid var(--ink-line);
+  border-radius: 0.3em;
+  padding: 0.15em 0.3em;
+  text-shadow: none;
+}
+.code-row input::placeholder { color: var(--ink-3); text-transform: none; letter-spacing: 0; font-weight: 500; font-size: max(11px, 0.8em); }
+.code-row input:focus-visible, .code-row button:focus-visible { outline: 2px solid var(--on); outline-offset: 1px; }
+.code-row button {
+  font: inherit;
+  font-weight: 700;
+  color: var(--panel-ink);
+  background: var(--on);
+  border: 0;
+  border-radius: 0.3em;
+  padding: 0.25em 0.9em;
+  cursor: pointer;
+  text-shadow: none;
+}
+
+/* narrow windows drop the W′ column, then the grade */
+@container root-html (width < 330px) {
+  .cols, .row { grid-template-columns: 1.9em 3.4em minmax(0, 1.25fr) minmax(0, 1.15fr) minmax(0, 1fr); }
+  .c.wb { display: none; }
+}
+@container root-html (width < 260px) {
+  .cols, .row { grid-template-columns: 1.9em 3.4em minmax(0, 1.25fr) minmax(0, 1.15fr); }
+  .c.g { display: none; }
+}

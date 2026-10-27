@@ -1,0 +1,411 @@
+/* The TT HUD (docs/REVAMP_PLAN.md 4.4): one page, three layouts (html[data-layout]).
+ * Everything is sized from --u, which each layout derives from the window with an 11 px floor. */
+html {
+  font-family: var(--font);
+  padding: 0;
+  overflow: hidden;
+}
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+  font-family: var(--font);
+  line-height: 1.1;
+}
+html.replay-mode body { background: var(--replay-bg, transparent); }
+
+.hud {
+  --u: 11px;
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  font-size: var(--u);
+  border-radius: 0.6em;
+  overflow: hidden;
+  user-select: none;
+}
+html[data-layout="strip"] .hud { --u: max(11px, calc(var(--hud-scale) * min(13.5cqh, 2.35cqw))); }
+html[data-layout="dial"]  .hud { --u: max(11px, calc(var(--hud-scale) * min(4.2cqw, 4.2cqh))); }
+html[data-layout="stack"] .hud { --u: max(11px, calc(var(--hud-scale) * min(6.2cqw, 3cqh))); }
+
+/* ---- the cells ---- */
+.cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+.label {
+  font-size: 1em;
+  font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.figure {
+  display: flex;
+  align-items: baseline;
+  gap: 0.18em;
+  white-space: nowrap;
+}
+.num {
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+.now .num { font-size: 2.9em; }
+.next .num { font-size: 2.1em; font-weight: 700; }
+.wbal .num, .finish .num { font-size: 1.9em; font-weight: 700; }
+.unit {
+  font-size: max(11px, 0.95em);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.sub {
+  font-size: max(11px, 0.95em);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+/* live power beside the target, in the band colour with a glyph and a word */
+.live {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3em;
+  font-size: 1.45em;
+  font-weight: 700;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.live .glyph { font-style: normal; font-size: max(11px, 0.75em); }
+.live .word { font-size: max(11px, 0.7em); font-weight: 500; }
+.live.band-under { color: var(--under); }
+.live.band-on { color: var(--on); }
+.live.band-over { color: var(--over); }
+html[data-band-words="false"] .live .word { display: none; }
+
+/* next: gradient glyph and "in 420 m 38 s" */
+.grade { font-size: 1em; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.grade.up { color: var(--over); }
+.grade.down { color: var(--under); }
+.in { font-size: 1.05em; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.in b { font-weight: 700; color: var(--ink); }
+
+/* the boundary moment: the change is seconds away */
+.hud.soon .next .num { color: var(--soon); }
+.hud.soon .next .in { color: var(--soon); }
+.hud.soon .next .in b { color: var(--soon); animation: hud-pulse 1s ease-in-out infinite; display: inline-block; }
+.hud.swap .now .num { animation: hud-swap 320ms ease-out; }
+@keyframes hud-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@keyframes hud-swap { 0% { transform: scale(1.18); color: var(--soon); } 100% { transform: scale(1); } }
+
+/* W' bar with the planner's floor */
+.bar {
+  position: relative;
+  height: 0.5em;
+  margin-top: 0.25em;
+  background: var(--ink-line);
+  border-radius: 0.25em;
+  overflow: visible;
+}
+.bar-fill {
+  height: 100%;
+  width: 0;
+  background: var(--ink);
+  border-radius: 0.25em;
+  transition: width 400ms linear;
+}
+.bar-floor {
+  position: absolute;
+  top: -0.2em;
+  bottom: -0.2em;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--ink-2);
+  display: none;
+}
+.bar-floor.shown { display: block; }
+.wbal.low .num, .wbal.low .bar-fill { color: var(--low); background-color: var(--low); }
+.wbal.low .num { background: none; }
+.wbal .sub.under { color: var(--over); }
+
+/* finish */
+.finish .delta { font-weight: 600; color: var(--ink); }
+.finish .delta.ahead { color: var(--on); }
+.finish .delta.behind { color: var(--over); }
+
+/* vitals: cadence, heart rate, speed */
+.vitals { display: none; gap: 0.9em; font-size: 1em; color: var(--ink-2); white-space: nowrap; }
+.vitals b { font-weight: 700; color: var(--ink); }
+
+/* interval progress */
+.progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0.28em;
+  background: var(--ink-line);
+}
+.progress-fill { height: 100%; width: 0; background: var(--ink); opacity: 0.85; transition: width 500ms linear; }
+
+/* state banner (armed / finished / spectating / notices) */
+.hud {
+  display: flex;
+  flex-direction: column;
+}
+.banner {
+  order: -1;
+  flex: 0 0 auto;
+  padding: 0.3em 1em 0;
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.banner[hidden] { display: none; }
+.banner .name { color: var(--ink); }
+.hud.spectating .hud-grid { opacity: 0.45; }
+
+/* idle: the plan code, obvious; the figures stay out of the way */
+.hud.choosing .hud-grid, .hud.choosing .progress, .hud.choosing .dial-svg, .hud.choosing .banner { visibility: hidden; }
+.idle {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  padding: 0.6em;
+  text-align: center;
+}
+.idle[hidden] { display: none; }
+.idle .title { font-size: 1.4em; font-weight: 700; }
+.idle .hint { font-size: 1em; color: var(--ink-2); max-width: 36ch; }
+.code-row { display: flex; gap: 0.4em; align-items: stretch; }
+.code-row input {
+  width: 8ch;
+  font: inherit;
+  font-size: 1.5em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--ink);
+  background: rgba(8, 12, 18, 0.6);
+  border: 1px solid var(--ink-line);
+  border-radius: 0.3em;
+  padding: 0.15em 0.3em;
+  text-shadow: none;
+}
+.code-row input::placeholder { color: var(--ink-3); letter-spacing: 0; text-transform: none; font-weight: 500; font-size: max(11px, 0.75em); }
+.code-row input:focus-visible { outline: 2px solid var(--on); outline-offset: 1px; }
+.hud button {
+  font: inherit;
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--ink);
+  background: rgba(8, 12, 18, 0.7);
+  border: 1px solid var(--ink-line);
+  border-radius: 0.3em;
+  padding: 0.25em 0.7em;
+  cursor: pointer;
+  text-shadow: none;
+}
+.hud button:hover { border-color: var(--ink-2); }
+.hud button:focus-visible { outline: 2px solid var(--on); outline-offset: 1px; }
+.hud button.primary { background: var(--on); color: var(--panel-ink); border-color: transparent; }
+.idle .message { font-size: 1em; color: var(--soon); min-height: 1.2em; }
+.idle .message.ok { color: var(--on); }
+
+/* hover tray: offset, bias, reset, settings; only while the pointer is over the HUD */
+.tray {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3em 0.5em;
+  padding: 0.3em 0.5em;
+  font-size: 1em;
+  background: rgba(8, 12, 18, 0.82);
+  opacity: 0;
+  transform: translateY(100%);
+  transition: opacity 150ms, transform 150ms;
+  pointer-events: none;
+}
+.hud:hover .tray,
+html.settings-mode .tray,
+.hud.tray-pinned .tray {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.tray .group { display: flex; align-items: center; gap: 0.2em; white-space: nowrap; }
+.tray .group .label { color: var(--ink-2); margin-right: 0.15em; }
+.tray .group .value { min-width: 4.5ch; text-align: center; font-weight: 700; }
+.tray button { padding: 0.1em 0.5em; }
+.tray a.button-link {
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  padding: 0.1em 0.5em;
+  border: 1px solid var(--ink-line);
+  border-radius: 0.3em;
+  background: rgba(8, 12, 18, 0.7);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+}
+.tray a.button-link ms { font-size: 1.2em; }
+
+/* ---- strip ---- */
+html[data-layout="strip"] .hud-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
+  gap: 0 1em;
+  padding: 0.3em 1em 0.6em;
+  align-items: center;
+}
+html[data-layout="strip"] .cell + .cell { border-left: 1px solid var(--ink-line); padding-left: 1em; }
+html[data-layout="strip"] .vitals { grid-column: 1 / -1; border: 0; padding: 0; justify-content: center; gap: 1.6em; font-size: max(11px, 0.95em); }
+html[data-layout="strip"] .dial-svg { display: none; }
+html[data-layout="strip"] .idle { flex-direction: row; flex-wrap: wrap; gap: 0.4em 1.2em; }
+html[data-layout="strip"] .idle .hint { display: none; }
+html[data-layout="strip"] .idle .message:empty { display: none; }
+@container root-html (height >= 130px) {
+  html[data-layout="strip"] .idle .hint { display: block; }
+}
+
+/* ---- stack ---- */
+html[data-layout="stack"] .hud-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: auto;
+  gap: 0.6em 0;
+  padding: 0.5em 0.9em 0.8em 1.1em;
+  align-content: center;
+}
+html[data-layout="stack"] .cell + .cell { border-top: 1px solid var(--ink-line); padding-top: 0.5em; }
+html[data-layout="stack"] .now .num { font-size: 3.2em; }
+html[data-layout="stack"] .progress {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: auto;
+  width: 0.4em;
+  height: auto;
+  display: flex;
+  flex-direction: column-reverse;
+}
+html[data-layout="stack"] .progress-fill { width: 100%; height: 0; transition: height 500ms linear; }
+html[data-layout="stack"] .dial-svg { display: none; }
+
+/* ---- dial ---- */
+html[data-layout="dial"] .hud {
+  aspect-ratio: 1;
+  margin: auto;
+  max-height: 100%;
+  max-width: 100%;
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
+  border-radius: 50%;
+}
+html[data-layout="dial"] .dial-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+html[data-layout="dial"] .hud-grid {
+  position: absolute;
+  inset: 0;
+}
+html[data-layout="dial"] .cell { position: absolute; align-items: center; text-align: center; }
+html[data-layout="dial"] .cell + .cell { border: 0; }
+html[data-layout="dial"] .now { left: 22%; right: 22%; top: 29%; }
+html[data-layout="dial"] .now .num { font-size: 3.4em; }
+html[data-layout="dial"] .finish { left: 22%; right: 22%; top: 19%; flex-direction: row; gap: 0.4em; align-items: baseline; justify-content: center; }
+html[data-layout="dial"] .finish .num { font-size: 1.35em; }
+html[data-layout="dial"] .finish .label { font-size: max(11px, 0.9em); }
+html[data-layout="dial"] .next { left: 18%; right: 18%; bottom: 8%; }
+html[data-layout="dial"] .next .figure { justify-content: center; }
+html[data-layout="dial"] .next .meta { display: flex; gap: 0.6em; justify-content: center; }
+html[data-layout="dial"] .wbal { left: 20%; right: 20%; top: 61%; flex-direction: row; gap: 0.35em; align-items: baseline; justify-content: center; }
+html[data-layout="dial"] .wbal .figure .num { font-size: 1.35em; }
+html[data-layout="dial"] .wbal .bar { display: none; }
+html[data-layout="dial"] .wbal .label { font-size: max(11px, 0.9em); }
+html[data-layout="dial"] .wbal .sub { display: none; }
+html[data-layout="dial"] .wbal.low .sub { display: block; width: 100%; text-align: center; }
+html[data-layout="dial"] .progress { display: none; }
+html[data-layout="dial"] .tray { font-size: max(11px, 0.9em); left: 12%; right: 12%; bottom: 14%; border-radius: 0.5em; padding: 0.4em; }
+html[data-layout="dial"] .banner { position: absolute; top: 11%; left: 16%; right: 16%; padding: 0; text-align: center; font-size: max(11px, 0.9em); }
+
+.dial-svg .track { fill: none; stroke: var(--ink-line); stroke-width: 10; }
+.dial-svg .under-stroke { fill: none; stroke: var(--halo); stroke-width: 14; stroke-linecap: round; }
+.dial-svg .live-arc { fill: none; stroke: var(--ink-2); stroke-width: 10; stroke-linecap: round; }
+.dial-svg .live-arc.band-under { stroke: var(--under); }
+.dial-svg .live-arc.band-on { stroke: var(--on); }
+.dial-svg .live-arc.band-over { stroke: var(--over); }
+.dial-svg .target-arc { fill: none; stroke: var(--ink); stroke-width: 4; opacity: 0.9; }
+.dial-svg .next-tick { fill: none; stroke: var(--ink-2); stroke-width: 2.5; }
+.hud.soon .dial-svg .next-tick { stroke: var(--soon); stroke-width: 3.5; }
+.dial-svg .wbal-track { fill: none; stroke: var(--ink-line); stroke-width: 5; }
+.dial-svg .wbal-arc { fill: none; stroke: var(--ink); stroke-width: 5; stroke-linecap: round; }
+.dial-svg .wbal-arc.low { stroke: var(--low); }
+.dial-svg .wbal-floor { fill: none; stroke: var(--ink-2); stroke-width: 2; }
+.dial-svg .progress-track { fill: none; stroke: var(--ink-line); stroke-width: 2; }
+.dial-svg .progress-arc { fill: none; stroke: var(--ink-2); stroke-width: 2; }
+
+/* vitals are shown where the layout has room and the setting is on: the stack, and a strip
+ * at least 130 px tall; the dial has no room */
+html[data-show-live="true"][data-layout="stack"] .vitals { display: flex; }
+@container root-html (height >= 130px) {
+  html[data-show-live="true"][data-layout="strip"] .hud-grid { grid-template-rows: 1fr auto; }
+  html[data-show-live="true"][data-layout="strip"] .vitals { display: flex; }
+}
+
+/* the plan panel's strategy choice (before the start) and the clipboard offer */
+.idle .strategy,
+.idle .clip { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.3em 0.5em; }
+.idle .strategy[hidden],
+.idle .clip[hidden] { display: none; }
+.idle .strategy .label { color: var(--ink-2); }
+.idle .strategy .choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.3em; }
+.idle .strategy button .tnum { color: inherit; opacity: 0.8; margin-left: 0.2em; }
+.idle .clip .hint { max-width: none; }
+.hud button * { text-shadow: none; }
+.hud button[aria-pressed="true"] { background: var(--ink); color: var(--panel-ink); border-color: transparent; }
+.hud button:disabled { opacity: 0.5; cursor: default; }
+.banner .chip {
+  pointer-events: auto;
+  margin: 0 0.5em;
+  padding: 0 0.55em;
+  font-size: max(11px, 0.9em);
+  font-weight: 600;
+  color: var(--ink);
+  background: rgba(8, 12, 18, 0.55);
+  border: 1px solid var(--ink-line);
+  border-radius: 1em;
+  vertical-align: baseline;
+}
+.banner .chip:hover { border-color: var(--ink-2); }
+html[data-layout="dial"] .idle { padding: 18% 13%; gap: 0.35em; }
+html[data-layout="dial"] .idle .title { font-size: 1.15em; }
+.idle .title { overflow-wrap: anywhere; }
+/* the plan panel has its own buttons; the hover tray would cover them */
+.hud.choosing .tray { display: none; }

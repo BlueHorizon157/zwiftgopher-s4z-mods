@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en" tabindex="0" data-settings-key="zg-tt-list" data-bg="smoke" data-halo="normal">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+    <title>TT interval list</title>
+    <link rel="stylesheet" href="/pages/css/common.css">
+    <link rel="stylesheet" href="./css/tokens.css">
+    <link rel="stylesheet" href="./css/list.css">
+    <link rel="icon" href="/pages/images/favicon.png">
+    <script type="module">
+      import {main} from './src/list.mjs';
+      main();
+    </script>
+  </head>
+  <body class="transparent-bg">
+    <div id="titlebar">
+      <header>
+        <div class="logo"><img src="/pages/images/icon128.png" alt="Sauce icon"></div>
+        <div class="title">TT interval list</div>
+        <div class="filler"></div>
+        <div class="buttons">
+          <a class="button open-settings" href="settings.html?for=list&width=420&height=720&child-window" target="zg-tt-settings" title="Settings"><ms>settings</ms></a>
+          <div class="button minimize electron-only" title="Minimize"><ms>minimize</ms></div>
+          <div class="button close electron-only" title="Close window"><ms>close</ms></div>
+        </div>
+      </header>
+    </div>
+
+    <main class="list panel halo" id="list">
+      <header class="head">
+        <div class="line top">
+          <span class="route" id="route">TT interval list</span>
+          <span class="finish tnum" id="finish"></span>
+        </div>
+        <div class="line">
+          <span class="fact" id="facts"></span>
+          <span class="delta" id="delta"></span>
+        </div>
+        <div class="line">
+          <span class="fact" id="power"></span>
+          <span class="fact controls tnum" id="controls"></span>
+        </div>
+        <div class="line spectating" id="spectating" hidden></div>
+      </header>
+      <div class="cols" id="cols">
+        <span class="c n">#</span>
+        <span class="c to">to km</span>
+        <span class="c w">W</span>
+        <span class="c t">time</span>
+        <span class="c g">grade</span>
+        <span class="c wb">W′ kJ</span>
+      </div>
+      <div class="rows" id="rows"></div>
+      <div class="empty" id="empty" hidden>
+        <div class="title">Enter your plan code</div>
+        <div class="code-row">
+          <input type="text" id="plan-code" maxlength="80" placeholder="plan code" autocomplete="off" spellcheck="false" aria-label="Plan code">
+          <button type="button" id="load-plan">Load</button>
+        </div>
+        <div class="hint">The six-letter code from the planner's Share page, or paste its link.</div>
+        <div class="message" id="message"></div>
+      </div>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,392 @@
+{
+    "schema": "zg-tt-plan/1",
+    "generator": "ZwiftGopher TT planner",
+    "created_at": "2026-10-27T00:00:00+00:00",
+    "route": {
+        "id": "2663908549",
+        "name": "Road to Sky",
+        "laps": null,
+        "target_distance_km": null,
+        "distance_km": 17.48,
+        "lead_in_km": 0.162,
+        "elevation_m": 1047.0,
+        "start_offset_m": 58.4,
+        "points_count": 2026
+    },
+    "rider": {
+        "zwift_id": null,
+        "name": "Fixture Endurance",
+        "weight": 72.0,
+        "height": 178.0,
+        "ftp": 290.0,
+        "cp": 285.0,
+        "wprime": 20000,
+        "power_profile_90day": {
+            "60": 430.0,
+            "180": 365.0,
+            "240": 350.0,
+            "300": 338.0,
+            "420": 325.0,
+            "600": 308.0,
+            "900": 296.0,
+            "1200": 286.0,
+            "1800": 272.0,
+            "2400": 260.0
+        },
+        "physiology_source": "zwiftpower_cp",
+        "suggested_cp": 271.9,
+        "suggested_wprime_j": 19700.0,
+        "wprime_used_j": 19700.0,
+        "cp_used": 271.9,
+        "cp_source": "profile_fit",
+        "cp_wbal": 271.0
+    },
+    "inputs": {
+        "wPrime": 19700.0,
+        "wPrimeMode": "suggested",
+        "gradientThreshold": 1.0,
+        "minIntervalMeters": 200.0,
+        "powerMergeThresholdW": 5.0,
+        "powerScale": 1.0,
+        "wbalFloorKj": 0.0,
+        "raceDayMarginPct": 0.0,
+        "fitnessLevel": "competitive",
+        "momentumFactor": 0.0,
+        "useInertia": false,
+        "bikeType": "tt",
+        "strategyPreset": "fastest",
+        "startProfile": "auto",
+        "finishEmphasis": "auto",
+        "executionSmoothness": "normal"
+    },
+    "settings": {
+        "wPrime": 19700.0
+    },
+    "meta": {
+        "plan_id": null,
+        "origin": null,
+        "stale": false,
+        "applied_card": null,
+        "optimiser": null,
+        "strategy": "fastest",
+        "race_day_margin_pct": 0.0,
+        "wbal_floor_kj": 0.0,
+        "solver": "dp"
+    },
+    "summary": {
+        "time_seconds": 3763.2,
+        "time_text": "1:02:43",
+        "distance_km": 17.48,
+        "avg_speed_kmh": 16.72,
+        "avg_power_w": 265.1,
+        "normalized_power_w": 265.2,
+        "variability_index": 1.001,
+        "intensity_factor": 0.915,
+        "tss": 87.4,
+        "min_wbal_kj": 17.2
+    },
+    "intervals": [
+        {
+            "index": 1,
+            "start_m": 0.0,
+            "end_m": 5224.0,
+            "start_km": 0.0,
+            "end_km": 5.224,
+            "distance_km": 5.224,
+            "point_start": 0,
+            "point_end": 762,
+            "power_w": 262.0,
+            "avg_gradient": -1.65,
+            "surface": "dirt",
+            "start_time_s": 0.0,
+            "duration_s": 418.2,
+            "duration_text": "6:58",
+            "speed_kmh": 44.97,
+            "wbal_kj": 19.7
+        },
+        {
+            "index": 2,
+            "start_m": 5224.0,
+            "end_m": 6691.0,
+            "start_km": 5.224,
+            "end_km": 6.691,
+            "distance_km": 1.467,
+            "point_start": 762,
+            "point_end": 912,
+            "power_w": 276.5,
+            "avg_gradient": 10.16,
+            "surface": "pavement_sand",
+            "start_time_s": 418.2,
+            "duration_s": 451.6,
+            "duration_text": "7:31",
+            "speed_kmh": 11.7,
+            "wbal_kj": 17.2
+        },
+        {
+            "index": 3,
+            "start_m": 6691.0,
+            "end_m": 11314.0,
+            "start_km": 6.691,
+            "end_km": 11.314,
+            "distance_km": 4.623,
+            "point_start": 912,
+            "point_end": 1385,
+            "power_w": 259.5,
+            "avg_gradient": 8.27,
+            "surface": "pavement_sand",
+            "start_time_s": 869.8,
+            "duration_s": 1264.3,
+            "duration_text": "21:04",
+            "speed_kmh": 13.17,
+            "wbal_kj": 19.69
+        },
+        {
+            "index": 4,
+            "start_m": 11314.0,
+            "end_m": 17479.0,
+            "start_km": 11.314,
+            "end_km": 17.479,
+            "distance_km": 6.165,
+            "point_start": 1385,
+            "point_end": 2026,
+            "power_w": 267.0,
+            "avg_gradient": 8.18,
+            "surface": "pavement_sand",
+            "start_time_s": 2134.1,
+            "duration_s": 1629.1,
+            "duration_text": "27:09",
+            "speed_kmh": 13.62,
+            "wbal_kj": 19.7
+        }
+    ],
+    "cards": [
+        {
+            "key": "fastest",
+            "label": "Fastest",
+            "time_seconds": 3763.2,
+            "time_text": "1:02:43",
+            "avg_power_w": 265.1,
+            "normalized_power_w": 265.2,
+            "min_wbal_kj": 17.2,
+            "min_wbal_rider_kj": null,
+            "target_wbal_floor_kj": 0.0,
+            "constraint_satisfied": true,
+            "time_vs_constant_seconds": 2.7,
+            "comparison_basis": "same_avg_power",
+            "comparison_power_w": 265.1,
+            "pd_envelope": {
+                "duration_s": 3763,
+                "planned_w": 265.1,
+                "best_w": 260.0,
+                "ratio": 1.0195,
+                "ok": true
+            },
+            "settings": {
+                "wPrime": 20000.0,
+                "wPrimeMode": "suggested",
+                "gradientThreshold": 1.0,
+                "minIntervalMeters": 200.0,
+                "powerMergeThresholdW": 5.0,
+                "powerScale": 1.0,
+                "wbalFloorKj": 0.0,
+                "raceDayMarginPct": 0.0,
+                "fitnessLevel": "competitive",
+                "momentumFactor": 0.0,
+                "useInertia": false,
+                "bikeType": "tt",
+                "strategyPreset": "fastest",
+                "startProfile": "auto",
+                "finishEmphasis": "auto",
+                "executionSmoothness": "normal"
+            },
+            "is_active": true,
+            "reserve_card": true,
+            "intervals": [
+                [
+                    0,
+                    762,
+                    262.0
+                ],
+                [
+                    762,
+                    912,
+                    276.5
+                ],
+                [
+                    912,
+                    1385,
+                    259.5
+                ],
+                [
+                    1385,
+                    2026,
+                    267.0
+                ]
+            ],
+            "plan_intervals": [
+                {
+                    "start_m": 0.0,
+                    "end_m": 5224.0,
+                    "power_w": 262.0,
+                    "avg_gradient": -1.65,
+                    "start_time_s": 0.0,
+                    "duration_s": 418.2,
+                    "speed_kmh": 44.97,
+                    "wbal_kj": 19.7
+                },
+                {
+                    "start_m": 5224.0,
+                    "end_m": 6691.0,
+                    "power_w": 276.5,
+                    "avg_gradient": 10.16,
+                    "start_time_s": 418.2,
+                    "duration_s": 451.6,
+                    "speed_kmh": 11.7,
+                    "wbal_kj": 17.2
+                },
+                {
+                    "start_m": 6691.0,
+                    "end_m": 11314.0,
+                    "power_w": 259.5,
+                    "avg_gradient": 8.27,
+                    "start_time_s": 869.8,
+                    "duration_s": 1264.3,
+                    "speed_kmh": 13.17,
+                    "wbal_kj": 19.69
+                },
+                {
+                    "start_m": 11314.0,
+                    "end_m": 17479.0,
+                    "power_w": 267.0,
+                    "avg_gradient": 8.18,
+                    "start_time_s": 2134.1,
+                    "duration_s": 1629.1,
+                    "speed_kmh": 13.62,
+                    "wbal_kj": 19.7
+                }
+            ]
+        },
+        {
+            "key": "balanced",
+            "label": "Balanced",
+            "time_seconds": 3767.1,
+            "time_text": "1:02:47",
+            "avg_power_w": 265.0,
+            "normalized_power_w": 265.0,
+            "min_wbal_kj": 19.7,
+            "min_wbal_rider_kj": null,
+            "target_wbal_floor_kj": 0.0,
+            "constraint_satisfied": true,
+            "time_vs_constant_seconds": 0.1,
+            "comparison_basis": "same_avg_power",
+            "comparison_power_w": 265.0,
+            "pd_envelope": {
+                "duration_s": 3767,
+                "planned_w": 265.0,
+                "best_w": 260.0,
+                "ratio": 1.0192,
+                "ok": true
+            },
+            "settings": {
+                "wPrime": 20000.0,
+                "wPrimeMode": "suggested",
+                "gradientThreshold": 1.0,
+                "minIntervalMeters": 200.0,
+                "powerMergeThresholdW": 5.0,
+                "powerScale": 1.0,
+                "wbalFloorKj": 0.0,
+                "raceDayMarginPct": 0.0,
+                "fitnessLevel": "competitive",
+                "momentumFactor": 0.0,
+                "useInertia": false,
+                "bikeType": "tt",
+                "strategyPreset": "balanced",
+                "startProfile": "auto",
+                "finishEmphasis": "auto",
+                "executionSmoothness": "normal"
+            },
+            "is_active": false,
+            "reserve_card": true,
+            "intervals": [
+                [
+                    0,
+                    2026,
+                    265.0
+                ]
+            ],
+            "plan_intervals": [
+                {
+                    "start_m": 0.0,
+                    "end_m": 17479.0,
+                    "power_w": 265.0,
+                    "avg_gradient": 5.43,
+                    "start_time_s": 0.0,
+                    "duration_s": 3767.1,
+                    "speed_kmh": 16.7,
+                    "wbal_kj": 19.7
+                }
+            ]
+        },
+        {
+            "key": "safe_finish",
+            "label": "Safe Finish",
+            "time_seconds": 3767.1,
+            "time_text": "1:02:47",
+            "avg_power_w": 265.0,
+            "normalized_power_w": 265.0,
+            "min_wbal_kj": 19.7,
+            "min_wbal_rider_kj": null,
+            "target_wbal_floor_kj": 0.0,
+            "constraint_satisfied": true,
+            "time_vs_constant_seconds": 0.1,
+            "comparison_basis": "same_avg_power",
+            "comparison_power_w": 265.0,
+            "pd_envelope": {
+                "duration_s": 3767,
+                "planned_w": 265.0,
+                "best_w": 260.0,
+                "ratio": 1.0192,
+                "ok": true
+            },
+            "settings": {
+                "wPrime": 20000.0,
+                "wPrimeMode": "suggested",
+                "gradientThreshold": 1.0,
+                "minIntervalMeters": 200.0,
+                "powerMergeThresholdW": 5.0,
+                "powerScale": 1.0,
+                "wbalFloorKj": 0.0,
+                "raceDayMarginPct": 0.0,
+                "fitnessLevel": "competitive",
+                "momentumFactor": 0.0,
+                "useInertia": false,
+                "bikeType": "tt",
+                "strategyPreset": "safe_finish",
+                "startProfile": "auto",
+                "finishEmphasis": "auto",
+                "executionSmoothness": "normal"
+            },
+            "is_active": false,
+            "reserve_card": true,
+            "intervals": [
+                [
+                    0,
+                    2026,
+                    265.0
+                ]
+            ],
+            "plan_intervals": [
+                {
+                    "start_m": 0.0,
+                    "end_m": 17479.0,
+                    "power_w": 265.0,
+                    "avg_gradient": 5.43,
+                    "start_time_s": 0.0,
+                    "duration_s": 3767.1,
+                    "speed_kmh": 16.7,
+                    "wbal_kj": 19.7
+                }
+            ]
+        }
+    ]
+}

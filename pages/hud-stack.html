@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en" tabindex="0" data-settings-key="zg-tt-hud" data-layout="stack" data-bg="smoke" data-halo="normal" data-band-words="true" data-show-live="false">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+    <title>TT HUD stack</title>
+    <link rel="stylesheet" href="/pages/css/common.css">
+    <link rel="stylesheet" href="./css/tokens.css">
+    <link rel="stylesheet" href="./css/hud.css">
+    <link rel="icon" href="/pages/images/favicon.png">
+    <script type="module">
+      import {main} from './src/hud.mjs';
+      main();
+    </script>
+  </head>
+  <body class="transparent-bg">
+    <div id="titlebar">
+      <header>
+        <div class="logo"><img src="/pages/images/icon128.png" alt="Sauce icon"></div>
+        <div class="title">TT HUD stack</div>
+        <div class="filler"></div>
+        <div class="buttons">
+          <a class="button open-settings" href="settings.html?for=hud&width=420&height=720&child-window" target="zg-tt-settings" title="Settings"><ms>settings</ms></a>
+          <div class="button minimize electron-only" title="Minimize"><ms>minimize</ms></div>
+          <div class="button close electron-only" title="Close window"><ms>close</ms></div>
+        </div>
+      </header>
+    </div>
+
+    <main class="hud panel halo" id="hud" data-state="idle">
+      <svg class="dial-svg" viewBox="0 0 260 260" role="presentation" aria-hidden="true">
+        <path class="track" id="dial-track" d=""></path>
+        <path class="under-stroke" id="dial-live-under" d=""></path>
+        <path class="live-arc" id="dial-live" d=""></path>
+        <path class="target-arc" id="dial-target" d=""></path>
+        <path class="next-tick" id="dial-next" d=""></path>
+        <path class="wbal-track" id="dial-wbal-track" d=""></path>
+        <path class="wbal-arc" id="dial-wbal" d=""></path>
+        <path class="wbal-floor" id="dial-wbal-floor" d=""></path>
+        <path class="progress-track" id="dial-progress-track" d=""></path>
+        <path class="progress-arc" id="dial-progress" d=""></path>
+      </svg>
+
+      <div class="hud-grid">
+        <section class="cell now">
+          <span class="label" id="now-label">now</span>
+          <div class="figure"><span class="num tnum" id="now-w">—</span><span class="unit">W</span></div>
+          <div class="live tnum" id="live"><i class="glyph" id="band-glyph">●</i><span id="live-w">—</span><span class="word" id="band-word"></span></div>
+        </section>
+        <section class="cell next">
+          <span class="label" id="next-label">next</span>
+          <div class="figure"><span class="num tnum" id="next-w">—</span><span class="unit" id="next-unit">W</span></div>
+          <div class="meta">
+            <span class="grade" id="next-grade"></span>
+            <span class="in tnum" id="next-in"><b id="next-in-m"></b> <span id="next-in-s"></span></span>
+          </div>
+        </section>
+        <section class="cell wbal" id="wbal">
+          <span class="label">W′ left</span>
+          <div class="figure"><span class="num tnum" id="wbal-kj">—</span><span class="unit">kJ</span></div>
+          <div class="bar"><div class="bar-fill" id="wbal-fill"></div><div class="bar-floor" id="wbal-floor"></div></div>
+          <span class="sub" id="wbal-word"></span>
+        </section>
+        <section class="cell finish">
+          <span class="label" id="finish-label">finish</span>
+          <div class="figure"><span class="num tnum" id="finish-time">—</span></div>
+          <span class="sub delta tnum" id="finish-delta"></span>
+        </section>
+        <section class="cell vitals" id="vitals">
+          <span><b class="tnum" id="v-cadence">—</b> rpm</span>
+          <span><b class="tnum" id="v-hr">—</b> bpm</span>
+          <span><b class="tnum" id="v-speed">—</b> km/h</span>
+        </section>
+      </div>
+
+      <div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="banner" id="banner" hidden></div>
+
+      <div class="idle" id="idle">
+        <div class="title" id="idle-title">Enter your plan code</div>
+        <div class="strategy" id="strategy" hidden>
+          <span class="label" id="strategy-label">strategy</span>
+          <div class="choices" id="strategy-choices"></div>
+        </div>
+        <div class="clip" id="clip" hidden>
+          <button type="button" class="primary" id="clip-load">Load</button>
+          <span class="hint">from your clipboard</span>
+        </div>
+        <div class="code-row" id="code-row">
+          <input type="text" id="plan-code" maxlength="6" placeholder="plan code" autocomplete="off" spellcheck="false" aria-label="Plan code">
+          <button type="button" class="primary" id="load-plan">Load</button>
+          <button type="button" id="close-panel" title="Keep this plan (Esc)" hidden>Close</button>
+        </div>
+        <div class="hint" id="idle-hint">The six-letter code from the planner's Share page, or paste its link.</div>
+        <div class="message" id="idle-message"></div>
+      </div>
+
+      <div class="tray" id="tray">
+        <div class="group">
+          <span class="label">offset</span>
+          <button type="button" data-action="offset-down" title="Plan is 10 m further back">−</button>
+          <span class="value tnum" id="offset-value">0 m</span>
+          <button type="button" data-action="offset-up" title="Plan is 10 m further on">+</button>
+        </div>
+        <div class="group">
+          <span class="label">bias</span>
+          <button type="button" data-action="bias-down" title="Targets 1 % lower">−</button>
+          <span class="value tnum" id="bias-value">100%</span>
+          <button type="button" data-action="bias-up" title="Targets 1 % higher">+</button>
+        </div>
+        <div class="group">
+          <button type="button" class="primary" data-action="clip-load" id="tray-clip" title="Load the plan whose code is on your clipboard" hidden>Load</button>
+          <button type="button" data-action="reset" title="Clear this race's statistics">Reset</button>
+          <button type="button" data-action="change-plan" title="Load another plan">Plan</button>
+          <a class="button-link open-settings" href="settings.html?for=hud&width=420&height=720&child-window" target="zg-tt-settings" title="Settings"><ms>settings</ms></a>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>

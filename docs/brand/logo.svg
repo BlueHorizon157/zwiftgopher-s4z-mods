@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>ZwiftGopher TT</title>
+  <rect width="512" height="512" rx="104" fill="#0c1118"/>
+  <path d="M 172.0 413.5 A 168 168 0 1 1 340.0 413.5" fill="none" stroke="#f5f7fa" stroke-opacity="0.16" stroke-width="30" stroke-linecap="round"/>
+  <path d="M 172.0 413.5 A 168 168 0 1 1 401.5 184.0" fill="none" stroke="#7bef9b" stroke-width="30" stroke-linecap="round"/>
+  <path d="M 372.0 201.0 L 430.9 167.0" stroke="#f5f7fa" stroke-width="12" stroke-linecap="round"/>
+  <g transform="translate(256 286) skewX(-12)" fill="#f5f7fa">
+    <path d="M -132 -70 h 122 v 34 h -44 v 112 h -34 v -112 h -44 z"/>
+    <path d="M 10 -70 h 122 v 34 h -44 v 112 h -34 v -112 h -44 z"/>
+  </g>
+</svg>

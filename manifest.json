@@ -1,33 +1,76 @@
 {
   "manifest_version": 1,
-  "name": "TT Planner Dashboard",
-  "description": "Displays TT plan intervals with live Zwift data inside Sauce4Zwift.",
+  "id": "zwiftgopher-tt",
+  "name": "ZwiftGopher TT",
+  "description": "Ride a ZwiftGopher TT plan in Zwift: the target now, the next change and when, W' and the finish, as a HUD over the game.",
   "author": "ZwiftGopher",
-  "website_url": "https://zwiftgopher.com/",
-  "version": "0.6.4",
+  "website_url": "https://zwiftgopher.com/TT/",
+  "version": "0.7.0",
   "content_js": [],
   "content_css": [],
   "web_root": "pages",
   "windows": [
     {
-      "file": "pages/tt-dashboard.html",
-      "id": "tt-interval-dashboard",
-      "name": "TT Planner Dashboard",
-      "description": "Gauge-style TT pacing overlay with offset & bias controls.",
+      "file": "pages/hud.html",
+      "id": "hud-strip",
+      "name": "TT HUD: strip",
+      "description": "One line across the top of the game: target now, next change and when, W' and the finish.",
       "overlay": true,
       "frame": false,
       "default_bounds": {
-        "width": 400,
-        "height": 550,
-        "x": -520,
+        "width": 600,
+        "height": 100,
+        "x": 0.33,
+        "y": 8
+      }
+    },
+    {
+      "file": "pages/hud-dial.html",
+      "id": "hud-dial",
+      "name": "TT HUD: dial",
+      "description": "A round gauge: live power against the target band, W' on the inner ring, the next change below.",
+      "overlay": true,
+      "frame": false,
+      "default_bounds": {
+        "width": 320,
+        "height": 320,
+        "x": -340,
         "y": 120
       }
     },
     {
-      "file": "pages/tt-field-dashboard.html",
-      "id": "tt-field-dashboard",
-      "name": "TT Field Dashboard",
-      "description": "Compact leaderboard showing rival TT riders sorted by average speed.",
+      "file": "pages/hud-stack.html",
+      "id": "hud-stack",
+      "name": "TT HUD: stack",
+      "description": "A narrow column for a screen edge: now, next, W' and the finish.",
+      "overlay": true,
+      "frame": false,
+      "default_bounds": {
+        "width": 230,
+        "height": 430,
+        "x": -250,
+        "y": 120
+      }
+    },
+    {
+      "file": "pages/list.html",
+      "id": "interval-list",
+      "name": "TT interval list",
+      "description": "Every interval of the plan with its target, time, gradient and W', and how each one went.",
+      "overlay": true,
+      "frame": false,
+      "default_bounds": {
+        "width": 400,
+        "height": 500,
+        "x": -100,
+        "y": 120
+      }
+    },
+    {
+      "file": "pages/field.html",
+      "id": "field",
+      "name": "TT field",
+      "description": "The riders of your event in standings order, with the gap at equal distance, the time you gain or lose on each per minute, speed, w/kg and W'.",
       "overlay": true,
       "frame": false,
       "default_bounds": {
@@ -38,17 +81,17 @@
       }
     },
     {
-      "file": "pages/tt-interval-list.html",
-      "id": "tt-interval-list",
-      "name": "TT Interval List",
-      "description": "Scrollable list of TT plan intervals with sticky summary + W′bal projection.",
+      "file": "pages/rivals.html",
+      "id": "rivals",
+      "name": "TT rivals",
+      "description": "One line for a screen edge: the riders nearest you on the road, ahead and behind, and whether you are gaining or losing on them.",
       "overlay": true,
       "frame": false,
       "default_bounds": {
-        "width": 400,
-        "height": 500,
-        "x": -100,
-        "y": 120
+        "width": 600,
+        "height": 76,
+        "x": 0.33,
+        "y": -96
       }
     }
   ]

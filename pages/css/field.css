@@ -1,0 +1,142 @@
+/* The field window (docs/REVAMP_PLAN.md 4.5, Phase 4.2): the riders of your event around
+ * you, on the shared tokens. One grid per row so the columns line up with the header. */
+html {
+  padding: 0;
+  overflow: hidden;
+}
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+  font-family: var(--font);
+  line-height: 1.2;
+}
+html.replay-mode body { background: var(--replay-bg, transparent); }
+
+.field {
+  --u: max(11px, calc(var(--hud-scale) * min(3cqw, 2.6cqh)));
+  font-size: var(--u);
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0.6em;
+  overflow: hidden;
+  user-select: none;
+}
+
+.head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1em;
+  padding: 0.5em 0.9em 0.3em;
+}
+.head .count { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head .place { font-size: 1.15em; font-weight: 700; white-space: nowrap; }
+
+.cols,
+.row {
+  display: grid;
+  grid-template-columns: 1.7em minmax(0, 1fr) 4em 3.6em 2.9em 2.6em 2.3em;
+  column-gap: 0.5em;
+  align-items: center;
+  padding: 0 0.9em;
+}
+.cols {
+  flex: 0 0 auto;
+  padding-top: 0.2em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--ink-line);
+  color: var(--ink-3);
+  font-size: max(11px, 0.9em);
+}
+.cols button.gap {
+  font: inherit;
+  color: var(--ink-2);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: right;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+  text-shadow: inherit;
+}
+.cols button.gap:focus-visible { outline: 2px solid var(--on); outline-offset: 1px; }
+.c { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c.pos, .c.gap, .c.trend, .c.kmh, .c.wkg { text-align: right; }
+
+.rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  position: relative;
+}
+.rows::-webkit-scrollbar { display: none; }
+.row {
+  padding-top: 0.3em;
+  padding-bottom: 0.3em;
+  font-variant-numeric: tabular-nums;
+}
+.row + .row { border-top: 1px solid rgba(245, 247, 250, 0.08); }
+.row .c.pos { color: var(--ink-3); }
+.row .c.name { font-weight: 600; }
+.row .c.name small { font-weight: 400; color: var(--ink-3); margin-left: 0.35em; font-size: max(11px, 0.85em); }
+.row .c.gap .glyph { font-size: max(11px, 0.75em); margin-right: 0.2em; color: var(--ink-2); }
+.row .c.trend { font-weight: 600; }
+.row.stale { opacity: 0.42; }
+.row.waiting .c.gap { color: var(--ink-3); }
+
+/* the home row: always in view (sticky at either edge), marked with a bar */
+.row.home {
+  position: sticky;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  background: rgba(14, 20, 30, 0.9);
+  box-shadow: inset 0.28em 0 0 var(--ink);
+}
+.row.home .c.name { font-weight: 800; }
+.row.home .c.pos { color: var(--ink); font-weight: 700; }
+
+.wbar {
+  display: block;
+  height: 0.45em;
+  background: var(--ink-line);
+  border-radius: 0.2em;
+  overflow: hidden;
+}
+.wbar i {
+  display: block;
+  height: 100%;
+  width: var(--w, 0%);
+  background: var(--ink);
+}
+.wbar.low i { background: var(--low); }
+
+.empty {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1em;
+  text-align: center;
+  color: var(--ink-2);
+}
+.empty[hidden] { display: none; }
+
+/* narrow windows drop w/kg, then the trend */
+@container root-html (width < 340px) {
+  .cols, .row { grid-template-columns: 1.7em minmax(0, 1fr) 4em 3.6em 2.9em 2.3em; }
+  .c.wkg { display: none; }
+}
+@container root-html (width < 270px) {
+  .cols, .row { grid-template-columns: 1.7em minmax(0, 1fr) 4em 2.9em; }
+  .c.trend, .c.wbal { display: none; }
+}

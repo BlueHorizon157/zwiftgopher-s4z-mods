@@ -1,0 +1,149 @@
+/* The one settings page (docs/REVAMP_PLAN.md 4.6), on Sauce's settings-page styles. */
+#settings {
+  padding: 0 1rem 1rem;
+}
+#settings .section[hidden],
+#settings label[hidden] {
+  display: none;
+}
+#settings .section .desc {
+  font-size: 0.85em;
+  opacity: 0.75;
+  margin: 0.3em 0 0.6em;
+}
+#settings .section .desc code {
+  font-family: inherit;
+  background: rgba(127, 127, 127, 0.2);
+  padding: 0 0.3em;
+  border-radius: 0.2em;
+}
+#settings form label key {
+  min-width: 14ch;
+}
+#settings input[type="range"] {
+  flex: 1;
+  min-width: 6em;
+}
+#settings .display-field {
+  min-width: 3ch;
+  text-align: right;
+  margin-right: 0.3em;
+}
+.code-row {
+  display: flex;
+  gap: 0.5em;
+  margin: 0.4em 0;
+}
+.code-row input {
+  flex: 1;
+  font: inherit;
+  text-transform: uppercase;
+}
+.code-row input::placeholder {
+  text-transform: none;
+}
+.btn {
+  font: inherit;
+  font-size: 0.9em;
+  padding: 0.25em 0.8em;
+  border-radius: 0.3em;
+  border: 1px solid rgba(127, 127, 127, 0.5);
+  background: rgba(127, 127, 127, 0.15);
+  color: inherit;
+  cursor: pointer;
+}
+.btn:hover {
+  background: rgba(127, 127, 127, 0.3);
+}
+.btn.primary {
+  background: #4caf7d;
+  border-color: transparent;
+  color: #0c1118;
+  font-weight: 600;
+}
+.btn.small {
+  font-size: 0.8em;
+  padding: 0.15em 0.5em;
+}
+.btn[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+.message {
+  min-height: 1.2em;
+  font-size: 0.85em;
+  margin: 0.2em 0 0.4em;
+  color: #ffc53d;
+}
+.message.ok {
+  color: #7bef9b;
+}
+.message:empty {
+  display: none;
+}
+table.plans {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+table.plans th {
+  text-align: left;
+  font-weight: 600;
+  opacity: 0.7;
+  padding: 0.2em 0.4em 0.2em 0;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.4);
+}
+table.plans td {
+  padding: 0.3em 0.4em 0.3em 0;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+  vertical-align: middle;
+}
+table.plans tr.active td:first-child {
+  font-weight: 700;
+}
+table.plans tr.active td:first-child::after {
+  content: " (active)";
+  font-weight: 400;
+  opacity: 0.7;
+}
+table.plans td.actions {
+  white-space: nowrap;
+  text-align: right;
+}
+table.plans td.actions .btn + .btn {
+  margin-left: 0.3em;
+}
+table.plans tr.empty td {
+  opacity: 0.7;
+  font-style: italic;
+}
+.button-row {
+  display: flex;
+  gap: 0.5em;
+  margin: 0.3em 0 0.5em;
+}
+.version #version-status.alert {
+  color: #ffc53d;
+  cursor: pointer;
+}
+.strategy .choices {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto auto;
+  gap: 0.15em 0.8em;
+  font-size: 0.85em;
+}
+.strategy .choice {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  padding: 0.2em 0;
+  cursor: pointer;
+}
+.strategy .choice .name {
+  font-weight: 600;
+}
+.strategy .choice .tnum {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}

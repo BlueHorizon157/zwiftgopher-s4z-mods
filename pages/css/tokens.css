@@ -1,0 +1,65 @@
+/* Shared tokens for every ZwiftGopher TT window (docs/REVAMP_PLAN.md 3.1).
+ *
+ * Ink is near-white with a layered dark halo so it reads over snow, jungle and night; the
+ * only saturated colours are the three band states (under / on / over), the amber of the
+ * boundary moment and the red of a low W'. Background modes paint a panel under the ink;
+ * nothing blurs the game. Sizes derive from one unit, --u, set per window from container
+ * query units with an 11 px floor and the rider's scale setting. */
+:root {
+  --ink: #f5f7fa;
+  --ink-2: rgba(245, 247, 250, 0.74);
+  --ink-3: rgba(245, 247, 250, 0.48);
+  --ink-line: rgba(245, 247, 250, 0.22);
+  --under: #62c6ff;
+  --on: #7bef9b;
+  --over: #ff7b5c;
+  --soon: #ffc53d;
+  --low: #ff5c5c;
+  --gain: var(--on);        /* field: you gain time on this rider */
+  --lose: var(--over);      /* field: you lose time on this rider */
+  --panel-ink: #0c1118;
+  --halo-a: 0.9;
+  --halo: rgba(4, 8, 14, var(--halo-a));
+  --hud-scale: 1;
+  --font: "Saira", "Segoe UI", system-ui, sans-serif;
+}
+
+/* Halo strength (settings → Look → Halo). */
+html[data-halo="off"] { --halo-a: 0; }
+html[data-halo="light"] { --halo-a: 0.55; }
+html[data-halo="normal"] { --halo-a: 0.9; }
+html[data-halo="strong"] { --halo-a: 1; }
+
+/* Background modes (settings → Look → Background); .panel is the window's one surface. */
+html[data-bg="clear"] .panel { background: transparent; }
+html[data-bg="smoke"] .panel { background: rgba(8, 12, 18, 0.38); }
+html[data-bg="dark"] .panel { background: rgba(8, 12, 18, 0.74); }
+html[data-bg="solid"] .panel { background: var(--panel-ink); }
+
+.ink { color: var(--ink); }
+.ink-2 { color: var(--ink-2); }
+.ink-3 { color: var(--ink-3); }
+.band-under { color: var(--under); }
+.band-on { color: var(--on); }
+.band-over { color: var(--over); }
+.trend-gaining { color: var(--gain); }
+.trend-losing { color: var(--lose); }
+.trend-holding { color: var(--ink-2); }
+
+.halo,
+.halo * {
+  text-shadow: 0 0 2px var(--halo), 0 0 6px var(--halo), 0 1px 2px var(--halo);
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

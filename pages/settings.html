@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html class="settings-page" lang="en" tabindex="0">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+    <title>TT Settings</title>
+    <link rel="icon" href="/pages/images/favicon.png">
+    <link rel="stylesheet" href="/pages/css/common.css">
+    <link rel="stylesheet" href="./css/settings.css">
+    <script type="module">
+      import {main} from './src/settings.mjs';
+      main();
+    </script>
+  </head>
+  <body>
+    <div id="titlebar">
+      <header>
+        <div class="logo"><img src="/pages/images/icon128.png" alt="Sauce icon"></div>
+        <div class="title">TT Settings</div>
+        <div class="filler"></div>
+        <div class="buttons">
+          <div class="button close electron-only" title="Close window"><ms>close</ms></div>
+        </div>
+      </header>
+    </div>
+    <div id="settings">
+      <div class="section" id="plans">
+        <div class="title">Plans</div>
+        <p class="desc">Load a plan with the six-letter code from the planner's Share page (or paste its link). Codes last seven days; the newest five plans are kept here and the one for the event's route is picked automatically.</p>
+        <div class="code-row">
+          <input type="text" id="plan-code" maxlength="80" placeholder="plan code or link" autocomplete="off" spellcheck="false" aria-label="Plan code">
+          <button type="button" id="load-plan" class="btn primary">Load</button>
+        </div>
+        <p class="message" id="plan-message"></p>
+        <table class="plans" id="plan-table">
+          <thead><tr><th>Code</th><th>Route</th><th>Plan time</th><th>Expires</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="strategy" id="strategy" hidden>
+          <p class="desc">Strategy for <b id="strategy-plan"></b>: the optimiser's ways to ride it. Choose before the start; a race already under way keeps its plan until it ends.</p>
+          <div class="choices" id="strategy-choices" role="radiogroup" aria-label="Strategy"></div>
+        </div>
+      </div>
+
+      <form id="look" class="section" data-for="hud list field rivals">
+        <div class="title">Look</div>
+        <label data-for="hud" title="The window's own layout comes from the one you added; override it here">
+          <key>Layout:</key>
+          <select name="layout">
+            <option value="auto">As added (strip, dial or stack)</option>
+            <option value="strip">Strip</option>
+            <option value="dial">Dial</option>
+            <option value="stack">Stack</option>
+          </select>
+        </label>
+        <label title="What sits behind the numbers">
+          <key>Background:</key>
+          <select name="background">
+            <option value="clear">Clear (the game shows through)</option>
+            <option value="smoke">Smoke</option>
+            <option value="dark">Dark</option>
+            <option value="solid">Solid</option>
+          </select>
+        </label>
+        <label title="The dark edge around every glyph that keeps it readable on snow and at night">
+          <key>Halo:</key>
+          <select name="halo">
+            <option value="off">Off</option>
+            <option value="light">Light</option>
+            <option value="normal">Normal</option>
+            <option value="strong">Strong</option>
+          </select>
+        </label>
+        <label title="Text size relative to the window">
+          <key>Size:</key>
+          <input type="range" name="scale" min="0.6" max="1.6" step="0.05" value="1">
+          <span class="display-field" name="scale">1</span>
+        </label>
+        <label data-for="hud" title="Show under / on / over as a word beside the glyph">
+          <key>Band words:</key>
+          <input type="checkbox" name="bandWords">
+        </label>
+        <label data-for="hud" title="Cadence, heart rate and speed, in the stack and in a strip at least 130 px tall">
+          <key>Show cadence, HR, speed:</key>
+          <input type="checkbox" name="showLive">
+        </label>
+      </form>
+
+      <form id="pacing" class="section" data-for="hud list">
+        <div class="title">Pacing</div>
+        <label data-for="hud" title="Average the live power over this many seconds">
+          <key>Power smoothing:</key>
+          <select name="smoothingSec">
+            <option value="0">Off</option>
+            <option value="1">1 s</option>
+            <option value="2">2 s</option>
+            <option value="3">3 s</option>
+            <option value="5">5 s</option>
+            <option value="10">10 s</option>
+          </select>
+        </label>
+        <label title="How far from the target still counts as on target">
+          <key>On-target band:</key>
+          <input type="range" name="bandWidthW" min="1" max="75" step="1" value="5">
+          <span class="display-field" name="bandWidthW">5</span> W
+        </label>
+        <label title="Show the next target this many seconds before it starts, at your current speed">
+          <key>Look-ahead:</key>
+          <select name="lookAheadSec">
+            <option value="0">Off</option>
+            <option value="2">2 s</option>
+            <option value="3">3 s</option>
+            <option value="5">5 s</option>
+            <option value="8">8 s</option>
+            <option value="10">10 s</option>
+            <option value="15">15 s</option>
+          </select>
+        </label>
+        <label title="The next target lights up amber this many seconds before the change">
+          <key>Warn before a change:</key>
+          <select name="soonSec">
+            <option value="5">5 s</option>
+            <option value="10">10 s</option>
+            <option value="15">15 s</option>
+            <option value="20">20 s</option>
+          </select>
+        </label>
+        <label title="How the race clock starts in a time trial: auto tries the game's timer first, then the start line's distance">
+          <key>Clock start:</key>
+          <select name="startRule">
+            <option value="auto">Auto</option>
+            <option value="time">Game timer</option>
+            <option value="distance">Start-line distance</option>
+          </select>
+        </label>
+      </form>
+
+      <form id="field-options" class="section" data-for="field">
+        <div class="title">Field</div>
+        <label title="On the clock: who is ahead in the standings at the same distance. On the road: who is physically ahead of you">
+          <key>Gap:</key>
+          <select name="gapMode">
+            <option value="clock">On the clock (standings)</option>
+            <option value="road">On the road</option>
+          </select>
+        </label>
+        <label title="Show riders of every category in the event, not only yours">
+          <key>Every category:</key>
+          <input type="checkbox" name="allSubgroups">
+        </label>
+        <p class="desc">Gaps are measured where both riders have been, every 50 m of the event, so they compare like with like. The trend is the time you gained or lost on each rider over the last minute.</p>
+      </form>
+
+      <form id="rivals-options" class="section" data-for="rivals">
+        <div class="title">Rivals</div>
+        <label title="How many riders to name on each side">
+          <key>Riders each side:</key>
+          <select name="rivalsEach">
+            <option value="1">1</option>
+            <option value="2">2</option>
+          </select>
+        </label>
+        <p class="desc">Behind you on the left, ahead on the right. Green: you are gaining time on that rider over the last minute; orange: losing. The speed is theirs over the last part of the plan you have both ridden, green when it was slower than yours.</p>
+      </form>
+
+      <form id="advanced" class="section">
+        <div class="title">Advanced</div>
+        <label title="Show the engine's log in the window">
+          <key>Debug log:</key>
+          <input type="checkbox" name="showDebug">
+        </label>
+        <label title="Keep what Sauce sends for up to two hours, so a race can be replayed without Zwift">
+          <key>Record telemetry:</key>
+          <input type="checkbox" id="record-telemetry">
+        </label>
+        <p class="desc" id="record-status">Off.</p>
+        <div class="button-row">
+          <button type="button" class="btn" id="record-save">Save recording…</button>
+          <button type="button" class="btn" id="record-clear">Clear</button>
+        </div>
+        <p class="desc">Turning recording on starts a fresh recording; Save writes a .jsonl file to your downloads. Add <code>?replay=idb</code> to a window's address to replay it.</p>
+        <p class="desc version">TT HUD <span id="version-current">v—</span> <span id="version-status"></span></p>
+      </form>
+    </div>
+  </body>
+</html>

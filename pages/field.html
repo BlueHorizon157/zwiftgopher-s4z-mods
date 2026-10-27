@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en" tabindex="0" data-settings-key="zg-tt-field" data-bg="smoke" data-halo="normal">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+    <title>TT field</title>
+    <link rel="stylesheet" href="/pages/css/common.css">
+    <link rel="stylesheet" href="./css/tokens.css">
+    <link rel="stylesheet" href="./css/field.css">
+    <link rel="icon" href="/pages/images/favicon.png">
+    <script type="module">
+      import {main} from './src/field.mjs';
+      main();
+    </script>
+  </head>
+  <body class="transparent-bg">
+    <div id="titlebar">
+      <header>
+        <div class="logo"><img src="/pages/images/icon128.png" alt="Sauce icon"></div>
+        <div class="title">TT field</div>
+        <div class="filler"></div>
+        <div class="buttons">
+          <a class="button open-settings" href="settings.html?for=field&width=420&height=720&child-window" target="zg-tt-settings" title="Settings"><ms>settings</ms></a>
+          <div class="button minimize electron-only" title="Minimize"><ms>minimize</ms></div>
+          <div class="button close electron-only" title="Close window"><ms>close</ms></div>
+        </div>
+      </header>
+    </div>
+
+    <main class="field panel halo" id="field">
+      <header class="head">
+        <span class="count" id="count"></span>
+        <span class="place tnum" id="place"></span>
+      </header>
+      <div class="cols">
+        <span class="c pos">pos</span>
+        <span class="c name">rider</span>
+        <button type="button" class="c gap" id="gap-mode" title="Click: gap on the clock (the standings) or on the road (who is physically ahead)">gap</button>
+        <span class="c trend" title="Time you gain (+) or lose (−) on the rider per minute, over the last minute">/min</span>
+        <span class="c kmh">km/h</span>
+        <span class="c wkg">w/kg</span>
+        <span class="c wbal">W′</span>
+      </div>
+      <div class="rows" id="rows"></div>
+      <div class="empty" id="empty">Riders in your event appear here once it starts.</div>
+    </main>
+  </body>
+</html>
