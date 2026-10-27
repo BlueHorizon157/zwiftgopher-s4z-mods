@@ -4,6 +4,7 @@ const STORAGE_KEY = 'tt-dashboard-state';
 const DEFAULT_TARGET_BAND_WIDTH = 5;
 const TARGET_BAND_MIN = 1;
 const TARGET_BAND_MAX = 75;
+const DEFAULT_LOOK_AHEAD_SEC = 5;
 
 let cachedState = null;
 
@@ -18,9 +19,10 @@ export function main() {
     const debugCheckbox = document.getElementById('debug-checkbox');
     const smoothingSelect = document.getElementById('smoothing-window');
     const smoothingValue = document.getElementById('smoothing-value');
+    const lookAheadSelect = document.getElementById('look-ahead');
 
     cachedState = getPersistedState();
-    applyStateToInputs(cachedState, {bandRange, bandNumber, debugCheckbox, smoothingSelect, smoothingValue});
+    applyStateToInputs(cachedState, {bandRange, bandNumber, debugCheckbox, smoothingSelect, smoothingValue, lookAheadSelect});
 
     const updateBandWidth = value => {
         const normalized = normalizeBandWidth(value);
@@ -51,13 +53,17 @@ export function main() {
 
     smoothingSelect.addEventListener('change', () => updateSmoothing(parseFloat(smoothingSelect.value)));
 
+    lookAheadSelect.addEventListener('change', () => {
+        savePartial({lookAheadSec: Number(lookAheadSelect.value)});
+    });
+
     if (common.storage) {
         common.storage.addEventListener('update', ev => {
             if (!ev?.data || ev.data.key !== STORAGE_KEY) {
                 return;
             }
             cachedState = ev.data.value || {};
-            applyStateToInputs(cachedState, {bandRange, bandNumber, debugCheckbox, smoothingSelect, smoothingValue});
+            applyStateToInputs(cachedState, {bandRange, bandNumber, debugCheckbox, smoothingSelect, smoothingValue, lookAheadSelect});
         });
     }
 }
@@ -85,6 +91,10 @@ function applyStateToInputs(state, elements) {
     }
     if (elements.smoothingValue) {
         elements.smoothingValue.textContent = smoothing > 0 ? `${smoothing.toFixed(1)}s` : 'Off';
+    }
+    if (elements.lookAheadSelect) {
+        const lookAhead = Number.isFinite(state?.lookAheadSec) ? state.lookAheadSec : DEFAULT_LOOK_AHEAD_SEC;
+        elements.lookAheadSelect.value = String(lookAhead);
     }
 }
 

@@ -14,6 +14,11 @@ const WBAL_NEGATIVE_RATIO = ((360 - GAUGE_TOTAL_DEGREES) / GAUGE_TOTAL_DEGREES) 
 const PLAN_WBAL_MIN_PERCENT = -100;
 const PLAN_WBAL_MAX_PERCENT = 200;
 const DEFAULT_TARGET_BAND_WIDTH = 5; // watts
+// Seconds before a boundary that the next target shows, at the current speed. The
+// planner used to label boundaries ~100 m early; it now puts them where the power
+// changes, and the anticipation lives here (TT planner Phase 5.2).
+const DEFAULT_LOOK_AHEAD_SEC = 5;
+const LOOK_AHEAD_MAX_SEC = 15;
 const TARGET_BAND_MIN = 1;
 const TARGET_BAND_MAX = 75;
 const MIN_PACING_SAMPLE_SECONDS = 60;
@@ -85,6 +90,7 @@ const state = {
     lastEventDistanceMeters: null,
     // Display-only power smoothing. Seconds: 0=Off, 0.5..5.0 allowed
     powerSmoothingSec: 0,
+    lookAheadSec: DEFAULT_LOOK_AHEAD_SEC,
     // Rolling buffer of recent power samples for smoothing
     powerSamples: [],
     // Exponential moving average state for display power
@@ -125,6 +131,7 @@ function loadPersistedState() {
         ? clamp(persisted.powerSmoothingSec, 0, 5)
         : 0;
     state.targetBandWidthW = normalizeTargetBandWidth(persisted.targetBandWidthW);
+    state.lookAheadSec = normalizeLookAhead(persisted.lookAheadSec);
     state.showDebug = typeof persisted.showDebug === 'boolean' ? persisted.showDebug : false;
     if (persisted.plan) {
         setPlan(persisted.plan, {share: false, resetHome: false});
@@ -144,6 +151,7 @@ function persistState() {
         distanceOffset: state.distanceOffset,
         powerBias: state.powerBias,
         powerSmoothingSec: state.powerSmoothingSec,
+        lookAheadSec: state.lookAheadSec,
         targetBandWidthW: getTargetBandWidth(),
         showDebug: state.showDebug,
         plan: state.plan,
@@ -678,7 +686,7 @@ function updateDashboard() {
         return;
     }
 
-    const currentIdx = findCurrentInterval(planDistanceKm);
+    const currentIdx = findCurrentInterval(planDistanceKm + lookAheadKm(watching));
     const intervalChanged = currentIdx !== state.displayedIntervalIndex;
     if (intervalChanged) {
         state.intervalStartTime = Date.now();
@@ -744,6 +752,19 @@ function deriveDistanceMeters(watching) {
         }
     }
     return 0;
+}
+
+function normalizeLookAhead(value) {
+    return Number.isFinite(value) ? clamp(Math.round(value), 0, LOOK_AHEAD_MAX_SEC) : DEFAULT_LOOK_AHEAD_SEC;
+}
+
+// How far ahead to look for the target: the look-ahead seconds at the current speed.
+function lookAheadKm(watching) {
+    const speedKmh = Number(watching?.state?.speed);
+    if (!state.lookAheadSec || !Number.isFinite(speedKmh) || speedKmh <= 0) {
+        return 0;
+    }
+    return speedKmh * state.lookAheadSec / 3600;
 }
 
 function findCurrentInterval(distanceKm) {
@@ -2006,6 +2027,11 @@ function applyRemotePreferences(persisted) {
         state.showDebug = debugPref;
         updateDebugVisibility();
     }
+    const lookAhead = normalizeLookAhead(persisted.lookAheadSec);
+    if (lookAhead !== state.lookAheadSec) {
+        state.lookAheadSec = lookAhead;
+        updateDashboard();
+    }
     const smoothingRaw = Number.isFinite(persisted.powerSmoothingSec) ? persisted.powerSmoothingSec : 0;
     const smoothing = clamp(Math.round(smoothingRaw * 2) / 2, 0, 5);
     if (smoothing !== state.powerSmoothingSec) {
@@ -2033,8 +2059,14 @@ function getTelemetryFtp(watching) {
     return Number(watching?.athlete?.ftp ?? watching?.stats?.ftp);
 }
 
+// The CP and W' the plan was paced with (plan file rider.cp_used / wprime_used_j);
+// plans shared before the plan file fall back to FTP and settings.wPrime.
+function getPlanCp() {
+    return Number(state.plan?.rider?.cp_used ?? state.plan?.rider?.ftp);
+}
+
 function getPlanWPrime() {
-    return Number(state.plan?.settings?.wPrime);
+    return Number(state.plan?.rider?.wprime_used_j ?? state.plan?.settings?.wPrime);
 }
 
 function getTelemetryWPrime(watching) {
@@ -2064,9 +2096,9 @@ function updatePlanWBalFromTelemetry(power) {
         return;
     }
 
-    // Use the plan's FTP as CP for W'bal calculation to match plan design assumptions
-    // This ensures that hitting the plan's target power will decrease W'bal at the intended rate
-    const cp = Number.isFinite(getPlanFtp()) ? getPlanFtp() : null;
+    // Use the plan's CP for W'bal so that riding the plan's targets spends W' at the
+    // rate the plan was made with.
+    const cp = Number.isFinite(getPlanCp()) ? getPlanCp() : null;
     let wPrime = Number.isFinite(getPlanWPrime()) ? getPlanWPrime() : null;
     if (!Number.isFinite(wPrime) || wPrime <= 0) {
         wPrime = DEFAULT_WPRIME;
