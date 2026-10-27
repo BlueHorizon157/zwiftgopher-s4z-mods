@@ -19,7 +19,6 @@ export const SETTINGS_DEFAULTS = {
     showLive: false,          // cadence, heart rate, speed where the layout has room (stack, a tall strip)
     smoothingSec: 3,
     bandWidthW: 5,
-    lookAheadSec: 5,
     soonSec: 10,              // the boundary moment starts this many seconds before a change
     startRule: 'auto',        // auto | time | distance
     showDebug: false,
@@ -221,7 +220,6 @@ export function enginePrefs(p = {}) {
     return {
         smoothingSec: num(p.smoothingSec ?? p.powerSmoothingSec, SETTINGS_DEFAULTS.smoothingSec),
         bandWidthW: num(p.bandWidthW ?? p.targetBandWidthW, SETTINGS_DEFAULTS.bandWidthW),
-        lookAheadSec: num(p.lookAheadSec, SETTINGS_DEFAULTS.lookAheadSec),
         startRule: ['auto', 'time', 'distance'].includes(p.startRule) ? p.startRule : 'auto',
     };
 }

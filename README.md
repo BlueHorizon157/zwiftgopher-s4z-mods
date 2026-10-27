@@ -68,7 +68,9 @@ made on the settings page during a race waits until it is over.
 - **now** is the target for the interval you are in, with your live power beside it in the
   band colour: blue ▼ under, green ● on, orange ▲ over (the word is there too).
 - **next** is the next target with its gradient and how far and how long until it starts.
-  Ten seconds before the change it turns amber and the countdown pulses.
+  Ten seconds before the change it turns amber and the countdown pulses. The target
+  switches exactly when the countdown reaches zero: the plan's boundaries are where the
+  change pays, so the HUD never moves them, and the warning is yours to use.
 - **W′ left** is the planner's own W′ balance model run on your live power, with the plan's
   floor marked on the bar. It turns red under 25 %.
 - **finish** is the time you are on for, and in words how that compares with the plan:
@@ -114,7 +116,7 @@ Right-click any window for Sauce's titlebar and its settings button (the HUD als
 its tray). One settings page serves every window and shows what that window uses. Plans:
 the library, code entry and the active plan's strategy. Look: background (clear, smoke, dark, solid), halo strength,
 size, and for the HUD its layout, band words and cadence/HR/speed. Pacing: power smoothing,
-on-target band, look-ahead, the amber warning time, how the clock starts. Field: gap on the
+on-target band, the amber warning time, how the clock starts. Field: gap on the
 clock or the road, every category. Rivals: riders named each side. Advanced: debug log, the
 telemetry recorder.
 

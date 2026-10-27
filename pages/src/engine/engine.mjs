@@ -21,7 +21,6 @@ import {update as wbalUpdate} from './wbal.mjs';
 export const DEFAULT_PREFS = {
     smoothingSec: 3,
     bandWidthW: 5,
-    lookAheadSec: 5,
     startRule: 'auto',      // clock.mjs START_RULES
 };
 
@@ -169,8 +168,10 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         const power = Number(data.state?.power);
         const index = planM == null ? state.index : locate(plan.intervals, planM, state.index);
         const speedMs = (Number(data.state?.speed) || 0) / 3.6;
-        const lookM = planM != null ? planM + speedMs * (state.prefs.lookAheadSec || 0) : null;
-        state.displayIndex = lookM == null ? index : locate(plan.intervals, lookM, state.displayIndex);
+        // The shown interval is the one the rider is in: the target switches at the boundary,
+        // when the countdown reaches zero (Dave, 2026-10-27). The plan's boundaries are the
+        // optimum (REVAMP_PLAN 6.3), so nothing here anticipates them.
+        state.displayIndex = index;
         if (state.status === 'racing' && clock.running && planM != null) {
             const before = state.tracking.lastIndex;
             advance(state.tracking, {

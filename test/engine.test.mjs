@@ -78,19 +78,19 @@ test('each interval closes with the W\' the plan has for its end', () => {
     });
 });
 
-test('targets follow the plan with bias and the look-ahead switches early', () => {
+test('targets switch exactly at the boundary, and the bias scales them', () => {
     const normalised = normalisePlan(plan);
     const second = normalised.intervals[1];
     let switched = null;
-    let onTarget = 0;
+    let lastBefore = null;
     run({
-        prefs: {lookAheadSec: 5, bandWidthW: 5},
+        prefs: {bandWidthW: 5},
         onTick: (row, v, engine) => {
             if (v.status !== 'racing') {
                 return;
             }
-            if (v.target.band === 'on') {
-                onTarget++;
+            if (v.target.number === 1) {
+                lastBefore = v;
             }
             if (switched == null && v.target.number === 2) {
                 switched = v.race.planM;
@@ -104,8 +104,11 @@ test('targets follow the plan with bias and the look-ahead switches early', () =
             }
         },
     });
-    assert.ok(switched < second.startM && switched > second.startM - 80, `target switched at ${switched} m for a boundary at ${second.startM} m`);
-    assert.ok(onTarget > 700, `on target for ${onTarget} ticks`);
+    // The switch is the first tick past the boundary, within a second's riding of it.
+    assert.ok(switched >= second.startM && switched < second.startM + 20, `target switched at ${switched} m for a boundary at ${second.startM} m`);
+    // Until then the countdown ran to that boundary, and the synthetic rider was on target.
+    assert.ok(lastBefore.next.number === 2 && lastBefore.next.inM < 20, `last tick before: next ${lastBefore.next.number} in ${lastBefore.next.inM} m`);
+    assert.equal(lastBefore.target.band, 'on');
 });
 
 test('a plan change and a reset clear the race; another rider is spectated', () => {
