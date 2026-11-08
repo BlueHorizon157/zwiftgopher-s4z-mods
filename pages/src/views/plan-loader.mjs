@@ -36,7 +36,15 @@ export async function clipboardCode() {
     return SHARE_CODE.test(code) ? code : null;
 }
 
-export async function loadPlanByCode(text) {
+/** Load a code into the library (active unless told otherwise); {code, raw, meta}. */
+export async function loadPlanByCode(text, {activate = true, ...extra} = {}) {
+    const loaded = await fetchPlanByCode(text);
+    store.savePlan(loaded.code, loaded.raw, {activate, expiresAt: loaded.meta?.expires_at ?? null, ...extra});
+    return loaded;
+}
+
+/** The plan for a code from the planner, not saved: {code, raw, meta}. A timeout, one retry. */
+export async function fetchPlanByCode(text) {
     const code = parseCode(text);
     if (!code) {
         throw new Error('A plan code is six letters and digits.');
@@ -54,7 +62,6 @@ export async function loadPlanByCode(text) {
             if (!resp.ok || !body.success || !body.plan) {
                 throw new Error(body.error || `The planner answered HTTP ${resp.status}.`);
             }
-            store.savePlan(code, body.plan, {expiresAt: body.meta?.expires_at ?? null});
             return {code, raw: body.plan, meta: body.meta ?? null};
         } catch (err) {
             lastError = err.name === 'AbortError' ? new Error('The planner did not answer in time.') : err;

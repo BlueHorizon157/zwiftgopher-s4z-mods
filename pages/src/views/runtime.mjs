@@ -1,14 +1,16 @@
 // What every engine window does the same way (docs/REVAMP_PLAN.md 1.8, 2.2, 2.4): one
 // engine on its own subscription, the plan library and controls from store.mjs, the window's
-// preferences from Sauce's settingsStore, event info on a new subgroup, replay support and
-// no work while the window is hidden. The window supplies render(view).
+// preferences from Sauce's settingsStore, event info on a new subgroup, the shelf sync with
+// the planner (TT/RIDE_DAY_PLAN.md 2.4), replay support and no work while the window is
+// hidden. The window supplies render(view).
 import * as common from '/pages/src/common.mjs';
 import * as sauce from '../sauce.mjs';
 import * as store from '../store.mjs';
 import {fetchEventInfo} from '../eventinfo.mjs';
 import {createEngine} from '../engine/engine.mjs';
 import {normalisePlan} from '../engine/plan.mjs';
-import {loadPlanByCode, loadReplayPlan} from './plan-loader.mjs';
+import {loadPlanByCode, fetchPlanByCode, loadReplayPlan} from './plan-loader.mjs';
+import {syncOnce, chooseActivation, shouldPoll, linkStatus, PENDING_POLL_MS} from './shelf-sync.mjs';
 
 export const SETTINGS_DEFAULTS = {
     layout: 'auto',           // auto = the manifest window's ?layout
@@ -147,6 +149,99 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     }, {record: true});
     setInterval(draw, 1000);
 
+    // ---- the shelf: plans from the planner arrive by themselves (TT/RIDE_DAY_PLAN.md 2.4) ----
+    // One window polls a minute for all of them (store.getShelf().lastPollAt is the guard),
+    // only while idle or armed and visible, never while racing. A pending pairing is checked
+    // every few seconds, so the planner's claim is seen even with the settings page closed.
+    const windowId = Math.random().toString(36).slice(2, 8);
+    let linkSupported = null;
+    let syncing = false;
+    const pendingStatus = async () => {
+        const link = store.getLink();
+        if (!link || link.state !== 'pending' || sauce.isReplay) {
+            return;
+        }
+        if (Date.now() - (link.lastStatusAt ?? 0) < PENDING_POLL_MS) {
+            return;
+        }
+        store.setLink({...link, lastStatusAt: Date.now()});
+        const st = await linkStatus(fetch, link.token);
+        const current = store.getLink();
+        if (!current || current.token !== link.token) {
+            return;
+        }
+        if (st.state === 'linked') {
+            const planner = (st.link?.devices ?? []).find(d => d.kind === 'planner');
+            store.setLink({...current, state: 'linked', linkedAt: Date.now(), code: null, expiresAt: null,
+                zwiftId: st.link?.zwift_id ?? current.zwiftId, riderName: st.link?.rider_name ?? current.riderName, plannerLabel: planner?.label ?? null});
+            note('Linked to the planner.');
+            draw();
+            pollShelf(true);
+        } else if (st.state === 'expired' || st.state === 'revoked' || st.state === 'unknown') {
+            store.setLink({...current, state: st.state});
+            draw();
+        }
+    };
+    const pollShelf = async (force = false) => {
+        const link = store.getLink();
+        const shelf = store.getShelf();
+        if (syncing || linkSupported === false || sauce.isReplay) {
+            return;
+        }
+        if (!shouldPoll({link, quiet: beforeStart(), visible: common.isVisible(), lastPollAt: shelf.lastPollAt, now: Date.now(), force})) {
+            return;
+        }
+        store.setShelf({lastPollAt: Date.now(), lastPollBy: windowId});
+        syncing = true;
+        try {
+            const r = await syncOnce({
+                fetchFn: fetch,
+                token: link.token,
+                etag: shelf.etag ?? null,
+                library: {has: store.getPlanEntry, save: (code, raw, meta) => store.savePlan(code, raw, {activate: false, ...meta})},
+                loadPlan: fetchPlanByCode,
+            });
+            if (r.status === 'revoked') {
+                store.clearLink();
+                note('The planner link has ended: link again from the settings page.');
+            } else if (r.status === 'unsupported') {
+                linkSupported = false;
+                store.setShelf({unsupportedAt: Date.now()});
+            } else if (r.status === 'ok') {
+                linkSupported = true;
+                store.setShelf({etag: r.etag, lastSyncAt: Date.now(), unsupportedAt: null});
+                if (r.added.length) {
+                    const {activate, offer} = chooseActivation({added: r.added, plans: r.plans, activeCode: store.getActiveCode(),
+                        inEvent: Boolean(engine.state.event.subgroupId), beforeStart: beforeStart()});
+                    if (activate) {
+                        store.setActive(activate);
+                        store.setShelf({offer: null});
+                        syncPlan();
+                        note(`Plan ${activate} from the planner.`);
+                    } else if (offer) {
+                        const e = store.getPlanEntry(offer);
+                        store.setShelf({offer: {code: offer, routeName: e?.routeName ?? null, timeText: e?.timeText ?? null, at: Date.now()}});
+                        note(`New plan ${offer} from the planner.`);
+                    }
+                }
+            } else if (r.status === 'unchanged') {
+                linkSupported = true;
+                store.setShelf({lastSyncAt: Date.now()});
+            } else if (r.error) {
+                note(`Shelf: ${r.error}`);
+            }
+        } finally {
+            syncing = false;
+            draw();
+        }
+    };
+    setInterval(() => {
+        pendingStatus().catch(() => {});
+        pollShelf().catch(() => {});
+    }, 5000);
+    window.addEventListener('focus', () => pollShelf(true).catch(() => {}));
+    setTimeout(() => pollShelf(true).catch(() => {}), 1500);
+
     const api = {
         engine,
         settings,
@@ -197,8 +292,34 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             engine.control('bias', bias);
             draw();
         },
+        // The link and the shelf (TT/RIDE_DAY_PLAN.md 2.4).
+        link: () => store.getLink(),
+        shelf: () => store.getShelf(),
+        /** A plan that arrived while another was active: offered until used or dismissed. */
+        offer() {
+            const o = store.getShelf().offer;
+            return o && store.getPlanEntry(o.code) ? o : null;
+        },
+        useOffer() {
+            const o = api.offer();
+            if (!o || !beforeStart()) {
+                return false;
+            }
+            store.setActive(o.code);
+            store.setShelf({offer: null});
+            syncPlan();
+            note(`Plan ${o.code} from the planner.`);
+            draw();
+            return true;
+        },
+        dismissOffer() {
+            store.setShelf({offer: null});
+            draw();
+        },
+        syncNow: () => pollShelf(true),
+        linkSupported: () => linkSupported,
     };
-    window.zgtt = {engine, view: api.view, replay: sauce.replayState, settings};   // scripts/page-check.mjs and DevTools
+    window.zgtt = {engine, view: api.view, replay: sauce.replayState, settings, store, api};   // scripts/page-check.mjs and DevTools
     onReady?.(api);
     applyLook(api.prefs());
     onSettings?.(api.prefs());
@@ -227,7 +348,7 @@ export function enginePrefs(p = {}) {
 /** Plain words for the engine's status, for any window. */
 export function statusWords(v) {
     switch (v.status) {
-        case 'idle': return v.plan ? 'waiting for Zwift' : 'no plan loaded';
+        case 'idle': return v.plan ? 'waiting for Zwift' : (store.getLink()?.state === 'linked' ? 'waiting for a plan from the planner' : 'no plan loaded');
         case 'armed': return v.event?.inEvent ? 'ready, waiting for the start' : 'ready on the route';
         case 'racing': return 'racing';
         case 'finished': return 'finished';

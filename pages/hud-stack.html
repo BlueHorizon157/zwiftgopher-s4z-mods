@@ -76,6 +76,11 @@
 
       <div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
       <div class="banner" id="banner" hidden></div>
+      <div class="toast" id="toast" hidden>
+        <span class="text" id="toast-text"></span>
+        <button type="button" class="primary" data-action="use-offer" id="toast-use">Use</button>
+        <button type="button" data-action="dismiss-offer" id="toast-dismiss" title="Keep the current plan">×</button>
+      </div>
 
       <div class="idle" id="idle">
         <div class="title" id="idle-title">Enter your plan code</div>
@@ -86,6 +91,11 @@
         <div class="clip" id="clip" hidden>
           <button type="button" class="primary" id="clip-load">Load</button>
           <span class="hint">from your clipboard</span>
+        </div>
+        <div class="pairing" id="pairing" hidden>
+          <span class="label">pairing code</span>
+          <b class="code tnum" id="pairing-code"></b>
+          <span class="hint">enter it in the planner: Share → Link Sauce</span>
         </div>
         <div class="code-row" id="code-row">
           <input type="text" id="plan-code" maxlength="6" placeholder="plan code" autocomplete="off" spellcheck="false" aria-label="Plan code">

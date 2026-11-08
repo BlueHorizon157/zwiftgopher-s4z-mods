@@ -27,7 +27,27 @@
     <div id="settings">
       <div class="section" id="plans">
         <div class="title">Plans</div>
-        <p class="desc">Load a plan with the six-letter code from the planner's Share page (or paste its link). Codes last seven days; the newest five plans are kept here and the one for the event's route is picked automatically.</p>
+        <div class="link" id="link">
+          <p class="desc">Link this mod to the planner once and the plans you optimise there arrive here by themselves; a new plan becomes the plan when none is loaded, and is offered otherwise.</p>
+          <div id="link-unlinked">
+            <div class="button-row"><button type="button" class="btn primary" id="link-start">Link to the planner</button></div>
+          </div>
+          <div id="link-pending" hidden>
+            <div class="pairing-code tnum" id="link-code">——————</div>
+            <p class="desc">Enter this code in the planner: open your plan's <b>Share</b> dialog and press <b>Link Sauce</b>. The code lasts ten minutes<span id="link-countdown"></span>.</p>
+            <div class="button-row"><button type="button" class="btn" id="link-cancel">Cancel</button></div>
+          </div>
+          <div id="link-linked" hidden>
+            <p class="desc" id="link-linked-text"></p>
+            <ul class="devices" id="link-devices"></ul>
+            <div class="button-row">
+              <button type="button" class="btn" id="link-sync">Sync now</button>
+              <button type="button" class="btn" id="link-unlink">Unlink</button>
+            </div>
+          </div>
+          <p class="message" id="link-message"></p>
+        </div>
+        <p class="desc">Or load a plan with the six-letter code from the planner's Share page (or paste its link). Codes last seven days; the newest ten plans are kept here and the one for the event's route is picked automatically.</p>
         <div class="code-row">
           <input type="text" id="plan-code" maxlength="80" placeholder="plan code or link" autocomplete="off" spellcheck="false" aria-label="Plan code">
           <button type="button" id="load-plan" class="btn primary">Load</button>

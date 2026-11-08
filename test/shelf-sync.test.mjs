@@ -1,0 +1,149 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {syncOnce, needsFetch, chooseActivation, shouldPoll, linkStart, linkStatus, serverSupportsLink, signedUpTimeTrials, POLL_GUARD_MS} from '../pages/src/views/shelf-sync.mjs';
+
+// A fetch that answers from a script: [{match: url substring, status, json, etag}].
+function fakeFetch(script) {
+    const calls = [];
+    const fn = async (url, init = {}) => {
+        calls.push({url: String(url), method: init.method ?? 'GET', headers: init.headers ?? {}, body: init.body ?? null});
+        const hit = script.find(s => String(url).includes(s.match) && (!s.method || s.method === (init.method ?? 'GET')));
+        if (!hit) {
+            return {status: 404, ok: false, text: async () => 'not found', headers: {get: () => null}};
+        }
+        const body = hit.text ?? (hit.json !== undefined ? JSON.stringify(hit.json) : '');
+        return {status: hit.status, ok: hit.status >= 200 && hit.status < 300, text: async () => body, headers: {get: name => (name === 'ETag' ? hit.etag ?? null : null)}};
+    };
+    fn.calls = calls;
+    return fn;
+}
+
+function library(entries = {}) {
+    const map = new Map(Object.entries(entries));
+    return {
+        has: code => map.get(code) ?? null,
+        save: (code, raw, meta) => map.set(code, {raw, ...meta}),
+        map,
+    };
+}
+
+const listing = (plans, link = {zwift_id: 354912, rider_name: 'Dave', devices: []}) => ({success: true, plans, link});
+const plan = (code, extra = {}) => ({code, route_id: '3395698268', route_name: 'Flat Out Fast', laps: 1, time_text: '14:57', strategy: 'fastest', source: 'planner', event: null, created_at: '2026-11-08 10:00:00', published_at: '2026-11-08T10:00:00+00:00', expires_at: '2026-11-15 10:00:00', fetched_at: null, ...extra});
+
+test('a sync fetches the plans the library lacks and acknowledges each', async () => {
+    const fetchFn = fakeFetch([
+        {match: 'shelf.php?action=list', status: 200, json: listing([plan('AAAAAA'), plan('BBBBBB', {fetched_at: '2026-11-08 10:05:00'})]), etag: 'W/"abc"'},
+        {match: 'shelf.php', method: 'POST', status: 200, json: {success: true, fetched: true}},
+    ]);
+    const lib = library();
+    const loaded = [];
+    const r = await syncOnce({fetchFn, token: 'zgt_x', library: lib, loadPlan: async code => { loaded.push(code); return {raw: {schema: 'zg-tt-plan/1', code}, meta: {expires_at: '2026-11-15 10:00:00'}}; }});
+    assert.equal(r.status, 'ok');
+    assert.equal(r.etag, 'W/"abc"');
+    assert.deepEqual(r.added, ['AAAAAA', 'BBBBBB'], 'both are new to the library');
+    assert.deepEqual(loaded, ['AAAAAA', 'BBBBBB']);
+    assert.equal(lib.map.get('AAAAAA').publishedAt, '2026-11-08T10:00:00+00:00');
+    assert.equal(lib.map.get('AAAAAA').source, 'planner');
+    assert.equal(lib.map.get('AAAAAA').shelf, true);
+    const acks = fetchFn.calls.filter(c => c.method === 'POST');
+    assert.equal(acks.length, 2);
+    assert.match(acks[0].body, /action=fetched&code=AAAAAA/);
+    assert.equal(fetchFn.calls[0].headers.Authorization, 'Bearer zgt_x', 'the token goes as a bearer');
+    assert.equal(r.link.rider_name, 'Dave');
+});
+
+test('a listing that has not changed is a 304 and costs nothing else', async () => {
+    const fetchFn = fakeFetch([{match: 'shelf.php?action=list', status: 304}]);
+    const r = await syncOnce({fetchFn, token: 'zgt_x', etag: 'W/"abc"', library: library(), loadPlan: async () => { throw new Error('must not load'); }});
+    assert.equal(r.status, 'unchanged');
+    assert.equal(r.etag, 'W/"abc"');
+    assert.equal(fetchFn.calls[0].headers['If-None-Match'], 'W/"abc"');
+    assert.equal(fetchFn.calls.length, 1);
+});
+
+test('a 401 means the link has ended; a 404 means the planner has no shelf', async () => {
+    const gone = await syncOnce({fetchFn: fakeFetch([{match: 'shelf.php?action=list', status: 401, json: {success: false, error: 'This link is not valid any more.'}}]), token: 'zgt_x', library: library(), loadPlan: async () => ({})});
+    assert.equal(gone.status, 'revoked');
+    assert.match(gone.error, /not valid/);
+    const old = await syncOnce({fetchFn: fakeFetch([]), token: 'zgt_x', library: library(), loadPlan: async () => ({})});
+    assert.equal(old.status, 'unsupported');
+    const html = await syncOnce({fetchFn: fakeFetch([{match: 'shelf.php?action=list', status: 200, text: '<html>old server</html>'}]), token: 'zgt_x', library: library(), loadPlan: async () => ({})});
+    assert.equal(html.status, 'unsupported');
+});
+
+test('a plan the library has is left alone unless it was republished', () => {
+    const have = {publishedAt: '2026-11-08T10:00:00+00:00'};
+    assert.equal(needsFetch(plan('A', {fetched_at: '2026-11-08 10:01:00'}), have), false, 'fetched already');
+    assert.equal(needsFetch(plan('A'), have), false, 'same publication, not yet acknowledged');
+    assert.equal(needsFetch(plan('A', {published_at: '2026-11-08T11:00:00+00:00'}), have), true, 'republished (an edit kept)');
+    assert.equal(needsFetch(plan('A'), null), true, 'not in the library');
+    assert.equal(needsFetch(plan('A'), {publishedAt: null}), true, 'kept before publications were recorded');
+});
+
+test('a failed plan download leaves the plan for the next poll and the listing read', async () => {
+    const fetchFn = fakeFetch([
+        {match: 'shelf.php?action=list', status: 200, json: listing([plan('AAAAAA'), plan('BBBBBB')]), etag: 'W/"e"'},
+        {match: 'shelf.php', method: 'POST', status: 200, json: {success: true}},
+    ]);
+    const lib = library();
+    const r = await syncOnce({fetchFn, token: 'zgt_x', library: lib, loadPlan: async code => { if (code === 'AAAAAA') { throw new Error('timeout'); } return {raw: {code}, meta: {}}; }});
+    assert.equal(r.status, 'ok');
+    assert.deepEqual(r.added, ['BBBBBB']);
+    assert.equal(lib.map.has('AAAAAA'), false);
+    assert.equal(fetchFn.calls.filter(c => c.method === 'POST').length, 1, 'only the saved plan is acknowledged');
+});
+
+test('a new plan becomes the plan when nothing is active outside an event; otherwise it is offered before the start', () => {
+    const plans = [plan('NEW111'), plan('OLD111')];
+    assert.deepEqual(chooseActivation({added: ['OLD111', 'NEW111'], plans, activeCode: null, inEvent: false, beforeStart: true}), {activate: 'NEW111', offer: null}, 'the newest of the arrivals, in the shelf\'s order');
+    assert.deepEqual(chooseActivation({added: ['NEW111'], plans, activeCode: 'OLD111', inEvent: false, beforeStart: true}), {activate: null, offer: 'NEW111'});
+    assert.deepEqual(chooseActivation({added: ['NEW111'], plans, activeCode: null, inEvent: true, beforeStart: true}), {activate: null, offer: 'NEW111'}, 'in an event nothing arms itself by arrival (the event match does that)');
+    assert.deepEqual(chooseActivation({added: ['NEW111'], plans, activeCode: 'OLD111', inEvent: false, beforeStart: false}), {activate: null, offer: null}, 'racing: nothing');
+    assert.deepEqual(chooseActivation({added: ['OLD111'], plans, activeCode: 'OLD111', inEvent: false, beforeStart: true}), {activate: null, offer: null}, 'the active plan republished is no offer');
+    assert.deepEqual(chooseActivation({added: [], plans, activeCode: null, inEvent: false, beforeStart: true}), {activate: null, offer: null});
+});
+
+test('one window polls a minute, only while linked, quiet and visible', () => {
+    const link = {token: 'zgt_x', state: 'linked'};
+    const now = 1_000_000;
+    assert.equal(shouldPoll({link, quiet: true, visible: true, lastPollAt: now - POLL_GUARD_MS - 1, now}), true);
+    assert.equal(shouldPoll({link, quiet: true, visible: true, lastPollAt: now - 10000, now}), false, 'another window polled 10 s ago');
+    assert.equal(shouldPoll({link, quiet: true, visible: true, lastPollAt: now - 10000, now, force: true}), true, 'a focus forces it, 5 s apart at most');
+    assert.equal(shouldPoll({link, quiet: true, visible: true, lastPollAt: now - 2000, now, force: true}), false);
+    assert.equal(shouldPoll({link, quiet: false, visible: true, lastPollAt: 0, now}), false, 'never while racing');
+    assert.equal(shouldPoll({link, quiet: true, visible: false, lastPollAt: 0, now}), false, 'not while hidden');
+    assert.equal(shouldPoll({link: {token: 'zgt_x', state: 'pending'}, quiet: true, visible: true, lastPollAt: 0, now}), false, 'not before the planner has claimed the code');
+    assert.equal(shouldPoll({link: null, quiet: true, visible: true, lastPollAt: 0, now}), false);
+});
+
+test('pairing: start gives a code and a token; status reads the state; the ping detects an old server', async () => {
+    const fetchFn = fakeFetch([
+        {match: 'link.php?action=ping', status: 200, json: {success: true, link: 1}},
+        {match: 'link.php?action=status', status: 200, json: {success: true, state: 'pending', code: 'ABC234', expires_at: '2026-11-08 10:10:00'}},
+        {match: 'link.php', method: 'POST', status: 200, json: {success: true, code: 'ABC234', token: 'zgt_t', expires_at: '2026-11-08 10:10:00', link_id: 7, device_id: 9}},
+    ]);
+    assert.equal(await serverSupportsLink(fetchFn), true);
+    const s = await linkStart(fetchFn, {athleteId: 354912, name: 'Dave'});
+    assert.deepEqual(s, {code: 'ABC234', token: 'zgt_t', expiresAt: '2026-11-08 10:10:00', linkId: 7, deviceId: 9});
+    assert.match(fetchFn.calls.at(-1).body, /action=start&athlete_id=354912&name=Dave&label=Sauce4Zwift/);
+    const st = await linkStatus(fetchFn, 'zgt_t');
+    assert.equal(st.state, 'pending');
+    assert.equal(st.code, 'ABC234');
+    assert.equal(await serverSupportsLink(fakeFetch([{match: 'link.php?action=ping', status: 200, text: '<html>'}])), false, 'an old server answers HTML');
+    assert.equal(await serverSupportsLink(fakeFetch([])), false, 'or a 404');
+    const refused = fakeFetch([{match: 'link.php', method: 'POST', status: 429, json: {success: false, error: 'Too many link requests'}}]);
+    await assert.rejects(() => linkStart(refused, {athleteId: 1}), /Too many link requests/);
+});
+
+test('the signed-up time trials in the event cache, soonest first', () => {
+    const now = 1_700_000_000_000;
+    const events = [
+        {id: 1, name: 'Later TT', eventType: 'TIME_TRIAL', ts: now + 7200000, routeId: 5, eventSubgroups: [{id: 11, signedUp: false}, {id: 12, signedUp: true}]},
+        {id: 2, name: 'Sooner TT', eventType: 'TIME_TRIAL', ts: now + 3600000, routeId: 6, eventSubgroups: [{id: 21, signedUp: true}]},
+        {id: 3, name: 'Not signed up', eventType: 'TIME_TRIAL', ts: now + 1800000, eventSubgroups: [{id: 31, signedUp: false}]},
+        {id: 4, name: 'Group ride', eventType: 'GROUP_RIDE', ts: now + 1800000, eventSubgroups: [{id: 41, signedUp: true}]},
+        {id: 5, name: 'No-draft ride', eventType: 'GROUP_RIDE', rulesSet: ['NO_DRAFTING'], ts: now + 5400000, eventSubgroups: [{id: 51, signedUp: true}]},
+        {id: 6, name: 'Yesterday', eventType: 'TIME_TRIAL', ts: now - 86400000, eventSubgroups: [{id: 61, signedUp: true}]},
+    ];
+    assert.deepEqual(signedUpTimeTrials(events, now).map(e => [e.id, e.subgroupId]), [[2, 21], [5, 51], [1, 12]]);
+});

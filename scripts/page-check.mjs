@@ -10,7 +10,7 @@
 //   node scripts/page-check.mjs [--base=http://127.0.0.1:1080] [--replay=synthetic-flat-tt]
 //        [--plan=flat.fit.optimise] [--speed=20] [--out=/tmp/zg-page-check]
 //        [--pages=hud,hud-dial,hud-stack,list,field,rivals,settings]
-//        [--replays=1|0] [--looks=1|0] [--moments=armed:20,racing:200,soon:349,finished:940] [--backgrounds=snow,jungle,night]
+//        [--replays=1|0] [--looks=1|0] [--links=1|0] [--moments=armed:20,racing:200,soon:349,finished:940] [--backgrounds=snow,jungle,night]
 //   node scripts/page-check.mjs --probe [--probe-url=https://zwiftgopher.com/TT/share-plan.php?action=load&code=PROBE1]
 //        the ride-day probe (TT/RIDE_DAY_PLAN.md Phase 0.1), nothing else: from a mod page inside
 //        Sauce, the rider's id (rpc.getAthlete('self')), what rpc.getCachedEvents() holds (how far
@@ -33,6 +33,7 @@ const OUT = opt.out || join(tmpdir(), 'zg-page-check');
 const PAGES = String(opt.pages || 'hud,hud-dial,hud-stack,list,field,rivals,settings').split(',');
 const LOOKS = opt.looks == null ? true : !['0', 'false', 'no'].includes(String(opt.looks));
 const STRATEGY = opt.strategy == null ? true : !['0', 'false', 'no'].includes(String(opt.strategy));
+const LINKS = opt.links == null ? true : !['0', 'false', 'no'].includes(String(opt.links));
 const REPLAYS = opt.replays == null ? true : !['0', 'false', 'no'].includes(String(opt.replays));
 const BACKGROUNDS = String(opt.backgrounds || 'snow,jungle,night').split(',');
 const PROBE = Boolean(opt.probe);
@@ -512,6 +513,61 @@ try {
             // Leave the library as the other passes expect it.
             await b.eval('localStorage.clear()');
         }
+    }
+
+    // Pass 4: the link states (TT/RIDE_DAY_PLAN.md Phase 1), seeded through the store: the
+    // pairing code in the plan panel, the toast for a plan that arrived while another is
+    // active and what Use does, and the idle title while linked with no plan.
+    if (LINKS) {
+        const page = 'hud';
+        await b.size(...SIZES[page]);
+        await b.goto(`${MOD}/${page}.html?replay=${REPLAY}&plan=${PLAN}&speed=1&seek=20&windowId=zg-link`);
+        await b.waitFor('window.zgtt && window.zgtt.view().status === "armed"', 15000);
+        await b.eval(`window.zgtt.store.setLink({token: 'zgt_pagecheck', state: 'pending', code: '7KQ2MF', expiresAt: new Date(Date.now() + 600000).toISOString(), zwiftId: 1, startedAt: Date.now()})`);
+        await b.eval(`document.querySelector('[data-action="change-plan"]').click()`);
+        await sleep(300);
+        const pending = await b.eval(`(() => { const p = document.getElementById('pairing'); return {shown: !p.hidden, code: document.getElementById('pairing-code').textContent}; })()`);
+        await b.screenshot(join(OUT, `${page}-link-pending.png`));
+        console.log(`-- ${page} link pending: ${JSON.stringify(pending)}`);
+        if (!pending.shown || pending.code !== '7KQ2MF') {
+            fail(`${page}: the pairing code is not shown in the plan panel`);
+        }
+        await b.eval(`document.getElementById('close-panel').click()`);
+        await b.eval(`(() => { const s = window.zgtt.store; s.setLink({token: 'zgt_pagecheck', state: 'linked', zwiftId: 1, riderName: 'Page Check', linkedAt: Date.now()});
+            const raw = JSON.parse(JSON.stringify(s.getActivePlanRaw())); raw.route = {...raw.route, name: 'Urumaze'};
+            s.savePlan('NEW111', raw, {activate: false, shelf: true, source: 'planner', publishedAt: new Date().toISOString()});
+            s.setShelf({offer: {code: 'NEW111', routeName: 'Urumaze', timeText: raw.summary?.time_text ?? null, at: Date.now()}}); window.zgtt.api.draw(); })()`);
+        await sleep(300);
+        const toast = await b.eval(`(() => { const t = document.getElementById('toast'); return {shown: !t.hidden, text: document.getElementById('toast-text').textContent}; })()`);
+        const font = await b.eval(MINFONT_EXPR);
+        await b.screenshot(join(OUT, `${page}-link-toast.png`));
+        console.log(`-- ${page} toast: ${JSON.stringify(toast)}, min font ${JSON.stringify(font)}`);
+        if (!toast.shown || !/Urumaze/.test(toast.text)) {
+            fail(`${page}: no toast for the plan that arrived`);
+        }
+        if (font && font.min < 11) {
+            fail(`${page}: text under 11 px with the toast (${font.which})`);
+        }
+        await b.eval(`document.getElementById('toast-use').click()`);
+        await sleep(300);
+        const used = await b.eval(`({active: window.zgtt.store.getActiveCode(), toastHidden: document.getElementById('toast').hidden, route: window.zgtt.view().plan?.routeName})`);
+        console.log(`-- ${page} after Use: ${JSON.stringify(used)}`);
+        if (used.active !== 'NEW111' || !used.toastHidden || used.route !== 'Urumaze') {
+            fail(`${page}: Use did not switch to the offered plan`);
+        }
+        // Linked, no plan: the panel waits for the planner instead of asking for a code.
+        await b.eval('localStorage.clear()');
+        await b.goto(`${MOD}/${page}.html?replay=${REPLAY}&speed=1&windowId=zg-link-idle`);
+        await b.waitFor('window.zgtt', 15000);
+        await b.eval(`window.zgtt.store.setLink({token: 'zgt_pagecheck', state: 'linked', zwiftId: 1, riderName: 'Page Check', linkedAt: Date.now()}); window.zgtt.api.draw()`);
+        await sleep(300);
+        const idle = await b.eval(`document.getElementById('idle-title').textContent`);
+        await b.screenshot(join(OUT, `${page}-link-idle.png`));
+        console.log(`-- ${page} idle while linked: ${idle}`);
+        if (!/planner/i.test(idle)) {
+            fail(`${page}: the idle title does not say it waits for the planner (${idle})`);
+        }
+        await b.eval('localStorage.clear()');
     }
 } finally {
     await b.close();

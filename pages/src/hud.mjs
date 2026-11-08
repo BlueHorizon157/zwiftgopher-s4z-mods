@@ -112,6 +112,15 @@ function initControls() {
         }
     });
     els.planCode.addEventListener('input', () => message(''));
+    // A plan from the planner, offered while another is active (TT/RIDE_DAY_PLAN.md 2.4).
+    els.toast.addEventListener('click', ev => {
+        const action = ev.target.closest('[data-action]')?.dataset.action;
+        if (action === 'use-offer') {
+            win.useOffer();
+        } else if (action === 'dismiss-offer') {
+            win.dismissOffer();
+        }
+    });
 }
 
 function loadFromInput() {
@@ -165,13 +174,26 @@ function render(v) {
     setHidden(els.idle, !showIdle);
     setClass(hud, 'choosing', showIdle);
     const beforeStart = win.beforeStart();
+    const link = win.link();
+    const linked = link?.state === 'linked';
     if (showIdle) {
-        setText(els.idleTitle, plan ? `Plan ${plan.code ?? ''}: ${plan.routeName ?? 'custom route'}` : 'Enter your plan code');
-        setText(els.idleHint, !plan ? "The six-letter code from the planner's Share page, or paste its link."
+        setText(els.idleTitle, plan ? `Plan ${plan.code ?? ''}: ${plan.routeName ?? 'custom route'}` : (linked ? 'Waiting for a plan from the planner' : 'Enter your plan code'));
+        setText(els.idleHint, !plan
+            ? (linked ? `Optimise a plan in the planner${link.riderName ? ` as ${link.riderName}` : ''}: it arrives here by itself. Or enter a code.`
+                : "The six-letter code from the planner's Share page, or paste its link.")
             : beforeStart ? 'Pick a strategy, or enter another code. Esc keeps this plan.'
                 : 'The strategy can be changed before the start. Esc keeps this plan.');
         renderStrategy(plan, beforeStart);
     }
+    // A pairing waiting for the planner: the code, large, in the panel (2.1).
+    const pairing = link?.state === 'pending' && link.code ? link.code : null;
+    setHidden(els.pairing, !(showIdle && pairing));
+    setText(els.pairingCode, pairing ?? '');
+    // A plan that arrived while another is active: offered before the start (decision 3).
+    const shelfOffer = win.offer();
+    const showToast = Boolean(shelfOffer && plan && !showIdle && beforeStart && !v.spectating);
+    setHidden(els.toast, !showToast);
+    setText(els.toastText, shelfOffer ? `new plan: ${shelfOffer.routeName ?? shelfOffer.code}${shelfOffer.timeText ? ` · ${shelfOffer.timeText}` : ''}` : '');
     setHidden(els.closePanel, !(showIdle && plan));
     // A code on the clipboard: in the panel, and in the tray before the start.
     const offer = clipCode && clipCode !== plan?.code ? clipCode : null;

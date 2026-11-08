@@ -49,9 +49,25 @@ window runs on its own, so they always agree.
 3. The HUD says *ready* with the route's name. In the pen it counts down to the start; the
    clock starts when you cross the timing line.
 
-Codes last seven days. The newest five plans are kept in the mod (settings → Plans) and the
+Codes last seven days. The newest ten plans are kept in the mod (settings → Plans) and the
 one made for the event's route is picked for you. To load another plan while one is active,
 hover the HUD and press **Plan** (a code on the clipboard is offered in the tray too).
+
+### Linking to the planner
+
+Link once and the codes go away: in the HUD's settings, under **Plans**, press **Link to the
+planner**. The HUD shows a six-letter pairing code (ten minutes). In the planner, open your
+plan's **Share** dialog, press **Link Sauce** and type the code. From then on every plan you
+optimise in that browser arrives in the mod by itself, within a minute, while a HUD window is
+open and no race is running. With no plan loaded, the new plan becomes the plan; with one
+loaded, the HUD offers it (*new plan: Urumaze · 14:57*, **Use**) before the start. The
+planner shows *Sauce has it ✓* once the mod has saved the plan. Nothing is ever changed while
+you race.
+
+The link is a token the mod keeps for itself; the planner keeps only its hash, and either side
+can end it (settings → Plans → **Unlink**, or the planner's Devices list). Linking needs the
+planner update of November 2026; until then the settings page says so and codes work as
+before.
 
 ### Choosing a strategy
 

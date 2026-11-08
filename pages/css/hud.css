@@ -173,6 +173,30 @@ html[data-band-words="false"] .live .word { display: none; }
 .banner .name { color: var(--ink); }
 .hud.spectating .hud-grid { opacity: 0.45; }
 
+/* a plan from the planner, offered before the start (TT/RIDE_DAY_PLAN.md 2.4) */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 0.4em;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  max-width: 96%;
+  padding: 0.25em 0.6em;
+  font-size: max(11px, 0.95em);
+  background: rgba(8, 12, 18, 0.88);
+  border: 1px solid var(--on);
+  border-radius: 0.5em;
+  white-space: nowrap;
+  z-index: 2;
+}
+.toast[hidden] { display: none; }
+.toast .text { overflow: hidden; text-overflow: ellipsis; }
+.toast button { padding: 0.1em 0.5em; }
+.hud:hover .toast,
+.hud.tray-pinned .toast { bottom: 2.3em; }
+
 /* idle: the plan code, obvious; the figures stay out of the way */
 .hud.choosing .hud-grid, .hud.choosing .progress, .hud.choosing .dial-svg, .hud.choosing .banner { visibility: hidden; }
 .idle {
@@ -388,6 +412,11 @@ html[data-show-live="true"][data-layout="stack"] .vitals { display: flex; }
 .idle .strategy .choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.3em; }
 .idle .strategy button .tnum { color: inherit; opacity: 0.8; margin-left: 0.2em; }
 .idle .clip .hint { max-width: none; }
+.idle .pairing { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.3em 0.5em; }
+.idle .pairing[hidden] { display: none; }
+.idle .pairing .label { color: var(--ink-2); }
+.idle .pairing .code { font-size: 1.6em; font-weight: 800; letter-spacing: 0.25em; }
+.idle .pairing .hint { max-width: none; }
 .hud button * { text-shadow: none; }
 .hud button[aria-pressed="true"] { background: var(--ink); color: var(--panel-ink); border-color: transparent; }
 .hud button:disabled { opacity: 0.5; cursor: default; }
