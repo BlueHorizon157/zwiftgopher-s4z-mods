@@ -30,7 +30,7 @@ start from the defaults.
 | Field | Value |
 |---|---|
 | `name` | ZwiftGopher TT |
-| `description` | Ride a ZwiftGopher TT plan in Zwift. A HUD (strip, dial or stack) shows the target now, the next change and when, the W′ you have left and the finish time you are on for. There is also an interval list, a field window, and a rivals strip showing whether you are gaining or losing on the riders around you. Plans come from the planner at zwiftgopher.com/TT by a six-character code. |
+| `description` | Ride a ZwiftGopher TT plan in Zwift. A HUD (strip, dial or stack) shows the target now, the next change and when, the W′ you have left and the finish time you are on for. There is also an interval list, a field window, and a rivals strip showing whether you are gaining or losing on the riders around you. Link the mod to the planner at zwiftgopher.com/TT once and your plans arrive by themselves; Plan it builds one for the event you are in; a six-character code works too. |
 | `tags` | `tt`, `pacing`, `racing`, `hud` |
 | `homeURL` | https://zwiftgopher.com/TT/sauce4zwift-mod.html |
 | `logoURL` | https://raw.githubusercontent.com/BlueHorizon157/zwiftgopher-s4z-mods/master/docs/brand/logo.png (512 × 512, `docs/brand/logo.svg` is the source) |
