@@ -3,11 +3,12 @@
 // page's override; look settings are data attributes on <html> so the CSS does the rest.
 import {startWindow, statusWords} from './views/runtime.mjs';
 import {clipboardCode} from './views/plan-loader.mjs';
-import {setText, setHidden, setClass, setAttr, fmtTime, deltaWords, fmtGrade} from './views/dom.mjs';
+import {setText, setHtml, setHidden, setClass, setAttr, fmtTime, deltaWords, fmtGrade} from './views/dom.mjs';
 
 const LAYOUTS = ['strip', 'dial', 'stack'];
 const GLYPH = {under: '▼', on: '●', over: '▲'};
-const DIAL = {centre: 130, startDeg: 210, totalDeg: 300, power: 118, wbal: 104, progress: 94};
+// The dial: a 270° gauge open at the bottom (start at 135°, clockwise); rings from the outside in.
+const DIAL = {centre: 130, startDeg: 135, totalDeg: 270, power: 116, time: 102, wbal: 93};
 
 const els = {};
 let win = null;
@@ -96,13 +97,15 @@ function initControls() {
             win.draw();
         }
     });
-    // Before the start the banner's strategy chip opens the plan panel.
-    els.banner.addEventListener('click', ev => {
-        if (ev.target.closest('[data-action="strategy"]')) {
-            changingPlan = true;
-            win.draw();
-        }
-    });
+    // Before the start the strategy chip (in the banner; on the dial, by the plan time) opens the plan panel.
+    for (const el of [els.banner, els.finishLabel]) {
+        el.addEventListener('click', ev => {
+            if (ev.target.closest('[data-action="strategy"]')) {
+                changingPlan = true;
+                win.draw();
+            }
+        });
+    }
     els.planCode.addEventListener('keydown', ev => {
         if (ev.key === 'Enter') {
             loadFromInput();
@@ -333,16 +336,28 @@ function render(v) {
         setText(els.wbalWord, '');
     }
 
+    // On the dial the strategy chip labels the plan time before the start ("fastest 14:54"):
+    // the time is that strategy's, and the banner above has no room for both.
+    const dialChip = document.documentElement.dataset.layout === 'dial' && plan && (v.status === 'armed' || v.status === 'idle')
+        && !v.spectating && strategyChoices(plan).length > 1;
+    const finishLabel = text => {
+        if (dialChip) {
+            setHtml(els.finishLabel, `<button type="button" class="chip" data-action="strategy" title="Change the strategy or the plan">${escapeHtml((plan.strategyLabel ?? 'as shared').toLowerCase())}</button>`);
+        } else {
+            els.finishLabel.__html = null;
+            setText(els.finishLabel, text);
+        }
+    };
     // Finish: the predicted finish time, with the plan's as the baseline, and the delta in words.
     if (plan) {
         if (v.status === 'finished') {
-            setText(els.finishLabel, 'finished');
+            finishLabel('finished');
             setText(els.finishTime, fmtTime(race.elapsedS));
         } else if (race.running && race.totalS != null) {
-            setText(els.finishLabel, 'finish');
+            finishLabel('finish');
             setText(els.finishTime, fmtTime(race.totalS));
         } else {
-            setText(els.finishLabel, 'plan');
+            finishLabel('plan');
             setText(els.finishTime, fmtTime(race.planTimeFromStartS ?? plan.timeS));
         }
         const words = (race.running && race.pacingSampleS > 0) || v.status === 'finished' ? deltaWords(race.deltaS) : '';
@@ -350,7 +365,7 @@ function render(v) {
         setClass(els.finishDelta, 'ahead', words.startsWith('ahead'));
         setClass(els.finishDelta, 'behind', words.startsWith('behind'));
     } else {
-        setText(els.finishLabel, 'finish');
+        finishLabel('finish');
         setText(els.finishTime, '—');
         setText(els.finishDelta, '');
     }
@@ -464,32 +479,42 @@ export function mismatchWords(v) {
 
 function initDial() {
     setArc(els.dialTrack, 0, 1, DIAL.power);
+    setArc(els.dialTimeTrack, 0, 1, DIAL.time);
     setArc(els.dialWbalTrack, 0, 1, DIAL.wbal);
-    setArc(els.dialProgressTrack, 0, 1, DIAL.progress);
 }
 
 function renderDial(v) {
     const plan = v.plan;
     const target = v.target;
     const live = v.live;
+    const racing = v.status !== 'finished';
     const maxPower = plan?.peakPowerW > 0 ? Math.ceil(plan.peakPowerW * 1.25) : 600;
-    const ratio = live.powerW != null ? clamp(live.powerW / maxPower, 0, 1) : 0;
+    // Power: the live arc in the band colour over the target band, the target as a bold tick
+    // and the next target as a dashed one (amber when the change is seconds away).
+    const ratio = racing && live.powerW != null ? clamp(live.powerW / maxPower, 0, 1) : 0;
     setArc(els.dialLive, 0, ratio, DIAL.power);
     setArc(els.dialLiveUnder, 0, ratio, DIAL.power);
     for (const b of ['under', 'on', 'over']) {
         setClass(els.dialLive, `band-${b}`, target?.band === b);
     }
-    if (target) {
+    if (target && racing) {
         const w = win.engine.state.prefs.bandWidthW;
         setArc(els.dialTarget, clamp((target.powerW - w) / maxPower, 0, 1), clamp((target.powerW + w) / maxPower, 0, 1), DIAL.power);
+        setTick(els.dialTargetTick, clamp(target.powerW / maxPower, 0, 1), DIAL.power, 12);
     } else {
         setArc(els.dialTarget, 0, 0, DIAL.power);
+        setAttr(els.dialTargetTick, 'd', '');
     }
-    if (v.next && target && Math.abs(v.next.powerW - target.powerW) > 5) {
-        setTick(els.dialNext, clamp(v.next.powerW / maxPower, 0, 1), DIAL.power, 9);
+    if (racing && v.next && target && Math.abs(v.next.powerW - target.powerW) > 5) {
+        setTick(els.dialNext, clamp(v.next.powerW / maxPower, 0, 1), DIAL.power, 11);
     } else {
         setAttr(els.dialNext, 'd', '');
     }
+    // Time left in the interval: full at its start, empty at the change (by distance, which
+    // is what the change waits for); the whole ring before the start, none after the finish.
+    const left = !target || !racing ? 0 : target.beforePlan ? 1 : clamp(1 - target.progress, 0, 1);
+    setArc(els.dialTime, 0, left, DIAL.time);
+    // W' left, with the plan's floor.
     const w = v.wbal;
     if (w) {
         setArc(els.dialWbal, 0, clamp(w.pct / 100, 0, 1), DIAL.wbal);
@@ -503,7 +528,6 @@ function renderDial(v) {
         setArc(els.dialWbal, 0, 0, DIAL.wbal);
         setAttr(els.dialWbalFloor, 'd', '');
     }
-    setArc(els.dialProgress, 0, target && !target.beforePlan ? clamp(target.progress, 0, 1) : 0, DIAL.progress);
 }
 
 function setArc(el, startRatio, endRatio, radius) {

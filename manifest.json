@@ -28,7 +28,7 @@
       "file": "pages/hud-dial.html",
       "id": "hud-dial",
       "name": "TT HUD: dial",
-      "description": "A round gauge: live power against the target band, W' on the inner ring, the next change below.",
+      "description": "A round gauge: live power against the target, the time left in the interval and W' as rings, the next change in the opening below.",
       "overlay": true,
       "frame": false,
       "default_bounds": {

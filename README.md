@@ -25,7 +25,7 @@ Add any of these from Sauce's window menu (right-click the Sauce icon → Window
 | Window | What it is |
 |---|---|
 | **TT HUD: strip** | One line for the top of the screen (600 × 100): now, next, W′, finish. |
-| **TT HUD: dial** | A round gauge (320 × 320): live power against the target band on the ring, W′ on the inner ring, the next change below. |
+| **TT HUD: dial** | A round gauge (320 × 320) open at the bottom. Rings from the outside in: live power against the target (bold tick) and the next target (dashed tick); time left in the interval, draining to the change and amber in the warning time; W′ left with the plan's floor. Inside: the finish, the target, your live power and W′; the next change sits in the opening. |
 | **TT HUD: stack** | A narrow column for a screen edge (230 × 430). |
 | **TT interval list** | Every interval with where it ends, its target, time, gradient and W′, and how each one went. |
 | **TT field** | The riders of your event in standings order, with the gap at equal distance and the time you gain or lose on each. |

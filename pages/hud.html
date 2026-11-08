@@ -30,16 +30,18 @@
 
     <main class="hud panel halo" id="hud" data-state="idle">
       <svg class="dial-svg" viewBox="0 0 260 260" role="presentation" aria-hidden="true">
+        <circle class="disc" cx="130" cy="130" r="88"></circle>
         <path class="track" id="dial-track" d=""></path>
+        <path class="target-arc" id="dial-target" d=""></path>
         <path class="under-stroke" id="dial-live-under" d=""></path>
         <path class="live-arc" id="dial-live" d=""></path>
-        <path class="target-arc" id="dial-target" d=""></path>
+        <path class="target-tick" id="dial-target-tick" d=""></path>
         <path class="next-tick" id="dial-next" d=""></path>
+        <path class="time-track" id="dial-time-track" d=""></path>
+        <path class="time-arc" id="dial-time" d=""></path>
         <path class="wbal-track" id="dial-wbal-track" d=""></path>
         <path class="wbal-arc" id="dial-wbal" d=""></path>
         <path class="wbal-floor" id="dial-wbal-floor" d=""></path>
-        <path class="progress-track" id="dial-progress-track" d=""></path>
-        <path class="progress-arc" id="dial-progress" d=""></path>
       </svg>
 
       <div class="hud-grid">
