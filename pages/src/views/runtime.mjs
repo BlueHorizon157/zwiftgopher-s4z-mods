@@ -26,7 +26,7 @@ export const SETTINGS_DEFAULTS = {
     finishShows: 'remaining', // the finish cell while racing: remaining (time to go) | finish (predicted finish time)
     planItInputs: 'last',     // Plan it plans with the rider's last planner settings, or the planner's defaults
     showDebug: false,
-    gapMode: 'clock',         // field: clock (standings) | road (who is physically ahead)
+    gapMode: 'clock',         // field: clock (standings) | finish (predicted) | road (who is physically ahead)
     allSubgroups: false,      // field: riders of every category
     rivalsEach: 2,            // rivals strip: riders shown each side
     rivalsRange: 'play',      // rivals track: play (±1 min, wider for riders in play) | 30 | 60 | 120 | 300 (s each way) | field

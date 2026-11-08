@@ -38,6 +38,14 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
 }
 .head .count { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .head .place { font-size: 1.15em; font-weight: 700; white-space: nowrap; }
+/* the verdict: how the finish is shaping up, at a glance */
+.verdict { flex: 0 0 auto; padding: 0 0.9em 0.35em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
+.verdict[hidden] { display: none; }
+.verdict b { font-weight: 800; color: var(--ink); margin-right: 0.3em; }
+.verdict.defend b { color: var(--lose); }
+.verdict.chase b { color: var(--gain); }
+.verdict.contested b { color: var(--soon); }
+.verdict.clear b, .verdict.early b { color: var(--ink-2); }
 
 .cols,
 .row {
@@ -102,6 +110,8 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
 .row .c.gap .glyph { font-size: max(11px, 0.75em); margin-right: 0.2em; color: var(--ink-2); }
 .row .c.trend { font-weight: 600; }
 .row.stale { opacity: 0.42; }
+.row.clear:not(.home) { opacity: 0.55; }          /* finishes nowhere near you */
+.row.early .c.gap, .row.early .c.pos { color: var(--ink-3); }   /* a prediction from a short history */
 .row.waiting .c.gap { color: var(--ink-3); }
 
 /* the home row: always in view (sticky at either edge), marked with a bar */

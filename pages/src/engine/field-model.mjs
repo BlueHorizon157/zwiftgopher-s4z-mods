@@ -379,6 +379,7 @@ export function rows(field, {nowMs, allSubgroups = false, boundaries = null, gap
             clockS: cmp?.clockS ?? null,
             gainSPerMin: cmp?.gainSPerMin ?? null,
             paceSPerMin: cmp?.paceSPerMin ?? null,
+            paceSpanS: cmp?.paceSpanS ?? 0,
             trend: cmp?.trend ?? null,
             trendSpanS: cmp?.trendSpanS ?? 0,
             sector: cmp?.sector ?? null,
@@ -407,7 +408,7 @@ export function rivals(field, {nowMs, each = 2, boundaries = null} = {}) {
     const behind = list.filter(r => r.roadS <= 0).sort((a, b) => b.roadS - a.roadS);
     const home = field.homeId ? field.riders.get(field.homeId) : null;
     return {
-        home: home ? {id: home.id, name: home.name, distanceM: home.distanceM, speedKmh: home.speedKmh} : null,
+        home: home ? {id: home.id, name: home.name, distanceM: home.distanceM, speedKmh: home.speedKmh, position: home.position, participants: home.participants} : null,
         ahead: ahead.slice(0, each),
         behind: behind.slice(0, each),
         all: list,

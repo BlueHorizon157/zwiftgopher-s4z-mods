@@ -1,11 +1,15 @@
 // The rivals strip (docs/REVAMP_PLAN.md 4.5, Phase 4.4): the riders that matter around you on
-// the road, ahead and behind: how far, and how it ends at the pace of the last minutes (you
-// catch them, they catch you, close at the finish, or the gap's drift), with their speed over
-// the last sector against yours; below, everyone around you placed on a track by their gap.
+// the road, ahead and behind: how far, how it ends at the pace of the last minutes (you catch
+// them, they catch you, close at the finish) and how fast the gap moves; in the middle your
+// place and the verdict on the finish (finish-outlook.mjs); below, everyone around you placed
+// on a track by their road gap.
 import {startWindow} from './views/runtime.mjs';
 import {startFieldFeed, boundariesOf, fmtGap, shortName} from './views/field-feed.mjs';
 import {rivals as fieldRivals, trackScale, drift, TRACK_MODES} from './engine/field-model.mjs';
 import {setText, setClass} from './views/dom.mjs';
+import {finishOutlook} from './engine/finish-outlook.mjs';
+import {verdictText, ordinal} from './views/verdict.mjs';
+import {remainingOf} from './views/race-time.mjs';
 
 const els = {};
 let win = null;
@@ -13,6 +17,7 @@ let feed = null;
 const dots = new Map();
 let rangeS = 30;
 let prevPlay = null;         // last render's play set: in play and near are sticky (playSet)
+let prevOutlook = null;      // last render's finish outlook (sticky states too)
 
 export function main() {
     for (const el of document.querySelectorAll('[id]')) {
@@ -42,10 +47,15 @@ function render(v) {
     const each = Math.max(1, Math.min(2, Number(win.prefs().rivalsEach) || 2));
     const r = fieldRivals(feed.field, {nowMs: Date.now(), each, boundaries: boundariesOf(v, win.engine.state.plan)});
     setClass(els.rivals, 'alone', r.all.length === 0);
-    setText(els.meSpeed, Number.isFinite(r.home?.speedKmh) ? r.home.speedKmh.toFixed(1) : '—');
     const mode = TRACK_MODES.includes(String(win.prefs().rivalsRange)) ? String(win.prefs().rivalsRange) : 'play';
     const remainingS = v.race?.running ? v.race.remainingS : (v.race?.planTimeFromStartS ?? null);
     const t = trackScale(r.all, {mode, remainingS, prev: prevPlay});
+    const o = finishOutlook(r.all, {remainingS: remainingOf(v), homePosition: r.home?.position, prev: prevOutlook});
+    prevOutlook = o;
+    if (o && r.home) {
+        o.home.participants = r.home.participants;
+    }
+    renderMe(r.all.length ? o : null, r.home?.speedKmh);
     prevPlay = t;
     renderSide(els.ahead, pick(r.all.filter(x => x.roadS > 0).sort((a, b) => a.roadS - b.roadS), each, t), t);
     renderSide(els.behind, pick(r.all.filter(x => x.roadS <= 0).sort((a, b) => b.roadS - a.roadS), each, t), t);
@@ -114,12 +124,12 @@ function pick(side, each, t) {
 function outlook(x, t) {
     if (t.inPlay.has(x.id)) {
         const at = fmtClock(t.meetS.get(x.id));
-        return x.roadS > 0 ? {tag: 'catch', text: `catch ${at}`} : {tag: 'caught', text: `catches you ${at}`};
+        return x.roadS > 0 ? {tag: 'catch', word: 'catch', val: at} : {tag: 'caught', word: 'catches you', val: at};
     }
     const n = t.near.get(x.id);
     if (n) {
         const g = Math.abs(n.finishGapS) < 1 ? '<1 s' : `${Math.round(Math.abs(n.finishGapS))} s`;
-        return n.kind === 'reach' ? {tag: 'reach', text: `in reach ${g}`} : {tag: 'pressure', text: `pressure ${g}`};
+        return n.kind === 'reach' ? {tag: 'reach', word: 'in reach', val: g} : {tag: 'pressure', word: 'pressure', val: g};
     }
     return null;
 }
@@ -142,9 +152,9 @@ function outlookTitle(x, t) {
 function renderSide(ol, list, t) {
     while (ol.children.length < list.length) {
         const li = document.createElement('li');
-        li.innerHTML = '<span class="nm"></span><span class="gp"></span><span class="tr"><span class="word"></span> <span class="rate"></span></span><span class="sc"></span>';
-        const [nm, gp, tr, sc] = li.children;
-        li.cells = {nm, gp, tr, word: tr.firstChild, rate: tr.lastChild, sc};
+        li.innerHTML = '<span class="nm"></span><span class="gp"></span><span class="tg"><i></i><span></span></span><span class="rt"></span>';
+        const [nm, gp, tg, rt] = li.children;
+        li.cells = {nm, gp, tg, tgWord: tg.firstChild, tgVal: tg.lastChild, rt};
         li.cache = {};
         ol.append(li);
     }
@@ -157,35 +167,56 @@ function renderSide(ol, list, t) {
         li.riderId = x.id;
         put(li, 'nm', c.nm, shortName(x.name));
         put(li, 'gp', c.gp, fmtGap(x.roadS));
-        // How it ends with them (a tag), else which way the gap drifts, over the last minutes.
+        // How it ends with them on the road (a tag), and how fast the gap moves (the last minutes).
         const o = outlook(x, t);
+        put(li, 'tgWord', c.tgWord, o?.word ?? '');
+        put(li, 'tgVal', c.tgVal, o?.val ?? '');
+        const tgCls = `tg${o ? ` ${o.tag}` : ' none'}`;
+        if (li.cache.tgCls !== tgCls) {
+            li.cache.tgCls = tgCls;
+            c.tg.className = tgCls;
+        }
         const dr = drift(x);
-        if (o) {
-            put(li, 'word', c.word, o.text);
-            put(li, 'rate', c.rate, '');
-        } else {
-            put(li, 'word', c.word, dr?.word ?? '');
-            put(li, 'rate', c.rate, dr && dr.word !== 'holding' ? `${Math.abs(dr.sPerMin).toFixed(1)} s/min` : '');
+        put(li, 'rt', c.rt, !dr ? '' : dr.word === 'holding' ? 'hold' : `${dr.sPerMin > 0 ? '+' : '−'}${Math.abs(dr.sPerMin).toFixed(1)}/min`);
+        const rtCls = `rt${dr ? ` trend-${dr.word}` : ''}`;
+        if (li.cache.rtCls !== rtCls) {
+            li.cache.rtCls = rtCls;
+            c.rt.className = rtCls;
         }
-        const trCls = o ? `tr tag ${o.tag}` : `tr${dr ? ` trend-${dr.word}` : ''}`;
-        if (li.cache.trCls !== trCls) {
-            li.cache.trCls = trCls;
-            c.tr.className = trCls;
-        }
-        // Their speed over the last sector both of you rode, coloured by who was faster.
-        const s = x.sector;
-        const sc = s && Number.isFinite(s.riderKmh) ? s.riderKmh.toFixed(1) : '';
-        put(li, 'sc', c.sc, sc);
-        const scCls = `sc${s && Number.isFinite(s.homeKmh) && Number.isFinite(s.riderKmh) && Math.abs(s.homeKmh - s.riderKmh) >= 0.1 ? (s.riderKmh < s.homeKmh ? ' trend-gaining' : ' trend-losing') : ''}`;
-        if (li.cache.scCls !== scCls) {
-            li.cache.scCls = scCls;
-            c.sc.className = scCls;
-        }
-        const title = `${x.name}${outlookTitle(x, t)}${s ? `. ${sc} km/h against your ${Number.isFinite(s.homeKmh) ? s.homeKmh.toFixed(1) : '—'} km/h from ${(s.startM / 1000).toFixed(2)} to ${(s.endM / 1000).toFixed(2)} km` : ''}`;
+        const title = `${x.name}: ${fmtGap(x.roadS)} ${x.roadS > 0 ? 'ahead' : 'behind'} on the road${outlookTitle(x, t)}${dr ? `. You ${dr.word === 'losing' ? 'lose' : 'gain'} ${Math.abs(dr.sPerMin).toFixed(1)} s a minute on them over the last ${dr.sustained ? 'four minutes' : 'minute'}` : ''}`;
         if (li.title !== title) {
             li.title = title;
         }
     });
+}
+
+/** The middle: your place and the verdict (finish-outlook.mjs), or your speed outside a race. */
+function renderMe(o, speedKmh) {
+    const vt = verdictText(o);
+    const place = o?.home.place;
+    if (vt && place) {
+        const pred = o.home.predictedPlace;
+        const settled = vt.kind !== 'early' && vt.kind !== 'done';
+        setText(els.meLabel, vt.word);
+        setText(els.meBig, ordinal(place));
+        setText(els.meSmall, settled && pred && pred !== place ? `→ ${ordinal(pred)}` : o.home.participants ? `of ${o.home.participants}` : '');
+        const cls = `me ${vt.kind}${settled && pred && pred !== place ? (pred < place ? ' up' : ' down') : ''}`;
+        if (els.me.className !== cls) {
+            els.me.className = cls;
+        }
+        const title = `${vt.headline}: ${vt.detail}`;
+        if (els.me.title !== title) {
+            els.me.title = title;
+        }
+        return;
+    }
+    setText(els.meLabel, 'you');
+    setText(els.meBig, Number.isFinite(speedKmh) ? speedKmh.toFixed(1) : '—');
+    setText(els.meSmall, 'km/h');
+    if (els.me.className !== 'me') {
+        els.me.className = 'me';
+        els.me.title = '';
+    }
 }
 
 function put(el, key, node, text) {

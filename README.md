@@ -140,15 +140,35 @@ tag by the name says how it ends, on the gap shown: on the road *catch 4:10* or 
 3:20* (you meet before the finish, and when), on the clock *you beat* or *beats you*; and,
 outlined, riders close when you finish: *in reach 8 s* ahead (a little more from you, or a
 fade from them, and you are past) and *pressure 5 s* behind. Close is a second for each
-minute to go, between 5 and 30 s. Your row stays in view.
+minute to go, between 5 and 30 s. Riders who finish nowhere near you fade back. Your row stays
+in view.
+
+The finish outlook carries each rider's clock gap to the line at that pace, using your own
+time to go from the plan (which knows the route), so no rider is modelled on the course. A
+line under the header sums it up for a glance:
+
+| Verdict | When |
+|---|---|
+| *Clear: 13 s up, 25 s back at the finish: ride your plan* | nobody close at the finish either way |
+| *Defend 4th: J. Hart 3 s back at the finish, closing 0.8 s/min* | someone beats you, or finishes close behind |
+| *Chase 3rd: S. Patel 6 s up at the finish: +0.9 s/min catches them* | you beat someone, or one finishes close ahead |
+| *Contested: 3rd to 5th within 8 s* | both |
+| *Too early to tell* | until there are a few minutes of pace |
+
+The header shows the place you are heading for (*you 4th → 3rd of 12*), and clicking *gap*
+cycles the clock gap, the gap **at the finish** (predicted, in predicted order and places,
+faint while the pace is still settling) and the road gap. Early in a race the paces move a
+lot: the outlook is most use in the last third, and *ride your plan* is the right call
+whenever it says clear, since the plan is already your fastest pacing.
 
 The **rivals strip** is for a glance: behind you on the left, ahead on the right. Each side
 names the nearest rider and then the nearest that matters, with how far up or down the road
-they are and how it ends at the pace of the last four minutes (a sprint barely moves it):
-the same tags as the field (*catch 4:10*, *catches you 3:20*, outlined *in reach 8 s* and
-*pressure 5 s*), else whether you are *gaining*, *holding* or *losing* on them and by how
-much a minute. Last, their speed over the last part of the plan you have both ridden (green
-when slower than yours). Below, everyone around you sits on a track by their road gap,
+they are, how it ends at the pace of the last four minutes (a sprint barely moves it):
+*catch 4:10*, *catches you 3:20*, outlined *in reach 8 s* and *pressure 5 s*, and how much
+you gain (green, *+0.6/min*) or lose (orange) on them a minute. In the middle, your place
+with the field's verdict over it (*defend*, *chase*, *contested*, *clear*) and the place you
+are heading for under it (*→ 3rd*); hover it for the reason. Outside a race it shows your
+speed. Below, everyone around you sits on a track by their road gap,
 ringed when you meet before the finish and ring-dashed when close at it. The track reaches
 ±1 min by default and widens to hold those riders; its ends count who you catch, who
 catches you, and the riders beyond the range (*+3*). Settings → Rivals → *Track range* fixes it at ±30 s, ±1, ±2 or
