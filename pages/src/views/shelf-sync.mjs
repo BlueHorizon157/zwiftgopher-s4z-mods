@@ -182,7 +182,16 @@ export function signedUpTimeTrials(events, now) {
         .filter(e => (e.eventType === 'TIME_TRIAL' || (e.rulesSet ?? []).includes('NO_DRAFTING')) && (e.eventSubgroups ?? []).some(sg => sg.signedUp))
         .filter(e => !e.ts || e.ts > now - 3600000)
         .sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0))
-        .map(e => ({id: e.id, name: e.name, ts: e.ts ?? null, subgroupId: (e.eventSubgroups ?? []).find(sg => sg.signedUp)?.id ?? null, routeId: e.routeId ?? null}));
+        .map(e => {
+            const sg = (e.eventSubgroups ?? []).find(s => s.signedUp) ?? null;
+            return {
+                id: e.id, name: e.name, ts: e.ts ?? null, subgroupId: sg?.id ?? null,
+                routeId: sg?.routeId != null ? String(sg.routeId) : (e.routeId != null ? String(e.routeId) : null),
+                laps: Number(sg?.laps ?? e.laps ?? 0) || 0,
+                distanceM: Math.round(Number(sg?.distanceInMeters ?? e.distanceInMeters ?? 0)) || 0,
+                rules: Array.isArray(sg?.rulesSet) ? sg.rulesSet : (Array.isArray(e.rulesSet) ? e.rulesSet : []),
+            };
+        });
 }
 
 // ---- events (TT/RIDE_DAY_PLAN.md 2.4) ----
@@ -224,7 +233,7 @@ export function nextTimeTrial({signedUp = [], plans = [], now}) {
     const candidates = [];
     for (const e of signedUp) {
         if (e.ts == null || e.ts > now - 3600000) {
-            candidates.push({id: e.id, name: e.name, ts: e.ts, subgroupId: e.subgroupId, routeId: e.routeId, source: 'sauce'});
+            candidates.push({id: e.id, name: e.name, ts: e.ts, subgroupId: e.subgroupId, routeId: e.routeId, laps: e.laps ?? null, distanceM: e.distanceM ?? null, rules: e.rules ?? [], source: 'sauce'});
         }
     }
     for (const p of plans) {
@@ -241,7 +250,7 @@ export function nextTimeTrial({signedUp = [], plans = [], now}) {
     if (!next) {
         return null;
     }
-    const planCode = choosePlanForEvent({plans, event: {eventId: next.id, subgroupId: next.subgroupId, routeId: next.routeId}}) ?? plans.find(p => String(p.event?.id) === String(next.id))?.code ?? null;
+    const planCode = choosePlanForEvent({plans, event: {eventId: next.id, subgroupId: next.subgroupId, routeId: next.routeId, laps: next.laps, distanceM: next.distanceM}}) ?? plans.find(p => String(p.event?.id) === String(next.id))?.code ?? null;
     return {...next, planCode};
 }
 
@@ -256,4 +265,48 @@ export function signupRows(signedUp) {
 export async function shelfSignups(fetchFn, token, rows) {
     const r = await request(fetchFn, `${base()}/shelf.php`, {method: 'POST', token, body: {action: 'signups', subgroups: JSON.stringify(rows)}});
     return Boolean(r.ok && r.json?.success);
+}
+
+// ---- Plan it (TT/RIDE_DAY_PLAN.md 2.5) ----
+
+/**
+ * An optimised plan for an event, built by the planner for the linked rider and put on the
+ * shelf: {code, file, meta: {inputs_source, route_name, time_text, ...}}. target: {routeId,
+ * laps, distanceM, eventId | id, subgroupId, ts | start, name, rules}. Throws an Error with
+ * .status and .retryAfter (seconds) when the planner says no.
+ */
+export async function shelfPlan(fetchFn, token, target, {inputsSource = 'last'} = {}) {
+    const body = {
+        action: 'plan',
+        route_id: target.routeId,
+        laps: target.laps ?? 1,
+        distance_m: target.distanceM ?? 0,
+        event_id: target.eventId ?? target.id ?? null,
+        subgroup_id: target.subgroupId ?? null,
+        start: target.ts ? new Date(target.ts).toISOString() : (target.start ?? null),
+        name: target.name ?? null,
+        rules: JSON.stringify(target.rules ?? []),
+        inputs_source: inputsSource === 'defaults' ? 'defaults' : 'last',
+    };
+    const r = await request(fetchFn, `${base()}/shelf.php`, {method: 'POST', token, body});
+    if (r.ok && r.json?.code && r.json.file) {
+        return {code: r.json.code, file: r.json.file, meta: r.json.meta ?? {}};
+    }
+    const err = new Error(planItErrorWords(r));
+    err.status = r.status;
+    err.retryAfter = Number(r.json?.retry_after) || null;
+    throw err;
+}
+
+export function planItErrorWords(r) {
+    if (r.status === 0) {
+        return r.error || 'The planner did not answer.';
+    }
+    if (r.status === 401) {
+        return 'The link has ended: link the mod to the planner again (settings → Plans).';
+    }
+    if (r.json?.error) {
+        return r.json.error;
+    }
+    return r.status === 503 ? 'The planner is busy: try again in a moment.' : `The planner answered HTTP ${r.status}.`;
 }

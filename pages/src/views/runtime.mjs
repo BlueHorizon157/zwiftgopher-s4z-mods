@@ -10,7 +10,7 @@ import {fetchEventInfo} from '../eventinfo.mjs';
 import {createEngine} from '../engine/engine.mjs';
 import {normalisePlan} from '../engine/plan.mjs';
 import {loadPlanByCode, fetchPlanByCode, loadReplayPlan} from './plan-loader.mjs';
-import {syncOnce, chooseActivation, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, PENDING_POLL_MS} from './shelf-sync.mjs';
+import {syncOnce, chooseActivation, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, shelfPlan, PENDING_POLL_MS} from './shelf-sync.mjs';
 
 export const SETTINGS_DEFAULTS = {
     layout: 'auto',           // auto = the manifest window's ?layout
@@ -23,6 +23,7 @@ export const SETTINGS_DEFAULTS = {
     bandWidthW: 5,
     soonSec: 10,              // the boundary moment starts this many seconds before a change
     startRule: 'auto',        // auto | time | distance
+    planItInputs: 'last',     // Plan it plans with the rider's last planner settings, or the planner's defaults
     showDebug: false,
     gapMode: 'clock',         // field: clock (standings) | road (who is physically ahead)
     allSubgroups: false,      // field: riders of every category
@@ -141,6 +142,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         if (sg && engine.state.event.kind == null && !eventInfoAsked.has(String(sg))) {
             eventInfoAsked.add(String(sg));
             fetchEventInfo(sg).then(info => {
+                lastEventInfo = info;
                 engine.event('eventInfo', info);
                 pickForEvent(info);
                 draw();
@@ -155,6 +157,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     // with the same laps or length, arms itself before the start; once per subgroup, so a
     // plan the rider then chooses by hand stays.
     let pickedFor = null;
+    let lastEventInfo = null;
     const planEntry = p => {
         const n = normalisePlan(p.raw, {code: p.code});
         return {code: p.code, routeId: p.routeId, laps: n?.laps ?? p.raw?.route?.laps ?? null, lengthM: n?.lengthM ?? null, routeName: p.routeName, event: p.event ?? p.raw?.meta?.event ?? null};
@@ -210,6 +213,63 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     };
     setInterval(() => refreshNextTT().catch(() => {}), 60000);
     setTimeout(() => refreshNextTT().catch(() => {}), 2500);
+
+    // ---- Plan it (2.5): an optimised plan for the event, from the bike, no options ----
+    // The target is the event the rider is in, else the next time trial; the planner builds
+    // the plan with the rider's last planner settings (or its defaults) and the shelf keeps it.
+    let planning = null;
+    const planTarget = () => {
+        const sg = engine.state.event.subgroupId;
+        if (sg && lastEventInfo && String(lastEventInfo.subgroupId) === String(sg) && lastEventInfo.routeId != null) {
+            return {routeId: String(lastEventInfo.routeId), laps: lastEventInfo.laps ?? 1, distanceM: lastEventInfo.distanceM ?? 0, eventId: lastEventInfo.eventId, subgroupId: lastEventInfo.subgroupId, ts: lastEventInfo.startMs ?? null, name: lastEventInfo.name ?? null, inEvent: true};
+        }
+        const next = nextTTOverride ?? nextTT;
+        return next?.routeId ? {...next, inEvent: false} : null;
+    };
+    const planIt = async (target = null) => {
+        const link = store.getLink();
+        if (link?.state !== 'linked') {
+            throw new Error('Link the mod to the planner first (settings → Plans → Link to the planner).');
+        }
+        target ??= planTarget();
+        if (!target?.routeId) {
+            throw new Error('Nothing to plan: join a time trial, or sign up for one.');
+        }
+        if (planning) {
+            return null;
+        }
+        planning = {startedAt: Date.now(), target};
+        draw();
+        try {
+            const inputsSource = settings?.get('planItInputs') === 'defaults' ? 'defaults' : 'last';
+            let result;
+            try {
+                result = await shelfPlan(fetch, link.token, target, {inputsSource});
+            } catch (err) {
+                if (err.status === 503 && err.retryAfter) {
+                    await new Promise(r => setTimeout(r, Math.min(10, err.retryAfter) * 1000));
+                    result = await shelfPlan(fetch, link.token, target, {inputsSource});
+                } else {
+                    if (err.status === 401) {
+                        store.clearLink();
+                    }
+                    throw err;
+                }
+            }
+            const file = result.file;
+            store.savePlan(result.code, file, {activate: beforeStart(), shelf: true, source: 'mod', event: file?.meta?.event ?? null, publishedAt: file?.meta?.published?.at ?? null, expiresAt: result.meta?.expires_at ?? null});
+            if (beforeStart()) {
+                store.setShelf({offer: null});
+                syncPlan();
+            }
+            note(`Planned ${result.meta?.route_name ?? target.name ?? 'the event'}: ${result.code}${result.meta?.inputs_source === 'defaults' ? ' (the planner\'s default settings)' : ''}.`);
+            refreshNextTT().catch(() => {});
+            return result;
+        } finally {
+            planning = null;
+            draw();
+        }
+    };
 
     // ---- the shelf: plans from the planner arrive by themselves (TT/RIDE_DAY_PLAN.md 2.4) ----
     // One window polls a minute for all of them (store.getShelf().lastPollAt is the guard),
@@ -382,6 +442,11 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         linkSupported: () => linkSupported,
         /** The next time trial the rider is signed up for or has a plan for: {id, name, ts, subgroupId, planCode}. */
         nextTT: () => nextTTOverride ?? nextTT,
+        /** What Plan it would plan: the event the rider is in, else the next time trial; null when neither. */
+        planTarget,
+        /** {startedAt, target} while a plan is being built, else null. */
+        planning: () => planning,
+        planIt,
         setNextTT(value) {       // scripts/page-check.mjs
             nextTTOverride = value;
             draw();

@@ -576,6 +576,15 @@ try {
         if (!nextTT.shown || !/Urumaze/.test(nextTT.text) || !/no plan yet/.test(nextTT.text)) {
             fail(`${page}: the next time trial is not shown in the panel`);
         }
+        // Plan it offers itself for a signed-up event with a route and no plan (2.5).
+        await b.eval(`window.zgtt.api.setNextTT({id: 1, name: 'Zwift TT Club Racing - Urumaze', ts: Date.now() + 42 * 60000, subgroupId: 2, routeId: '4092230492', laps: 1, planCode: null})`);
+        await sleep(200);
+        const planIt = await b.eval(`(() => { const btn = document.getElementById('next-tt-plan'); return {shown: !btn.hidden, text: btn.textContent, target: window.zgtt.api.planTarget()?.routeId}; })()`);
+        await b.screenshot(join(OUT, `${page}-link-plan-it.png`));
+        console.log(`-- ${page} Plan it: ${JSON.stringify(planIt)}`);
+        if (!planIt.shown || planIt.target !== '4092230492') {
+            fail(`${page}: Plan it is not offered for the next time trial`);
+        }
         await b.eval('localStorage.clear()');
     }
 } finally {

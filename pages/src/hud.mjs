@@ -112,6 +112,18 @@ function initControls() {
         }
     });
     els.planCode.addEventListener('input', () => message(''));
+    // Plan it (2.5): the event the rider is in, else the next time trial.
+    els.nextTtPlan.addEventListener('click', async () => {
+        message('');
+        try {
+            const r = await win.planIt();
+            if (r) {
+                message(`Plan ${r.code} ready${r.meta?.inputs_source === 'defaults' ? ' (the planner\'s default settings: open the planner to tune them)' : ''}.`, true);
+            }
+        } catch (err) {
+            message(err.message);
+        }
+    });
     // A plan from the planner, offered while another is active (TT/RIDE_DAY_PLAN.md 2.4).
     els.toast.addEventListener('click', ev => {
         const action = ev.target.closest('[data-action]')?.dataset.action;
@@ -189,11 +201,31 @@ function render(v) {
     const pairing = link?.state === 'pending' && link.code ? link.code : null;
     setHidden(els.pairing, !(showIdle && pairing));
     setText(els.pairingCode, pairing ?? '');
-    // The next time trial the rider is signed up for, in the panel while nothing is happening (2.4).
+    // The next time trial the rider is signed up for, in the panel while nothing is happening
+    // (2.4), or the event the rider is in with no plan for it, with Plan it (2.5).
     const upcoming = win.nextTT();
-    const showNext = Boolean(upcoming && showIdle && !v.event?.inEvent);
-    setHidden(els.nextTt, !showNext);
-    setText(els.nextTtText, upcoming ? nextWords(upcoming, plan) : '');
+    const planning = win.planning();
+    const planFor = win.planTarget();
+    const inEvent = Boolean(v.event?.inEvent);
+    let nextText = '';
+    let nextLabel = 'next TT';
+    let showPlanIt = false;
+    if (planning) {
+        nextLabel = 'plan it';
+        nextText = `planning ${planning.target?.name ?? 'the event'}… ${Math.round((Date.now() - planning.startedAt) / 1000)} s`;
+    } else if (inEvent && !plan && planFor?.inEvent) {
+        nextLabel = 'this event';
+        nextText = `${planFor.name ?? v.event?.name ?? 'event'} · no plan yet`;
+        showPlanIt = linked;
+    } else if (upcoming && !inEvent) {
+        nextText = nextWords(upcoming, plan);
+        showPlanIt = linked && !upcoming.planCode && Boolean(upcoming.routeId);
+    }
+    setHidden(els.nextTt, !(showIdle && nextText));
+    setText(els.nextTtLabel, nextLabel);
+    setText(els.nextTtText, nextText);
+    setHidden(els.nextTtPlan, !showPlanIt);
+    els.nextTtPlan.disabled = Boolean(planning);
     // A plan that arrived while another is active: offered before the start (decision 3).
     const shelfOffer = win.offer();
     const showToast = Boolean(shelfOffer && plan && !showIdle && beforeStart && !v.spectating);

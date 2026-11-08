@@ -80,6 +80,15 @@ from what Sauce has loaded (about four hours ahead) and from the plans the plann
 settings page lists them. While linked, the mod tells the planner which events you signed up
 for, so the picker marks them.
 
+### Plan it
+
+Signed up but no plan? Linked, the next-TT line (and, in the pen, *this event: … · no plan
+yet*) has **Plan it**: the planner builds an optimised plan for that event with your last
+planner settings (or its defaults: settings → Advanced → *Plan it uses*), in a few seconds,
+and the HUD arms it. The plan is on your shelf like any other, so the planner's Load dialog
+opens it for tuning. Six plans an hour, twenty a day; the planner itself is not limited that
+way.
+
 ### Choosing a strategy
 
 An optimised plan carries the optimiser's three ways to ride it: *Fastest*, *Balanced* and

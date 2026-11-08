@@ -178,6 +178,13 @@
 
       <form id="advanced" class="section">
         <div class="title">Advanced</div>
+        <label data-for="hud" title="Plan it (the HUD's button for the event you are in or signed up for) builds the plan in the planner with these settings">
+          <key>Plan it uses:</key>
+          <select name="planItInputs">
+            <option value="last">My last planner settings</option>
+            <option value="defaults">The planner's defaults</option>
+          </select>
+        </label>
         <label title="Show the engine's log in the window">
           <key>Debug log:</key>
           <input type="checkbox" name="showDebug">

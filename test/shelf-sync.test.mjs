@@ -146,9 +146,31 @@ test('the signed-up time trials in the event cache, soonest first', () => {
         {id: 6, name: 'Yesterday', eventType: 'TIME_TRIAL', ts: now - 86400000, eventSubgroups: [{id: 61, signedUp: true}]},
     ];
     assert.deepEqual(signedUpTimeTrials(events, now).map(e => [e.id, e.subgroupId]), [[2, 21], [5, 51], [1, 12]]);
+    const withCourse = signedUpTimeTrials([{id: 7, name: 'Cleveland', eventType: 'TIME_TRIAL', ts: now + 3600000, routeId: 2128890027, laps: 0, distanceInMeters: 16093, eventSubgroups: [{id: 71, signedUp: true, routeId: 4131664304, laps: 0, distanceInMeters: 40234, rulesSet: ['NO_DRAFTING']}]}], now)[0];
+    assert.deepEqual([withCourse.routeId, withCourse.laps, withCourse.distanceM, withCourse.rules], ['4131664304', 0, 40234, ['NO_DRAFTING']], 'the signed-up pen\'s course, for Plan it');
 });
 
-import {choosePlanForEvent, courseMatches, nextTimeTrial, signupRows, shelfSignups} from '../pages/src/views/shelf-sync.mjs';
+test('Plan it asks the shelf for a plan and brings the file back; refusals come as words', async () => {
+    const file = {schema: 'zg-tt-plan/1', intervals: [{power_w: 300}], meta: {event: {id: 5727315}}};
+    const fetchFn = fakeFetch([{match: 'shelf.php', method: 'POST', status: 200, json: {success: true, code: 'PLAN11', file, meta: {inputs_source: 'defaults', route_name: 'Urumaze', time_text: '14:57'}}}]);
+    const r = await shelfPlan(fetchFn, 'zgt_x', {routeId: '4092230492', laps: 1, eventId: 5727315, subgroupId: 7380880, ts: Date.parse('2026-11-20T00:20:00Z'), name: 'Urumaze', rules: ['NO_DRAFTING']}, {inputsSource: 'last'});
+    assert.equal(r.code, 'PLAN11');
+    assert.equal(r.file.meta.event.id, 5727315);
+    assert.equal(r.meta.inputs_source, 'defaults');
+    const body = fetchFn.calls[0].body;
+    assert.match(body, /action=plan&route_id=4092230492&laps=1&distance_m=0&event_id=5727315&subgroup_id=7380880&start=2026-11-20T00%3A20%3A00\.000Z&name=Urumaze&rules=%5B%22NO_DRAFTING%22%5D&inputs_source=last/);
+    assert.equal(fetchFn.calls[0].headers.Authorization, 'Bearer zgt_x');
+    const busy = fakeFetch([{match: 'shelf.php', method: 'POST', status: 503, json: {success: false, error: 'The planner is busy: try again in 5 s.', retry_after: 5}}]);
+    await assert.rejects(() => shelfPlan(busy, 'zgt_x', {routeId: '1'}), err => err.status === 503 && err.retryAfter === 5 && /busy/.test(err.message));
+    const spent = fakeFetch([{match: 'shelf.php', method: 'POST', status: 429, json: {success: false, error: 'Plan it has made its plans for now (six an hour): try again in 40 min, or plan in the planner.', retry_after: 2400}}]);
+    await assert.rejects(() => shelfPlan(spent, 'zgt_x', {routeId: '1'}), /six an hour/);
+    const gone = fakeFetch([{match: 'shelf.php', method: 'POST', status: 401, json: {success: false, error: 'This link is not valid any more.'}}]);
+    await assert.rejects(() => shelfPlan(gone, 'zgt_x', {routeId: '1'}), /link has ended/);
+    assert.match(planItErrorWords({status: 0, error: 'The planner did not answer in time.'}), /did not answer/);
+    assert.match(planItErrorWords({status: 500, json: null}), /HTTP 500/);
+});
+
+import {choosePlanForEvent, courseMatches, nextTimeTrial, signupRows, shelfSignups, shelfPlan, planItErrorWords} from '../pages/src/views/shelf-sync.mjs';
 
 const entry = (code, extra = {}) => ({code, routeId: '4092230492', laps: 1, lengthM: 10710, routeName: 'Urumaze', event: null, ...extra});
 
