@@ -189,6 +189,11 @@ function render(v) {
     const pairing = link?.state === 'pending' && link.code ? link.code : null;
     setHidden(els.pairing, !(showIdle && pairing));
     setText(els.pairingCode, pairing ?? '');
+    // The next time trial the rider is signed up for, in the panel while nothing is happening (2.4).
+    const upcoming = win.nextTT();
+    const showNext = Boolean(upcoming && showIdle && !v.event?.inEvent);
+    setHidden(els.nextTt, !showNext);
+    setText(els.nextTtText, upcoming ? nextWords(upcoming, plan) : '');
     // A plan that arrived while another is active: offered before the start (decision 3).
     const shelfOffer = win.offer();
     const showToast = Boolean(shelfOffer && plan && !showIdle && beforeStart && !v.spectating);
@@ -395,6 +400,10 @@ function setBanner(v, now) {
         name = v.plan?.routeName ? ` ${v.plan.routeName}` : '';
     } else if (v.status === 'idle' && v.plan) {
         text = `${v.plan.routeName ?? 'plan'}: ${statusWords(v)}`;
+        const upcoming = win.nextTT();
+        if (upcoming) {
+            text += ` · next TT ${nextWords(upcoming, v.plan, true)}`;
+        }
     } else if (v.status === 'racing' && Number.isFinite(v.event?.mismatchM)) {
         // A plan for another distance (the 2026-10-27 race: one lap planned, 16 km raced)
         // stays flagged for the whole race; the finish is predicted to the event's end.
@@ -493,6 +502,15 @@ function setTick(el, ratio, radius, half) {
 }
 
 // ---- helpers ----
+
+/** "Urumaze 19:20 (in 42 min) · plan ready": the next time trial and whether a plan fits it. */
+function nextWords(next, plan, short = false) {
+    const when = next.ts ? new Date(next.ts).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
+    const minutes = next.ts ? Math.round((next.ts - Date.now()) / 60000) : null;
+    const countdown = minutes == null ? '' : minutes < 0 ? 'started' : minutes < 1 ? 'starting now' : minutes < 120 ? `in ${minutes} min` : minutes < 2880 ? `in ${Math.round(minutes / 60)} h` : `in ${Math.round(minutes / 1440)} days`;
+    const status = next.planCode ? (plan && next.planCode === plan.code ? 'this plan' : short ? 'plan ready' : `plan ${next.planCode} ready`) : 'no plan yet';
+    return `${next.name ?? 'event'} ${when}${countdown ? ` (${countdown})` : ''} · ${status}`;
+}
 
 /** Time-weighted average power over the tracked intervals. */
 function rideAverage(stats) {

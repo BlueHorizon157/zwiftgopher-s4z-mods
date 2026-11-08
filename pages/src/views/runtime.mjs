@@ -10,7 +10,7 @@ import {fetchEventInfo} from '../eventinfo.mjs';
 import {createEngine} from '../engine/engine.mjs';
 import {normalisePlan} from '../engine/plan.mjs';
 import {loadPlanByCode, fetchPlanByCode, loadReplayPlan} from './plan-loader.mjs';
-import {syncOnce, chooseActivation, shouldPoll, linkStatus, PENDING_POLL_MS} from './shelf-sync.mjs';
+import {syncOnce, chooseActivation, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, PENDING_POLL_MS} from './shelf-sync.mjs';
 
 export const SETTINGS_DEFAULTS = {
     layout: 'auto',           // auto = the manifest window's ?layout
@@ -142,12 +142,74 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             eventInfoAsked.add(String(sg));
             fetchEventInfo(sg).then(info => {
                 engine.event('eventInfo', info);
+                pickForEvent(info);
                 draw();
             }).catch(() => {});
         }
         draw();
     }, {record: true});
     setInterval(draw, 1000);
+
+    // ---- the plan for the event (TT/RIDE_DAY_PLAN.md 2.4, rules 1 and 2) ----
+    // Joining a subgroup: the plan made for this pen, else for this event, else for this route
+    // with the same laps or length, arms itself before the start; once per subgroup, so a
+    // plan the rider then chooses by hand stays.
+    let pickedFor = null;
+    const planEntry = p => {
+        const n = normalisePlan(p.raw, {code: p.code});
+        return {code: p.code, routeId: p.routeId, laps: n?.laps ?? p.raw?.route?.laps ?? null, lengthM: n?.lengthM ?? null, routeName: p.routeName, event: p.event ?? p.raw?.meta?.event ?? null};
+    };
+    const pickForEvent = info => {
+        if (!info?.subgroupId || pickedFor === String(info.subgroupId) || !beforeStart()) {
+            return;
+        }
+        pickedFor = String(info.subgroupId);
+        const code = choosePlanForEvent({
+            plans: store.listPlans().map(planEntry),
+            event: {eventId: info.eventId, subgroupId: info.subgroupId, routeId: info.routeId, laps: info.laps, distanceM: info.distanceM},
+            activeCode: store.getActiveCode(),
+        });
+        if (code) {
+            store.setActive(code);
+            store.setShelf({offer: null});
+            syncPlan();
+            note(`Plan ${code} for ${info.name ?? 'the event'}.`);
+        }
+    };
+
+    // ---- the next time trial (2.4) and the rider's sign-ups for the planner ----
+    // Sauce's event cache holds about four hours ahead with the rider's sign-ups marked; the
+    // shelf's event-tagged plans cover the rest. While linked, the sign-ups Sauce can see go to
+    // the planner's picker once they change.
+    let nextTT = null;
+    let nextTTOverride = null;
+    const refreshNextTT = async () => {
+        if (sauce.isReplay || !beforeStart() || !common.isVisible()) {
+            return;
+        }
+        let events = [];
+        try {
+            events = await common.rpc.getCachedEvents();
+        } catch (err) {
+            return;
+        }
+        const now = Date.now();
+        const signedUp = signedUpTimeTrials(events ?? [], now);
+        nextTT = nextTimeTrial({signedUp, plans: store.listPlans().map(planEntry), now});
+        const link = store.getLink();
+        if (link?.state === 'linked') {
+            const rows = signupRows(signedUp);
+            const key = JSON.stringify(rows.map(r => r.subgroup_id).sort());
+            const shelf = store.getShelf();
+            if (shelf.signupsSent !== key && now - (shelf.signupsSentAt ?? 0) > 60000) {
+                store.setShelf({signupsSent: key, signupsSentAt: now});
+                shelfSignups(fetch, link.token, rows).catch(() => {});
+            }
+        }
+        draw();
+    };
+    setInterval(() => refreshNextTT().catch(() => {}), 60000);
+    setTimeout(() => refreshNextTT().catch(() => {}), 2500);
 
     // ---- the shelf: plans from the planner arrive by themselves (TT/RIDE_DAY_PLAN.md 2.4) ----
     // One window polls a minute for all of them (store.getShelf().lastPollAt is the guard),
@@ -318,6 +380,12 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         },
         syncNow: () => pollShelf(true),
         linkSupported: () => linkSupported,
+        /** The next time trial the rider is signed up for or has a plan for: {id, name, ts, subgroupId, planCode}. */
+        nextTT: () => nextTTOverride ?? nextTT,
+        setNextTT(value) {       // scripts/page-check.mjs
+            nextTTOverride = value;
+            draw();
+        },
     };
     window.zgtt = {engine, view: api.view, replay: sauce.replayState, settings, store, api};   // scripts/page-check.mjs and DevTools
     onReady?.(api);

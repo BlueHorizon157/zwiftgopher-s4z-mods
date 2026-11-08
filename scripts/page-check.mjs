@@ -567,6 +567,15 @@ try {
         if (!/planner/i.test(idle)) {
             fail(`${page}: the idle title does not say it waits for the planner (${idle})`);
         }
+        // The next time trial the rider is signed up for, in the panel (2.4).
+        await b.eval(`window.zgtt.api.setNextTT({id: 1, name: 'Zwift TT Club Racing - Urumaze', ts: Date.now() + 42 * 60000, subgroupId: 2, planCode: null})`);
+        await sleep(200);
+        const nextTT = await b.eval(`(() => { const n = document.getElementById('next-tt'); return {shown: !n.hidden, text: document.getElementById('next-tt-text').textContent}; })()`);
+        await b.screenshot(join(OUT, `${page}-link-next-tt.png`));
+        console.log(`-- ${page} next TT: ${JSON.stringify(nextTT)}`);
+        if (!nextTT.shown || !/Urumaze/.test(nextTT.text) || !/no plan yet/.test(nextTT.text)) {
+            fail(`${page}: the next time trial is not shown in the panel`);
+        }
         await b.eval('localStorage.clear()');
     }
 } finally {

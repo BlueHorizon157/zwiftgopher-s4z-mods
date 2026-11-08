@@ -417,6 +417,11 @@ html[data-show-live="true"][data-layout="stack"] .vitals { display: flex; }
 .idle .pairing .label { color: var(--ink-2); }
 .idle .pairing .code { font-size: 1.6em; font-weight: 800; letter-spacing: 0.25em; }
 .idle .pairing .hint { max-width: none; }
+.idle .next-tt { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0.3em 0.5em; font-size: 1em; }
+.idle .next-tt[hidden] { display: none; }
+.idle .next-tt .label { color: var(--ink-2); }
+html[data-layout="strip"] .idle .next-tt { display: none; }
+html[data-layout="strip"] .hud.choosing .idle .next-tt { display: flex; }
 .hud button * { text-shadow: none; }
 .hud button[aria-pressed="true"] { background: var(--ink); color: var(--panel-ink); border-color: transparent; }
 .hud button:disabled { opacity: 0.5; cursor: default; }

@@ -7,7 +7,7 @@ import * as recorder from './recorder.mjs';
 import {loadPlanByCode} from './views/plan-loader.mjs';
 import {normalisePlan} from './engine/plan.mjs';
 import {SETTINGS_DEFAULTS} from './views/runtime.mjs';
-import {linkStart, linkStatus, linkRevoke, serverSupportsLink} from './views/shelf-sync.mjs';
+import {linkStart, linkStatus, linkRevoke, serverSupportsLink, signedUpTimeTrials, nextTimeTrial, choosePlanForEvent} from './views/shelf-sync.mjs';
 import {VERSION} from './version.mjs';
 
 const KEYS = {hud: 'zg-tt-hud', list: 'zg-tt-list', field: 'zg-tt-field', rivals: 'zg-tt-rivals'};
@@ -43,6 +43,7 @@ export async function main() {
     store.migrate();
     initPlans();
     initLink().catch(err => console.warn('[link]', err));
+    initNextTimeTrials();
     initRecorder();
     initVersion();
 }
@@ -196,6 +197,54 @@ async function initLink() {
     store.onChange(render);
     render();
     refreshDevices();
+}
+
+// ---- the next time trials (TT/RIDE_DAY_PLAN.md 2.4) ----
+
+function initNextTimeTrials() {
+    const box = document.getElementById('next-tts');
+    const list = document.getElementById('next-tts-list');
+    if (!box || !list) {
+        return;
+    }
+    const entries = () => store.listPlans().map(p => {
+        const n = normalisePlan(p.raw, {code: p.code});
+        return {code: p.code, routeId: p.routeId, laps: n?.laps ?? null, lengthM: n?.lengthM ?? null, routeName: p.routeName, event: p.event ?? p.raw?.meta?.event ?? null};
+    });
+    const refresh = async () => {
+        let events = [];
+        try {
+            events = await common.rpc.getCachedEvents();
+        } catch (err) {
+            events = [];
+        }
+        const now = Date.now();
+        const plans = entries();
+        const signedUp = signedUpTimeTrials(events ?? [], now);
+        const rows = [];
+        const seen = new Set();
+        for (const e of signedUp) {
+            seen.add(String(e.id));
+            rows.push({...e, planCode: choosePlanForEvent({plans, event: {eventId: e.id, subgroupId: e.subgroupId, routeId: e.routeId}}) ?? plans.find(p => String(p.event?.id) === String(e.id))?.code ?? null, source: 'sauce'});
+        }
+        for (const p of plans) {
+            const ts = p.event?.start ? Date.parse(p.event.start) : NaN;
+            if (Number.isFinite(ts) && ts > now - 3600000 && !seen.has(String(p.event.id))) {
+                seen.add(String(p.event.id));
+                rows.push({id: p.event.id, name: p.event.name ?? p.routeName, ts, planCode: p.code, source: 'shelf'});
+            }
+        }
+        rows.sort((a, b) => a.ts - b.ts);
+        box.hidden = rows.length === 0;
+        list.innerHTML = rows.slice(0, 6).map(r => {
+            const when = new Date(r.ts).toLocaleString([], {weekday: 'short', hour: '2-digit', minute: '2-digit'});
+            const status = r.planCode ? `plan ${esc(r.planCode)}${r.planCode === store.getActiveCode() ? ' (active)' : ''}` : 'no plan yet';
+            return `<li><b>${esc(when)}</b> ${esc(r.name ?? '')} <span class="muted">· ${status}${r.source === 'shelf' ? ' · from the planner' : ' · signed up'}</span></li>`;
+        }).join('');
+    };
+    refresh();
+    setInterval(refresh, 60000);
+    store.onChange(refresh);
 }
 
 function agoWords(value) {

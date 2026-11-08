@@ -31,6 +31,7 @@ export async function fetchEventInfo(subgroupId) {
         const startMs = typeof startRaw === 'number' ? startRaw : (startRaw ? Date.parse(startRaw) : NaN);
         return {
             subgroupId: key,
+            eventId: eventId != null ? String(eventId) : null,
             kind,
             startMs: Number.isFinite(startMs) ? startMs : null,
             name: ev?.name ?? sg?.name ?? null,

@@ -184,3 +184,76 @@ export function signedUpTimeTrials(events, now) {
         .sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0))
         .map(e => ({id: e.id, name: e.name, ts: e.ts ?? null, subgroupId: (e.eventSubgroups ?? []).find(sg => sg.signedUp)?.id ?? null, routeId: e.routeId ?? null}));
 }
+
+// ---- events (TT/RIDE_DAY_PLAN.md 2.4) ----
+
+/**
+ * The plan to arm for the event the rider is in (decision 3, rules 1 and 2): the plan made for
+ * this pen, else for this event, else the plan for this route whose length (a distance event)
+ * or laps (a laps event) match. Entries: {code, routeId, laps, lengthM, event}. Null when the
+ * active plan already is the match, or nothing matches.
+ */
+export function choosePlanForEvent({plans, event, activeCode = null}) {
+    if (!event || !plans?.length) {
+        return null;
+    }
+    const sg = event.subgroupId != null ? String(event.subgroupId) : null;
+    const id = event.eventId != null ? String(event.eventId) : null;
+    const byPen = sg ? plans.find(p => p.event?.subgroup_id != null && String(p.event.subgroup_id) === sg) : null;
+    const byEvent = id ? plans.find(p => p.event?.id != null && String(p.event.id) === id) : null;
+    const byRoute = event.routeId != null ? plans.find(p => String(p.routeId) === String(event.routeId) && courseMatches(p, event)) : null;
+    const pick = byPen ?? byEvent ?? byRoute ?? null;
+    return pick && pick.code !== activeCode ? pick.code : null;
+}
+
+/** A plan's course against an event's: within 1 % by length for a distance event, equal laps otherwise. */
+export function courseMatches(plan, event) {
+    const distanceM = Number(event.distanceM) || 0;
+    if (distanceM > 0) {
+        return Number.isFinite(plan.lengthM) && Math.abs(plan.lengthM - distanceM) <= Math.max(50, distanceM * 0.01);
+    }
+    const laps = Number(event.laps) || 0;
+    return laps <= 0 || plan.laps == null || Number(plan.laps) === laps;
+}
+
+/**
+ * The next time trial for the HUD: the soonest signed-up TT Sauce knows (signedUpTimeTrials)
+ * or the soonest event a shelf plan was made for, with the plan that fits it, if any.
+ */
+export function nextTimeTrial({signedUp = [], plans = [], now}) {
+    const candidates = [];
+    for (const e of signedUp) {
+        if (e.ts == null || e.ts > now - 3600000) {
+            candidates.push({id: e.id, name: e.name, ts: e.ts, subgroupId: e.subgroupId, routeId: e.routeId, source: 'sauce'});
+        }
+    }
+    for (const p of plans) {
+        const ts = p.event?.start ? Date.parse(p.event.start) : NaN;
+        if (!Number.isFinite(ts) || ts <= now - 3600000) {
+            continue;
+        }
+        if (!candidates.some(c => String(c.id) === String(p.event.id))) {
+            candidates.push({id: p.event.id, name: p.event.name ?? p.routeName ?? p.code, ts, subgroupId: p.event.subgroup_id ?? null, routeId: p.routeId, source: 'shelf'});
+        }
+    }
+    candidates.sort((a, b) => (a.ts ?? Infinity) - (b.ts ?? Infinity));
+    const next = candidates[0];
+    if (!next) {
+        return null;
+    }
+    const planCode = choosePlanForEvent({plans, event: {eventId: next.id, subgroupId: next.subgroupId, routeId: next.routeId}}) ?? plans.find(p => String(p.event?.id) === String(next.id))?.code ?? null;
+    return {...next, planCode};
+}
+
+/** The rider's sign-ups as the shelf stores them: [{event_id, subgroup_id, start, name}]. */
+export function signupRows(signedUp) {
+    return (signedUp ?? [])
+        .filter(e => e.subgroupId != null && e.ts != null)
+        .map(e => ({event_id: e.id, subgroup_id: e.subgroupId, start: new Date(e.ts).toISOString(), name: e.name ?? null}));
+}
+
+/** Report the rider's sign-ups to the shelf (the planner's picker marks them). */
+export async function shelfSignups(fetchFn, token, rows) {
+    const r = await request(fetchFn, `${base()}/shelf.php`, {method: 'POST', token, body: {action: 'signups', subgroups: JSON.stringify(rows)}});
+    return Boolean(r.ok && r.json?.success);
+}

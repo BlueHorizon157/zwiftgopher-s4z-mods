@@ -147,3 +147,59 @@ test('the signed-up time trials in the event cache, soonest first', () => {
     ];
     assert.deepEqual(signedUpTimeTrials(events, now).map(e => [e.id, e.subgroupId]), [[2, 21], [5, 51], [1, 12]]);
 });
+
+import {choosePlanForEvent, courseMatches, nextTimeTrial, signupRows, shelfSignups} from '../pages/src/views/shelf-sync.mjs';
+
+const entry = (code, extra = {}) => ({code, routeId: '4092230492', laps: 1, lengthM: 10710, routeName: 'Urumaze', event: null, ...extra});
+
+test('the plan for the event: by pen, then by event, then by route and course', () => {
+    const plans = [
+        entry('PEN111', {event: {id: 5727315, subgroup_id: 7380880, name: 'Urumaze A', start: '2026-11-08T00:20:00Z'}}),
+        entry('EVT111', {event: {id: 5727315, subgroup_id: 7380882, name: 'Urumaze C', start: '2026-11-08T00:20:00Z'}}),
+        entry('RTE111'),
+        entry('RTE222', {laps: 2, lengthM: 21000}),
+        entry('OTHER1', {routeId: '1', event: {id: 99, subgroup_id: 9, start: '2026-11-09T00:00:00Z'}}),
+    ];
+    assert.equal(choosePlanForEvent({plans, event: {eventId: 5727315, subgroupId: 7380880, routeId: '4092230492', laps: 1}}), 'PEN111', 'the pen first');
+    assert.equal(choosePlanForEvent({plans, event: {eventId: 5727315, subgroupId: 7380881, routeId: '4092230492', laps: 1}}), 'PEN111', 'another pen of the event: the first plan for the event');
+    assert.equal(choosePlanForEvent({plans: plans.slice(1), event: {eventId: 5727315, subgroupId: 7380881, routeId: '4092230492', laps: 1}}), 'EVT111');
+    assert.equal(choosePlanForEvent({plans: plans.slice(2), event: {eventId: 1, subgroupId: 2, routeId: '4092230492', laps: 1}}), 'RTE111', 'no plan for the event: the route with the same laps');
+    assert.equal(choosePlanForEvent({plans: plans.slice(2), event: {eventId: 1, subgroupId: 2, routeId: '4092230492', laps: 2}}), 'RTE222', 'two laps: the two-lap plan');
+    assert.equal(choosePlanForEvent({plans: plans.slice(2), event: {eventId: 1, subgroupId: 2, routeId: '4092230492', laps: 3}}), null, 'three laps: nothing fits');
+    assert.equal(choosePlanForEvent({plans: plans.slice(2), event: {eventId: 1, subgroupId: 2, routeId: '4092230492', distanceM: 21100}}), 'RTE222', 'a distance event: the plan within 1 % of the length');
+    assert.equal(choosePlanForEvent({plans, event: {eventId: 5727315, subgroupId: 7380880, routeId: '4092230492'}, activeCode: 'PEN111'}), null, 'the active plan is already the match');
+    assert.equal(choosePlanForEvent({plans, event: null}), null);
+    assert.equal(courseMatches({lengthM: 16093, laps: 0}, {distanceM: 16093}), true);
+    assert.equal(courseMatches({lengthM: 16093}, {distanceM: 40234}), false);
+    assert.equal(courseMatches({laps: null}, {laps: 2}), true, 'a plan without laps recorded is not held against the event');
+});
+
+test('the next time trial: the soonest signed-up event or shelf event, with its plan', () => {
+    const now = Date.parse('2026-11-08T10:00:00Z');
+    const plans = [
+        entry('PLAN11', {event: {id: 5727386, subgroup_id: 7380999, name: 'Zwift TT Club Racing - Urumaze', start: '2026-11-08T12:20:00Z'}}),
+        entry('PLAN22', {routeId: '2128890027', event: {id: 5800001, subgroup_id: 1, name: 'Tempus Fugit TT', start: '2026-11-11T19:20:00Z'}}),
+    ];
+    const signedUp = [{id: 5765491, name: 'Torturefest Alpe', ts: Date.parse('2026-11-08T11:15:00Z'), subgroupId: 55, routeId: '2663908549'}];
+    const next = nextTimeTrial({signedUp, plans, now});
+    assert.equal(next.id, 5765491, 'the signed-up Alpe comes first');
+    assert.equal(next.planCode, null, 'no plan for it');
+    const later = nextTimeTrial({signedUp: [], plans, now});
+    assert.equal(later.id, 5727386);
+    assert.equal(later.planCode, 'PLAN11', 'the shelf plan made for it');
+    assert.equal(later.source, 'shelf');
+    assert.equal(nextTimeTrial({signedUp: [], plans: [], now}), null);
+    assert.equal(nextTimeTrial({signedUp: [], plans, now: Date.parse('2026-11-08T14:00:00Z')}).id, 5800001, 'an event over an hour past is gone');
+    const both = nextTimeTrial({signedUp: [{id: 5727386, name: 'Urumaze', ts: Date.parse('2026-11-08T12:20:00Z'), subgroupId: 7380999, routeId: '4092230492'}], plans, now});
+    assert.equal(both.planCode, 'PLAN11', 'a signed-up event with a plan for its pen');
+    assert.equal(both.source, 'sauce');
+});
+
+test('sign-ups go to the shelf as rows with event, pen, start and name', async () => {
+    const rows = signupRows([{id: 1, name: 'A', ts: Date.parse('2026-11-08T12:20:00Z'), subgroupId: 11}, {id: 2, name: 'no pen', ts: 5, subgroupId: null}]);
+    assert.deepEqual(rows, [{event_id: 1, subgroup_id: 11, start: '2026-11-08T12:20:00.000Z', name: 'A'}]);
+    const fetchFn = fakeFetch([{match: 'shelf.php', method: 'POST', status: 200, json: {success: true, count: 1}}]);
+    assert.equal(await shelfSignups(fetchFn, 'zgt_x', rows), true);
+    assert.match(fetchFn.calls[0].body, /action=signups&subgroups=%5B%7B%22event_id%22%3A1/);
+    assert.equal(fetchFn.calls[0].headers.Authorization, 'Bearer zgt_x');
+});

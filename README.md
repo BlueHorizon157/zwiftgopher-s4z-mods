@@ -69,6 +69,17 @@ can end it (settings → Plans → **Unlink**, or the planner's Devices list). L
 planner update of November 2026; until then the settings page says so and codes work as
 before.
 
+### Events
+
+A plan made from the planner's event picker knows its event. When you join that event's pen,
+the HUD arms the plan by itself before the start; failing a plan for the event, it arms the
+plan for the same route with the same laps, or within 1 % of a distance event's length. A
+plan you choose by hand after joining stays. With nothing happening, the plan panel shows the
+next time trial you are signed up for (*next TT: Urumaze 19:20 (in 42 min) · plan ready*),
+from what Sauce has loaded (about four hours ahead) and from the plans the planner sent; the
+settings page lists them. While linked, the mod tells the planner which events you signed up
+for, so the picker marks them.
+
 ### Choosing a strategy
 
 An optimised plan carries the optimiser's three ways to ride it: *Fastest*, *Balanced* and
