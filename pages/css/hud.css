@@ -371,13 +371,15 @@ html[data-layout="dial"] .cell + .cell { border: 0; }
 html[data-layout="dial"] .label { color: rgba(245, 247, 250, 0.82); font-weight: 600; font-size: max(11px, calc(var(--f) * 10.5)); }
 html[data-layout="dial"] .unit { color: rgba(245, 247, 250, 0.85); font-weight: 600; font-size: max(11px, calc(var(--f) * 11)); }
 
-/* finish: one row near the top, "finish 14:46 on plan" */
-html[data-layout="dial"] .finish { top: calc(var(--t) * 74); left: calc(var(--t) * 50); right: calc(var(--t) * 50); flex-direction: row; gap: 0.35em; align-items: baseline; justify-content: center; }
+/* finish: "to go 10:24" near the top, the delta from the plan on a short line under it */
+html[data-layout="dial"] .finish { top: calc(var(--t) * 76); left: calc(var(--t) * 56); right: calc(var(--t) * 56); flex-direction: row; flex-wrap: wrap; column-gap: 0.35em; row-gap: 0; align-items: baseline; justify-content: center; }
+html[data-layout="dial"] .finish .delta { flex-basis: 100%; text-align: center; line-height: 1.1; }
+html[data-layout="dial"] .finish .delta:empty { display: none; }
 html[data-layout="dial"] .finish .num { font-size: max(11px, calc(var(--f) * 19)); font-weight: 800; }
 html[data-layout="dial"] .finish .delta { font-size: max(11px, calc(var(--f) * 11.5)); font-weight: 700; }
 
 /* now: the label, the target (the hero) and the live power under it */
-html[data-layout="dial"] .now { top: calc(var(--t) * 126); left: calc(var(--t) * 44); right: calc(var(--t) * 44); gap: calc(var(--t) * 1); }
+html[data-layout="dial"] .now { top: calc(var(--t) * 130); left: calc(var(--t) * 44); right: calc(var(--t) * 44); gap: calc(var(--t) * 1); }
 html[data-layout="dial"] .now .figure { line-height: 1; }
 html[data-layout="dial"] .now .num { font-size: max(11px, calc(var(--f) * 46)); line-height: 0.9; }
 html[data-layout="dial"] .now .unit { font-size: max(11px, calc(var(--f) * 13)); }
@@ -386,7 +388,7 @@ html[data-layout="dial"] .now .live .glyph { font-size: max(11px, calc(var(--f) 
 html[data-layout="dial"] .now .live .word { font-size: max(11px, calc(var(--f) * 12)); }
 
 /* W' left: one row under the live power */
-html[data-layout="dial"] .wbal { top: calc(var(--t) * 176); left: calc(var(--t) * 52); right: calc(var(--t) * 52); flex-direction: row; gap: 0.3em; align-items: baseline; justify-content: center; }
+html[data-layout="dial"] .wbal { top: calc(var(--t) * 180); left: calc(var(--t) * 52); right: calc(var(--t) * 52); flex-direction: row; gap: 0.3em; align-items: baseline; justify-content: center; }
 html[data-layout="dial"] .wbal .num { font-size: max(11px, calc(var(--f) * 16)); font-weight: 800; }
 html[data-layout="dial"] .wbal .bar { display: none; }
 html[data-layout="dial"] .wbal .sub { display: none; }

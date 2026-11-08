@@ -2,7 +2,7 @@
 
 A Sauce for Zwift mod that rides a [ZwiftGopher TT plan](https://zwiftgopher.com/TT/)
 with you: the power to hold now, the next change and when it comes, the W′ you have left
-and the finish time you are on for, drawn over the game.
+and the time to go against your plan, drawn over the game.
 
 **New to it?** The [Race HUD guide](https://zwiftgopher.com/TT/guide.php) walks through both
 ends step by step with pictures: install, link once, pick your event in the planner, ride.
@@ -112,9 +112,10 @@ made on the settings page during a race waits until it is over.
   change pays, so the HUD never moves them, and the warning is yours to use.
 - **W′ left** is the planner's own W′ balance model run on your live power, with the plan's
   floor marked on the bar. It turns red under 25 %.
-- **finish** is the time you are on for, and in words how that compares with the plan:
-  *on plan*, *ahead 0:12*, *behind 0:40*. Before the start it shows the plan's time; after
-  the finish, your time.
+- **to go** is the time left to the finish line at the pace you are riding, and beside it, in
+  words, how you compare with the plan: *on plan*, *ahead 0:12*, *behind 0:40*. Prefer the
+  predicted finish time? Settings → Pacing → *Finish shows* → *Predicted finish time*. Before
+  the start it shows the plan's time; after the finish, your time.
 
 Hover the HUD for the tray: **offset** (nudge the plan ±10 m if its boundaries come early or
 late), **bias** (every target ±1 %), **Reset** (clear this race's statistics), **Plan** (the

@@ -23,6 +23,7 @@ export const SETTINGS_DEFAULTS = {
     bandWidthW: 5,
     soonSec: 10,              // the boundary moment starts this many seconds before a change
     startRule: 'auto',        // auto | time | distance
+    finishShows: 'remaining', // the finish cell while racing: remaining (time to go) | finish (predicted finish time)
     planItInputs: 'last',     // Plan it plans with the rider's last planner settings, or the planner's defaults
     showDebug: false,
     gapMode: 'clock',         // field: clock (standings) | road (who is physically ahead)

@@ -3,7 +3,7 @@
 // page's override; look settings are data attributes on <html> so the CSS does the rest.
 import {startWindow, statusWords} from './views/runtime.mjs';
 import {clipboardCode} from './views/plan-loader.mjs';
-import {setText, setHtml, setHidden, setClass, setAttr, fmtTime, deltaWords, fmtGrade} from './views/dom.mjs';
+import {setText, setHtml, setHidden, setClass, setAttr, fmtTime, deltaWords, fmtGrade, finishFigure} from './views/dom.mjs';
 
 const LAYOUTS = ['strip', 'dial', 'stack'];
 const GLYPH = {under: '▼', on: '●', over: '▲'};
@@ -348,18 +348,12 @@ function render(v) {
             setText(els.finishLabel, text);
         }
     };
-    // Finish: the predicted finish time, with the plan's as the baseline, and the delta in words.
+    // Finish: the time to go (or, by the setting, the predicted finish time), the plan's time
+    // before the start, and the delta from the plan in words.
     if (plan) {
-        if (v.status === 'finished') {
-            finishLabel('finished');
-            setText(els.finishTime, fmtTime(race.elapsedS));
-        } else if (race.running && race.totalS != null) {
-            finishLabel('finish');
-            setText(els.finishTime, fmtTime(race.totalS));
-        } else {
-            finishLabel('plan');
-            setText(els.finishTime, fmtTime(race.planTimeFromStartS ?? plan.timeS));
-        }
+        const fig = finishFigure(v, win.prefs().finishShows);
+        finishLabel(fig.label);
+        setText(els.finishTime, fmtTime(fig.seconds));
         const words = (race.running && race.pacingSampleS > 0) || v.status === 'finished' ? deltaWords(race.deltaS) : '';
         setText(els.finishDelta, words);
         setClass(els.finishDelta, 'ahead', words.startsWith('ahead'));
