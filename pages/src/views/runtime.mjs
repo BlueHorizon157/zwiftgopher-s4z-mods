@@ -29,6 +29,7 @@ export const SETTINGS_DEFAULTS = {
     gapMode: 'clock',         // field: clock (standings) | road (who is physically ahead)
     allSubgroups: false,      // field: riders of every category
     rivalsEach: 2,            // rivals strip: riders shown each side
+    rivalsRange: 'play',      // rivals track: play (±1 min, wider for riders in play) | 30 | 60 | 120 | 300 (s each way) | field
 };
 
 /**

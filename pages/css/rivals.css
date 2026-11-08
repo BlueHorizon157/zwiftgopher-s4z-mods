@@ -126,7 +126,8 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
 .lane .dot.trend-gaining { background: var(--gain); }
 .lane .dot.trend-losing { background: var(--lose); }
 .lane .dot.named { width: 0.78em; height: 0.78em; margin: -0.39em 0 0 -0.39em; }
-.lane .dot.edge { opacity: 0.55; }
+/* in play: you catch them, or they catch you, before the finish at the current trend */
+.lane .dot.in-play { box-shadow: 0 0 0 2px var(--halo), 0 0 0 3.5px var(--ink); }
 
 .empty {
   display: none;

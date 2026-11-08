@@ -180,7 +180,19 @@
             <option value="2">2</option>
           </select>
         </label>
+        <label title="How far the track under the names reaches each way">
+          <key>Track range:</key>
+          <select name="rivalsRange">
+            <option value="play">±1 min, wider for riders in play</option>
+            <option value="30">±30 s</option>
+            <option value="60">±1 min</option>
+            <option value="120">±2 min</option>
+            <option value="300">±5 min</option>
+            <option value="field">The whole field</option>
+          </select>
+        </label>
         <p class="desc">Behind you on the left, ahead on the right. Green: you are gaining time on that rider over the last minute; orange: losing. The speed is theirs over the last part of the plan you have both ridden, green when it was slower than yours.</p>
+        <p class="desc">A rider <b>in play</b> is one you will catch, or who will catch you, before the finish at the current trend: ringed on the track, which widens to hold them. Riders beyond the range are counted at its ends (+3).</p>
       </form>
 
       <form id="advanced" class="section">

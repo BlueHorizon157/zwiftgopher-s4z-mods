@@ -375,3 +375,66 @@ export function rivals(field, {nowMs, each = 2, boundaries = null} = {}) {
         all: list,
     };
 }
+
+// ---- the rivals track's scale ----
+
+export const TRACK_MODES = ['play', '30', '60', '120', '300', 'field'];
+const PLAY_STEPS_S = [60, 90, 120, 180, 300, 600, 900, 1200, 1800];
+const FIELD_STEPS_S = [15, 30, 60, 120, 300, 600];
+const PLAY_HORIZON_S = 600;     // with no time to go known, "in play" looks ten minutes ahead
+
+/**
+ * When a rider and you meet on the road at the current trend, in seconds; null when the gap
+ * is not closing. A rider ahead (roadS > 0) is caught while you gain on them; a rider behind
+ * catches you while you lose on them (gainSPerMin < 0).
+ */
+export function meetInS(r) {
+    if (!Number.isFinite(r?.roadS) || !Number.isFinite(r?.gainSPerMin) || r.gainSPerMin === 0) {
+        return null;
+    }
+    const closing = r.roadS > 0 ? r.gainSPerMin > 0 : r.gainSPerMin < 0;
+    return closing ? Math.abs(r.roadS) / Math.abs(r.gainSPerMin) * 60 : null;
+}
+
+/**
+ * The track's range each way and which riders it shows (the rivals strip). Modes:
+ *   'play' (default): ±1 min, widened to hold every rider "in play": one you will catch, or
+ *                     who will catch you, before the finish at the current trend;
+ *   '30' | '60' | '120' | '300': a fixed range in seconds;
+ *   'field': wide enough for everyone (15 s up to 10 min), as before.
+ * Riders outside the range are left off the track and counted per side.
+ * Returns {rangeS, shown: [riders], inPlay: Set(ids), meetS: Map(id → s), hiddenAhead, hiddenBehind}.
+ */
+export function trackScale(all, {mode = 'play', remainingS = null} = {}) {
+    const horizon = Number.isFinite(remainingS) && remainingS > 0 ? remainingS : PLAY_HORIZON_S;
+    const inPlay = new Set();
+    const meetS = new Map();
+    for (const r of all) {
+        const t = meetInS(r);
+        if (t != null) {
+            meetS.set(r.id, t);
+            if (t <= horizon) {
+                inPlay.add(r.id);
+            }
+        }
+    }
+    let rangeS;
+    if (mode === 'field') {
+        const far = all.reduce((m, x) => Math.max(m, Math.abs(x.roadS)), 0);
+        rangeS = FIELD_STEPS_S.find(x => x >= far) ?? FIELD_STEPS_S.at(-1);
+    } else if (/^\d+$/.test(String(mode))) {
+        rangeS = Math.max(5, Number(mode));
+    } else {
+        const far = all.filter(r => inPlay.has(r.id)).reduce((m, x) => Math.max(m, Math.abs(x.roadS)), 0);
+        rangeS = PLAY_STEPS_S.find(x => x >= far) ?? PLAY_STEPS_S.at(-1);
+    }
+    const shown = all.filter(r => Math.abs(r.roadS) <= rangeS);
+    return {
+        rangeS,
+        shown,
+        inPlay,
+        meetS,
+        hiddenAhead: all.filter(r => r.roadS > rangeS).length,
+        hiddenBehind: all.filter(r => r.roadS < -rangeS).length,
+    };
+}

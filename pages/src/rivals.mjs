@@ -4,10 +4,8 @@
 // you placed on a track by their gap on the road.
 import {startWindow} from './views/runtime.mjs';
 import {startFieldFeed, boundariesOf, fmtGap, shortName} from './views/field-feed.mjs';
-import {rivals as fieldRivals} from './engine/field.mjs';
+import {rivals as fieldRivals, trackScale, TRACK_MODES} from './engine/field.mjs';
 import {setText, setClass} from './views/dom.mjs';
-
-const RANGES_S = [15, 30, 60, 120, 300, 600];
 
 const els = {};
 let win = null;
@@ -47,14 +45,18 @@ function render(v) {
     renderSide(els.ahead, r.ahead);
     renderSide(els.behind, r.behind);
 
-    // The track: a range that holds everyone in view, from 15 s up to 10 min each way.
-    const far = r.all.reduce((m, x) => Math.max(m, Math.abs(x.roadS)), 0);
-    rangeS = RANGES_S.find(x => x >= far) ?? RANGES_S.at(-1);
-    setText(els.rangeLeft, `${fmtRange(rangeS)} behind`);
-    setText(els.rangeRight, `${fmtRange(rangeS)} ahead`);
+    // The track (settings → Rivals → Track range): by default ±1 min, wider to hold the riders
+    // in play (you catch them, or they catch you, before the finish at the current trend); or a
+    // fixed range; or the whole field. Riders beyond it are counted at the ends.
+    const mode = TRACK_MODES.includes(String(win.prefs().rivalsRange)) ? String(win.prefs().rivalsRange) : 'play';
+    const remainingS = v.race?.running ? v.race.remainingS : (v.race?.planTimeFromStartS ?? null);
+    const t = trackScale(r.all, {mode, remainingS});
+    rangeS = t.rangeS;
+    setText(els.rangeLeft, `${t.hiddenBehind ? `+${t.hiddenBehind} · ` : ''}${fmtRange(rangeS)} behind`);
+    setText(els.rangeRight, `${fmtRange(rangeS)} ahead${t.hiddenAhead ? ` · +${t.hiddenAhead}` : ''}`);
     const named = new Set([...r.ahead, ...r.behind].map(x => x.id));
     const seen = new Set();
-    for (const x of r.all) {
+    for (const x of t.shown) {
         seen.add(x.id);
         let d = dots.get(x.id);
         if (!d) {
@@ -69,12 +71,13 @@ function render(v) {
             d.cache.left = left;
             d.style.left = left;
         }
-        const cls = `dot${x.trend ? ` trend-${x.trend}` : ''}${named.has(x.id) ? ' named' : ''}${Math.abs(x.roadS) > rangeS ? ' edge' : ''}`;
+        const cls = `dot${x.trend ? ` trend-${x.trend}` : ''}${named.has(x.id) ? ' named' : ''}${t.inPlay.has(x.id) ? ' in-play' : ''}`;
         if (d.cache.cls !== cls) {
             d.cache.cls = cls;
             d.className = cls;
         }
-        const title = `${x.name}: ${fmtGap(x.roadS)} ${x.roadS > 0 ? 'ahead' : 'behind'}`;
+        const meet = t.meetS.get(x.id);
+        const title = `${x.name}: ${fmtGap(x.roadS)} ${x.roadS > 0 ? 'ahead' : 'behind'}${meet != null ? `; ${x.roadS > 0 ? 'you catch them' : 'they catch you'} in about ${fmtRange(Math.round(meet / 60) * 60 || Math.round(meet))}` : ''}`;
         if (d.title !== title) {
             d.title = title;
         }
@@ -135,5 +138,5 @@ function put(el, key, node, text) {
 }
 
 function fmtRange(s) {
-    return s < 60 ? `${s} s` : `${s / 60} min`;
+    return s < 60 ? `${s} s` : `${+(s / 60).toFixed(1)} min`;
 }

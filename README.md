@@ -141,7 +141,11 @@ The **rivals strip** is for a glance: behind you on the left, ahead on the right
 nearest riders each side it gives how far up or down the road they are, whether you are
 *gaining*, *holding* or *losing* on them and by how much a minute, and their speed over the
 last part of the plan you have both ridden (green when slower than yours). Below, everyone
-around you sits on a track by their gap.
+around you sits on a track by their gap. The track reaches ±1 min by default and widens for the riders **in
+play**: one you will catch, or who will catch you, before the finish at the current trend.
+They are ringed, and hovering a rider says when you meet. Riders beyond the range are
+counted at its ends (*+3*). Settings → Rivals → *Track range* fixes it at ±30 s, ±1, ±2 or
+±5 min, or fits the whole field.
 
 The field and the rivals strip need an event: outside one, riders have no shared distance to
 compare.
