@@ -3,7 +3,10 @@
 import * as store from '../store.mjs';
 import * as sauce from '../sauce.mjs';
 
+// The planner's share endpoint; window.ZG_PLANNER_BASE (set by the Sauce stand-in for a local
+// planner) moves it with the link and the shelf (views/shelf-sync.mjs).
 export const SHARE_URL = 'https://zwiftgopher.com/TT/share-plan.php';
+const shareUrl = () => (typeof window !== 'undefined' && window.ZG_PLANNER_BASE ? `${window.ZG_PLANNER_BASE}/share-plan.php` : SHARE_URL);
 const TIMEOUT_MS = 8000;
 
 export function parseCode(text) {
@@ -54,7 +57,7 @@ export async function fetchPlanByCode(text) {
         const ctl = new AbortController();
         const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
         try {
-            const resp = await fetch(`${SHARE_URL}?action=load&code=${code}`, {signal: ctl.signal});
+            const resp = await fetch(`${shareUrl()}?action=load&code=${code}`, {signal: ctl.signal});
             const body = await resp.json().catch(() => ({}));
             if (resp.status === 404) {
                 throw new Error(`No plan for ${code}: it may have expired (codes last seven days).`);

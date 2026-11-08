@@ -4,6 +4,9 @@ A Sauce for Zwift mod that rides a [ZwiftGopher TT plan](https://zwiftgopher.com
 with you: the power to hold now, the next change and when it comes, the W′ you have left
 and the finish time you are on for, drawn over the game.
 
+**New to it?** The [Race HUD guide](https://zwiftgopher.com/TT/guide.php) walks through both
+ends step by step with pictures: install, link once, pick your event in the planner, ride.
+
 ## Installing
 
 1. Download the zip of the [latest release](https://github.com/BlueHorizon157/zwiftgopher-s4z-mods/releases/latest).
@@ -157,6 +160,10 @@ clock or the road, every category. Rivals: riders named each side. Advanced: deb
 telemetry recorder.
 
 ## Development
+
+Screenshots without Sauce: `scripts/sauce-standin/server.mjs` serves the windows with a
+stand-in for Sauce's `common.mjs`, and `scripts/guide-shots.mjs` pairs them with a local
+planner and captures the guide's pictures (`--out=../ZwiftGopher/TT/images/guide --webp`).
 
 ```
 npm test                       # engine, kernel, plan and page tests (node --test)
