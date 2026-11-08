@@ -4,7 +4,7 @@
 // changed cells are written; the home row stays in view.
 import {startWindow} from './views/runtime.mjs';
 import {startFieldFeed, boundariesOf, fmtGap} from './views/field-feed.mjs';
-import {rows as fieldRows} from './engine/field.mjs';
+import {rows as fieldRows, playSet, drift} from './engine/field-model.mjs';
 import {setText, setHidden} from './views/dom.mjs';
 
 const MANUAL_SCROLL_HOLD_MS = 5000;
@@ -15,6 +15,7 @@ let feed = null;
 const rowEls = new Map();
 let holdScrollUntil = 0;
 let lastOrder = '';
+let prevPlay = null;         // last render's play set (in play and near are sticky, playSet)
 
 export function main() {
     for (const el of document.querySelectorAll('[id]')) {
@@ -64,6 +65,14 @@ function render(v) {
         gapMode: mode,
     });
     const home = list.find(r => r.isHome);
+    // How it ends with each rider at the pace of the last minutes, on the gap shown: on the
+    // road, who you catch or who catches you; on the clock (your result), who you beat or who
+    // beats you; on either, who is close when you finish. A gap's pace is the same either way.
+    const remainingS = v.race?.running ? v.race.remainingS : (v.race?.planTimeFromStartS ?? null);
+    const play = playSet(list.filter(r => !r.isHome && Number.isFinite(r.gapS))
+        .map(r => ({id: r.id, roadS: r.gapS, paceSPerMin: r.paceSPerMin})), {remainingS, prev: prevPlay});
+    play.road = mode === 'road';
+    prevPlay = play;
     const others = list.length - (home ? 1 : 0);
     setHidden(els.empty, list.length > 0);
     setText(els.count, list.length ? `${others} ${others === 1 ? 'rider' : 'riders'} ${prefs.allSubgroups ? 'in the event' : 'in your category'}` : '');
@@ -77,7 +86,7 @@ function render(v) {
             el = makeRow(r.id);
             rowEls.set(r.id, el);
         }
-        updateRow(el, r);
+        updateRow(el, r, play);
     }
     for (const [id, el] of rowEls) {
         if (!seen.has(id)) {
@@ -103,11 +112,11 @@ function makeRow(id) {
     const el = document.createElement('div');
     el.className = 'row';
     el.dataset.id = id;
-    el.innerHTML = '<span class="c pos"></span><span class="c name"><span></span><small></small></span>'
+    el.innerHTML = '<span class="c pos"></span><span class="c name"><span></span><b class="play none"><i></i><span></span></b><small></small></span>'
         + '<span class="c gap"><i class="glyph"></i><span></span></span><span class="c trend"></span>'
         + '<span class="c kmh"></span><span class="c wkg"></span><span class="c wbal"><span class="wbar"><i></i></span></span>';
     const [pos, name, gap, trend, kmh, wkg, wbal] = el.children;
-    el.cells = {pos, name: name.firstChild, team: name.lastChild, glyph: gap.firstChild, gap: gap.lastChild, trend, kmh, wkg, bar: wbal.firstChild};
+    el.cells = {pos, name: name.children[0], play: name.children[1], playWord: name.children[1].firstChild, playVal: name.children[1].lastChild, team: name.children[2], glyph: gap.firstChild, gap: gap.lastChild, trend, kmh, wkg, bar: wbal.firstChild};
     el.cache = {};
     return el;
 }
@@ -119,7 +128,7 @@ function put(el, key, node, text) {
     }
 }
 
-function updateRow(el, r) {
+function updateRow(el, r, play) {
     const c = el.cells;
     const cls = `row${r.isHome ? ' home' : ''}${r.stale ? ' stale' : ''}${!r.started ? ' waiting' : ''}`;
     if (el.cache.cls !== cls) {
@@ -129,6 +138,37 @@ function updateRow(el, r) {
     put(el, 'pos', c.pos, r.position ? String(r.position) : '');
     put(el, 'name', c.name, r.isHome ? 'you' : r.name);
     put(el, 'team', c.team, r.isHome ? '' : (r.team ?? ''));
+    // The tag: you meet before the finish (catch, catches you) or are close at it (in reach,
+    // pressure), at the pace of the last minutes.
+    const meet = play.inPlay.has(r.id) ? play.meetS.get(r.id) : null;
+    const near = meet == null ? play.near.get(r.id) : null;
+    const road = play.road;
+    const tag = meet != null ? (r.gapS > 0 ? 'catch' : 'caught') : near ? near.kind : '';
+    const g = near ? fmtFinishGap(near.finishGapS) : '';
+    // [word, value]: narrow windows keep only the value, the colour and outline say which.
+    const [word, val] = {
+        catch: road ? ['catch', fmtClock(meet)] : ['you beat', ''],
+        caught: road ? ['catches you', fmtClock(meet)] : ['beats you', ''],
+        reach: ['in reach', g],
+        pressure: ['pressure', g],
+        '': ['', ''],
+    }[tag];
+    put(el, 'playWord', c.playWord, word);
+    put(el, 'playVal', c.playVal, val);
+    const playCls = `play${tag ? ` ${tag}${val ? ' has-val' : ''}` : ' none'}`;
+    if (el.cache.playCls !== `${playCls}${road}`) {
+        el.cache.playCls = `${playCls}${road}`;
+        c.play.className = playCls;
+        c.name.parentNode.classList.toggle('tagged', Boolean(tag));
+        const pace = 'At the pace of the last minutes';
+        c.play.title = {
+            catch: road ? `${pace} you catch this rider on the road before the finish` : `${pace} you finish ahead of this rider on time`,
+            caught: road ? `${pace} this rider catches you on the road before the finish` : `${pace} this rider finishes ahead of you on time`,
+            reach: `${pace} this rider finishes just ahead of you${road ? ' on the road' : ' on time'}: a little more from you, or a fade from them, and you are past`,
+            pressure: `${pace} this rider finishes just behind you${road ? ' on the road' : ' on time'}`,
+            '': '',
+        }[tag];
+    }
     if (r.isHome) {
         put(el, 'glyph', c.glyph, '');
         put(el, 'gap', c.gap, '');
@@ -143,9 +183,10 @@ function updateRow(el, r) {
         put(el, 'glyph', c.glyph, '');
         put(el, 'gap', c.gap, '');
     }
-    const trendText = r.trend == null ? '' : r.trend === 'holding' ? 'hold' : `${r.trend === 'gaining' ? '+' : '−'}${Math.abs(r.gainSPerMin).toFixed(1)} s`;
+    const dr = r.isHome ? null : drift(r);
+    const trendText = dr == null ? '' : dr.word === 'holding' ? 'hold' : `${dr.word === 'gaining' ? '+' : '−'}${Math.abs(dr.sPerMin).toFixed(1)} s`;
     put(el, 'trend', c.trend, trendText);
-    const trendCls = `c trend${r.trend ? ` trend-${r.trend}` : ''}`;
+    const trendCls = `c trend${dr ? ` trend-${dr.word}` : ''}`;
     if (el.cache.trendCls !== trendCls) {
         el.cache.trendCls = trendCls;
         c.trend.className = trendCls;
@@ -175,6 +216,18 @@ function keepHomeInView() {
     if (Math.abs(c.scrollTop - next) > 2) {
         c.scrollTop = next;
     }
+}
+
+/** A gap at the finish for the tags: "<1 s", "8 s". */
+function fmtFinishGap(s) {
+    const a = Math.abs(s);
+    return a < 1 ? '<1 s' : `${Math.round(a)} s`;
+}
+
+function fmtClock(s) {
+    const t = Math.max(0, Math.round(s));
+    const m = Math.floor(t / 60);
+    return m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}` : `${m}:${String(t % 60).padStart(2, '0')}`;
 }
 
 function ordinal(n) {

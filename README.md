@@ -134,17 +134,24 @@ point of the course. The gap is measured at equal distance: where both of you ha
 every 50 m, so it compares like with like.
 By default it is the gap on the clock (in a TT riders start apart, so a rider behind you on
 the road can be ahead on time); click *gap* to switch to the road. The next column is the
-time you gained (+, green) or lost (−, orange) on each rider per minute over the last minute.
-Your row stays in view.
+time you gain (+, green) or lose (−, orange) on each rider a minute, over the last four
+minutes (the last minute until four have passed), so a sprint barely moves it. At that pace a
+tag by the name says how it ends, on the gap shown: on the road *catch 4:10* or *catches you
+3:20* (you meet before the finish, and when), on the clock *you beat* or *beats you*; and,
+outlined, riders close when you finish: *in reach 8 s* ahead (a little more from you, or a
+fade from them, and you are past) and *pressure 5 s* behind. Close is a second for each
+minute to go, between 5 and 30 s. Your row stays in view.
 
-The **rivals strip** is for a glance: behind you on the left, ahead on the right. For the
-nearest riders each side it gives how far up or down the road they are, whether you are
-*gaining*, *holding* or *losing* on them and by how much a minute, and their speed over the
-last part of the plan you have both ridden (green when slower than yours). Below, everyone
-around you sits on a track by their gap. The track reaches ±1 min by default and widens for the riders **in
-play**: one you will catch, or who will catch you, before the finish at the current trend.
-They are ringed, and hovering a rider says when you meet. Riders beyond the range are
-counted at its ends (*+3*). Settings → Rivals → *Track range* fixes it at ±30 s, ±1, ±2 or
+The **rivals strip** is for a glance: behind you on the left, ahead on the right. Each side
+names the nearest rider and then the nearest that matters, with how far up or down the road
+they are and how it ends at the pace of the last four minutes (a sprint barely moves it):
+the same tags as the field (*catch 4:10*, *catches you 3:20*, outlined *in reach 8 s* and
+*pressure 5 s*), else whether you are *gaining*, *holding* or *losing* on them and by how
+much a minute. Last, their speed over the last part of the plan you have both ridden (green
+when slower than yours). Below, everyone around you sits on a track by their road gap,
+ringed when you meet before the finish and ring-dashed when close at it. The track reaches
+±1 min by default and widens to hold those riders; its ends count who you catch, who
+catches you, and the riders beyond the range (*+3*). Settings → Rivals → *Track range* fixes it at ±30 s, ±1, ±2 or
 ±5 min, or fits the whole field.
 
 The field and the rivals strip need an event: outside one, riders have no shared distance to

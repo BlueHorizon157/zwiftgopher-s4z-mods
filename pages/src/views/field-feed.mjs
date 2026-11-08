@@ -1,8 +1,8 @@
-// Sauce's `nearby` list into the field model (engine/field.mjs) for the field window and the
+// Sauce's `nearby` list into the field model (engine/field-model.mjs) for the field window and the
 // rivals strip. The window's own engine says what kind of event it is, where the timing line
 // is and where the plan's sectors end; this converts those from plan metres to event metres.
 import * as sauce from '../sauce.mjs';
-import {createField, ingest, resetField} from '../engine/field.mjs';
+import {createField, ingest, resetField} from '../engine/field-model.mjs';
 
 export function startFieldFeed({view, onUpdate = null}) {
     const field = createField();

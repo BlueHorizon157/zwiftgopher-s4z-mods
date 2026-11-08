@@ -236,8 +236,8 @@ try {
     await moment('hud-dial.html', [320, 320], 200, 'jungle', 'mod-hud-dial');
     await moment('hud-stack.html', [230, 430], 349, 'snow', 'mod-hud-stack');
     await moment('list.html', [400, 500], 349, 'snow', 'mod-list');
-    await moment('field.html', [400, 500], 600, 'night', 'mod-field');
-    await moment('rivals.html', [600, 76], 600, 'jungle', 'mod-rivals');
+    await moment('field.html', [400, 500], 500, 'night', 'mod-field');
+    await moment('rivals.html', [600, 76], 500, 'jungle', 'mod-rivals');
     await moment('hud.html', [600, 100], 200, 'snow', 'mod-hud-tray', async page => {
         await page.evaluate(() => document.getElementById('hud').classList.add('tray-pinned'));
     });

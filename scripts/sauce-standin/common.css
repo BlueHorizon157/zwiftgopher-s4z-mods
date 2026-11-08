@@ -4,11 +4,19 @@
 @import url("https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600;700;800&display=swap");
 
 html {
+  /* as Sauce: the window is the size container the mod's @container root-html rules query */
+  box-sizing: border-box;
+  container: root-html / size;
+  width: 100%;
+  height: 100%;
+  padding: 2px;
+  overflow: hidden;
   font-family: 'Saira', sans-serif;
   font-size: 15px;
   color: #eee;
 }
-body { margin: 0; }
+*, *::before, *::after { box-sizing: inherit; }
+body { margin: 0; height: 100%; }
 body.transparent-bg { background: transparent; }
 ms { font-family: sans-serif; font-style: normal; }
 ms:empty::before { content: '⚙'; }

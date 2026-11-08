@@ -88,6 +88,23 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
   height: 1.1em;
 }
 .track .end { font-size: max(11px, 0.85em); color: var(--ink-3); white-space: nowrap; }
+.track .end.good { color: var(--gain); font-weight: 600; }
+.track .end.warn { color: var(--lose); font-weight: 600; }
+/* the tags: how it ends with a rider at the pace of the last minutes. Solid: you meet before
+ * the finish; outlined: close at the finish (in reach ahead, pressure behind). */
+.side li .tr.tag .word {
+  display: inline-block;
+  padding: 0 0.45em;
+  border-radius: 0.65em;
+  font-weight: 800;
+  line-height: 1.25;
+  text-shadow: none;
+}
+.side li .tr.catch .word { background: var(--gain); color: #08130c; }
+.side li .tr.caught .word { background: var(--lose); color: #1a0703; }
+.side li .tr.reach .word { color: var(--gain); box-shadow: inset 0 0 0 1.5px var(--gain); background: rgba(8, 19, 12, 0.45); }
+.side li .tr.pressure .word { color: var(--lose); box-shadow: inset 0 0 0 1.5px var(--lose); background: rgba(26, 7, 3, 0.45); }
+.side li .tr.tag .rate { display: none; }
 .lane {
   position: relative;
   height: 100%;
@@ -128,6 +145,8 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
 .lane .dot.named { width: 0.78em; height: 0.78em; margin: -0.39em 0 0 -0.39em; }
 /* in play: you catch them, or they catch you, before the finish at the current trend */
 .lane .dot.in-play { box-shadow: 0 0 0 2px var(--halo), 0 0 0 3.5px var(--ink); }
+/* near: close at the finish (in reach, pressure) */
+.lane .dot.near { outline: 1.5px dashed var(--ink); outline-offset: 2px; }
 
 .empty {
   display: none;

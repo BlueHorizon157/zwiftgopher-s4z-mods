@@ -168,7 +168,7 @@
           <key>Every category:</key>
           <input type="checkbox" name="allSubgroups">
         </label>
-        <p class="desc">Gaps are measured where both riders have been, every 50 m of the event, so they compare like with like. The trend is the time you gained or lost on each rider over the last minute.</p>
+        <p class="desc">Gaps are measured where both riders have been, every 50 m of the event, so they compare like with like. The trend (/min) is the time you gain or lose on each rider a minute, over the last four minutes, so a sprint barely moves it (over the last minute until four have passed). A rider's tag says how it ends at that pace, on the gap shown: <b>catch</b> or <b>catches you</b> (on the road, with when) or <b>you beat</b> / <b>beats you</b> (on the clock) before the finish; outlined, close when you finish: <b>in reach</b> ahead, <b>pressure</b> behind.</p>
       </form>
 
       <form id="rivals-options" class="section" data-for="rivals">
@@ -183,7 +183,7 @@
         <label title="How far the track under the names reaches each way">
           <key>Track range:</key>
           <select name="rivalsRange">
-            <option value="play">±1 min, wider for riders in play</option>
+            <option value="play">±1 min, wider for the riders that matter</option>
             <option value="30">±30 s</option>
             <option value="60">±1 min</option>
             <option value="120">±2 min</option>
@@ -191,8 +191,8 @@
             <option value="field">The whole field</option>
           </select>
         </label>
-        <p class="desc">Behind you on the left, ahead on the right. Green: you are gaining time on that rider over the last minute; orange: losing. The speed is theirs over the last part of the plan you have both ridden, green when it was slower than yours.</p>
-        <p class="desc">A rider <b>in play</b> is one you will catch, or who will catch you, before the finish at the current trend: ringed on the track, which widens to hold them. Riders beyond the range are counted at its ends (+3).</p>
+        <p class="desc">Behind you on the left, ahead on the right: the nearest rider each side, then the nearest that matters. Each says how it ends at the pace of the last four minutes (a sprint barely moves it): <b>catch 4:10</b> (you catch them in 4:10) or <b>catches you 3:20</b>; outlined, close when you finish: <b>in reach 8 s</b> (a little more from you, or a fade from them, and you catch them) or <b>pressure 5 s</b> (they finish 5 s behind you). Otherwise whether you are gaining (green) or losing (orange) on them, and how much a minute. The speed is theirs over the last part of the plan you have both ridden, green when it was slower than yours.</p>
+        <p class="desc">On the track, riders you meet before the finish are ringed and those close at the finish ring-dashed; the track widens to hold both. The ends count who you catch and who catches you, and the riders beyond the range (+3). Close is a second for each minute to go, 5 s to 30 s.</p>
       </form>
 
       <form id="advanced" class="section">
