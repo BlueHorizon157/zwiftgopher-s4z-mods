@@ -91,6 +91,12 @@ function initControls() {
         changingPlan = false;
         win.draw();
     });
+    // Ride with no plan: the panel stays, offering Plan from here (or Plan it in a pen).
+    els.clearPlan.addEventListener('click', () => {
+        win.clearPlan();
+        changingPlan = false;
+        win.draw();
+    });
     els.strategyChoices.addEventListener('click', ev => {
         const btn = ev.target.closest('button[data-card]');
         if (btn && !btn.disabled && win.setStrategy(btn.dataset.card || null)) {
@@ -98,7 +104,7 @@ function initControls() {
             win.draw();
         }
     });
-    // Before the start the strategy chip (in the banner; on the dial, by the plan time) opens the plan panel.
+    // The strategy chip (in the banner; on the dial before the start, by the plan time) opens the plan panel.
     for (const el of [els.banner, els.finishLabel]) {
         el.addEventListener('click', ev => {
             if (ev.target.closest('[data-action="strategy"]')) {
@@ -207,13 +213,17 @@ function render(v) {
     const link = win.link();
     const linked = link?.state === 'linked';
     if (showIdle) {
-        setText(els.idleTitle, plan ? `Plan ${plan.code ?? ''}: ${plan.routeName ?? 'custom route'}` : (linked ? 'Waiting for a plan from the planner' : 'Enter your plan code'));
+        const waiting = !plan && linked ? win.offer() : null;
+        setText(els.idleTitle, plan ? `Plan ${plan.code ?? ''}: ${plan.routeName ?? 'custom route'}`
+            : waiting ? `Plan ${waiting.code} is ready` : (linked ? 'Waiting for a plan from the planner' : 'Enter your plan code'));
         setText(els.idleHint, !plan
-            ? (linked ? `Optimise a plan in the planner${link.riderName ? ` as ${link.riderName}` : ''}: it arrives here by itself. Or enter a code.`
+            ? (waiting ? 'It comes up by itself in its pen or on its route. Use loads it now.'
+                : linked ? `Optimise a plan in the planner${link.riderName ? ` as ${link.riderName}` : ''}: it comes up in its pen or on its route. Or enter a code.`
                 : "The six-letter code from the planner's Share page, or paste its link.")
             : beforeStart ? 'Pick a strategy, or enter another code. Esc keeps this plan.'
-                : 'The strategy can be changed before the start. Esc keeps this plan.');
-        renderStrategy(plan, beforeStart);
+                : v.status === 'racing' ? 'Pick a strategy: the targets change now, the clock and W\u2032 carry on. Esc keeps this plan.'
+                : 'A strategy picked now is for the next ride. Esc keeps this plan.');
+        renderStrategy(plan, beforeStart || v.status === 'racing');
     }
     // A pairing waiting for the planner: the code, large, in the panel (2.1).
     const pairing = link?.state === 'pending' && link.code ? link.code : null;
@@ -261,15 +271,19 @@ function render(v) {
             ? 'Plan from here plans the rest of the race from where you are, with what your legs have left. Or enter a code.'
             : 'Plan from here plans the rest of this lap from where you are, with what your legs have left. Or enter a code.');
     }
+    // A plan from here running: made again from here, it starts from the W' the ride has left now.
+    setText(els.fromHereLabel, plan?.fromHere && !herePlanning ? 'again from here' : 'from here');
     setText(els.fromHereText, hereText);
     setHidden(els.fromHerePlan, herePlanning);
     els.fromHerePlan.disabled = Boolean(planning);
-    // A plan that arrived while another is active: offered before the start (decision 3).
+    // A plan that arrived for another course or pen: offered before the start, to load by hand
+    // (decision 3, revised 2026-11-09), over the plan being ridden or in the empty panel.
     const shelfOffer = win.offer();
-    const showToast = Boolean(shelfOffer && plan && !showIdle && beforeStart && !v.spectating);
+    const showToast = Boolean(shelfOffer && (!plan || !showIdle) && beforeStart && !v.spectating);
     setHidden(els.toast, !showToast);
     setText(els.toastText, shelfOffer ? `new plan: ${shelfOffer.routeName ?? shelfOffer.code}${shelfOffer.timeText ? ` · ${shelfOffer.timeText}` : ''}` : '');
     setHidden(els.closePanel, !(showIdle && plan));
+    setHidden(els.clearPlan, !(showIdle && plan && !v.spectating));
     // A code on the clipboard: in the panel, and in the tray before the start.
     const offer = clipCode && clipCode !== plan?.code ? clipCode : null;
     setHidden(els.clip, !(showIdle && offer));
@@ -436,24 +450,26 @@ function strategyChoices(plan) {
     return choices;
 }
 
-function renderStrategy(plan, beforeStart) {
+/** The strategy buttons: before the start and while racing (in place); after the finish, for the next ride. */
+function renderStrategy(plan, canChange) {
     const choices = strategyChoices(plan);
     setHidden(els.strategy, choices.length < 2);
-    setText(els.strategyLabel, beforeStart ? 'strategy' : 'strategy (before the start)');
-    const key = `${beforeStart}|${choices.map(c => `${c.card}:${c.selected}:${c.timeText}`).join(',')}`;
+    setText(els.strategyLabel, canChange ? 'strategy' : 'strategy (next ride)');
+    const key = `${canChange}|${choices.map(c => `${c.card}:${c.selected}:${c.timeText}`).join(',')}`;
     if (els.strategyChoices.__key === key) {
         return;
     }
     els.strategyChoices.__key = key;
-    els.strategyChoices.innerHTML = choices.map(c => `<button type="button" data-key="${escapeHtml(c.key)}" data-card="${escapeHtml(c.card)}" aria-pressed="${c.selected}"${beforeStart ? '' : ' disabled title="The strategy can be changed before the start"'}>`
+    els.strategyChoices.innerHTML = choices.map(c => `<button type="button" data-key="${escapeHtml(c.key)}" data-card="${escapeHtml(c.card)}" aria-pressed="${c.selected}"${canChange ? '' : ' disabled title="Reset for the next ride first"'}>`
         + `${escapeHtml(c.label)} <span class="tnum">${escapeHtml(c.timeText ?? '')}</span></button>`).join('');
 }
 
 function setBanner(v, now) {
     let text = '';
     let name = '';
-    // Before the start, the strategy being ridden, as a chip that opens the plan panel.
-    const chip = (v.status === 'armed' || v.status === 'idle') && !v.spectating && strategyChoices(v.plan).length > 1
+    // The strategy being ridden, as a chip that opens the plan panel: before the start and,
+    // since a strategy changes in place, while racing (Dave, 2026-11-09).
+    const chip = (v.status === 'armed' || v.status === 'idle' || v.status === 'racing') && !v.spectating && strategyChoices(v.plan).length > 1
         ? `<button type="button" class="chip" data-action="strategy" title="Change the strategy or the plan">${escapeHtml((v.plan.strategyLabel ?? 'as shared').toLowerCase())}</button>` : '';
     if (v.spectating) {
         text = 'spectating ';
@@ -490,7 +506,7 @@ function setBanner(v, now) {
         text = 'clock from the gun';
     }
     // The chip before the route name, so a narrow banner cuts the name, not the chip.
-    const html = text ? `${escapeHtml(text)}${chip}<span class="name">${escapeHtml(name)}</span>` : '';
+    const html = text || chip ? `${escapeHtml(text)}${chip}<span class="name">${escapeHtml(name)}</span>` : '';
     if (els.banner.__html !== html) {
         els.banner.__html = html;
         els.banner.innerHTML = html;

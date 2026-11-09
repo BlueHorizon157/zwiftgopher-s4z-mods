@@ -137,3 +137,42 @@ test('a late join starts the clock from state.time and marks the interval partia
     assert.equal(first.partial, true, 'the interval joined mid-way is partial');
     assert.ok(v.race.elapsedS > 800, 'the clock is the race time, not time since joining');
 });
+
+test('a strategy changed while racing swaps the targets in place: clock, W\' and position carry on', () => {
+    const balanced = normalisePlan(plan, {card: 'balanced'});
+    const fastest = normalisePlan(plan);
+    assert.ok(balanced && balanced.signature !== fastest.signature, 'the fixture has a Balanced plan of its own');
+    let before = null;
+    let after = null;
+    let swapped = false;
+    run({onTick: (row, v, engine) => {
+        if (!swapped && v.status === 'racing' && v.race.elapsedS > 300) {
+            before = {elapsedS: v.race.elapsedS, wbalJ: v.wbal.j, planM: v.race.planM, planTimeS: v.race.planTimeFromStartS};
+            engine.event('strategy', {plan: balanced}, epoch + row.t);
+            const w = engine.view();
+            after = {status: w.status, elapsedS: w.race.elapsedS, wbalJ: w.wbal.j, planM: w.race.planM, planTimeS: w.race.planTimeFromStartS, strategy: w.plan.strategyLabel, signature: engine.state.plan.signature, stats: engine.state.tracking.stats.map((x, i) => x ? i : null).filter(i => i != null), index: engine.state.index};
+            swapped = true;
+        }
+    }});
+    assert.ok(swapped, 'racing reached');
+    assert.equal(after.status, 'racing', 'still racing');
+    assert.equal(after.elapsedS, before.elapsedS, 'the clock carries on');
+    assert.equal(after.wbalJ, before.wbalJ, 'the W\' carries on');
+    assert.equal(after.planM, before.planM, 'the position carries on');
+    assert.equal(after.strategy, 'Balanced');
+    assert.equal(after.signature, balanced.signature, 'the engine rides Balanced');
+    assert.ok(after.planTimeS > before.planTimeS, `Balanced's plan time ${after.planTimeS} s is longer than Fastest's ${before.planTimeS} s`);
+    assert.deepEqual(after.stats, [after.index], 'the statistics start again, from the interval in progress');
+});
+
+test('a strategy chosen before the start is a new plan; the same strategy again is nothing', () => {
+    const engine = createEngine({plan, prefs: {smoothingSec: 0}});
+    engine.tick(ticks[0].d, epoch + ticks[0].t);
+    assert.equal(engine.view().status, 'armed');
+    engine.event('strategy', {plan: normalisePlan(plan, {card: 'balanced'})}, epoch + ticks[0].t);
+    assert.equal(engine.view().plan.strategyLabel, 'Balanced');
+    assert.equal(engine.view().status, 'armed', 'a new plan, armed again on the tick');
+    const log = engine.state.log.length;
+    engine.event('strategy', {plan: normalisePlan(plan, {card: 'balanced'})}, epoch + ticks[0].t);
+    assert.equal(engine.state.log.length, log, 'the same strategy: nothing');
+});

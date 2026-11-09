@@ -300,6 +300,32 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 }
                 break;
             }
+            case 'strategy': {
+                // The same plan in another strategy, any time (Dave, 2026-11-09; decision 8 was
+                // before the start only). Not racing, it is a new plan. Racing, the targets
+                // change in place: the clock, the W', the position, the anchors and the
+                // rider's controls stay; the interval statistics start again (the strategies'
+                // intervals differ), the interval in progress as a partial one.
+                const next = payload?.plan ? (payload.plan.signature ? payload.plan : normalisePlan(payload.plan, {code: payload.code})) : null;
+                if (next?.signature === state.plan?.signature) {
+                    return;
+                }
+                if (state.status !== 'racing' || !next || !state.plan) {
+                    event('plan', payload, nowMs);
+                    return;
+                }
+                state.plan = next;
+                state.tracking = createTracking();
+                state.index = BEFORE;
+                state.displayIndex = BEFORE;
+                state.planTimeAtStart = planTimeAtMetre(next.intervals, state.clock.startPlanM ?? 0);
+                state.lastPrediction = null;
+                log(`Strategy changed while racing: ${next.strategyLabel ?? 'as shared'}`, nowMs);
+                if (state.tick) {
+                    tick(state.tick, nowMs);
+                }
+                break;
+            }
             case 'reset':
                 clearRace('reset by the rider', nowMs);
                 setStatus(state.plan && state.tick && !state.hereSpent ? 'armed' : 'idle', nowMs);

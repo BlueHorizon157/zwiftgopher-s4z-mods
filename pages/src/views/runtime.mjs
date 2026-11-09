@@ -10,8 +10,8 @@ import {fetchEventInfo} from '../eventinfo.mjs';
 import {createEngine} from '../engine/engine.mjs';
 import {normalisePlan} from '../engine/plan.mjs';
 import {loadPlanByCode, fetchPlanByCode, loadReplayPlan} from './plan-loader.mjs';
-import {syncOnce, chooseActivation, activePlanStep, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, shelfPlan, shelfPlanFromHere, PENDING_POLL_MS} from './shelf-sync.mjs';
-import {hereTarget, powerHistory, chooseBike, hereOffered, bikeWords} from './from-here.mjs';
+import {syncOnce, chooseActivation, activePlanStep, planForPlace, fitsEvent, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, shelfPlan, shelfPlanFromHere, PENDING_POLL_MS} from './shelf-sync.mjs';
+import {hereTarget, powerHistory, chooseBike, hereOffered, bikeWords, hereCard} from './from-here.mjs';
 
 export const SETTINGS_DEFAULTS = {
     layout: 'auto',           // auto = the manifest window's ?layout
@@ -27,6 +27,7 @@ export const SETTINGS_DEFAULTS = {
     finishShows: 'remaining', // the finish cell while racing: remaining (time to go) | finish (predicted finish time)
     planItInputs: 'last',     // Plan it plans with the rider's last planner settings, or the planner's defaults
     hereBike: 'auto',         // Plan from here's bike: auto (road unless the draft says TT) | road | tt
+    hereStrategy: 'balanced', // Plan from here's strategy to start on: fastest | balanced | safe_finish
     showDebug: false,
     gapMode: 'clock',         // field: clock (standings) | finish (predicted) | road (who is physically ahead)
     allSubgroups: false,      // field: riders of every category
@@ -87,15 +88,15 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         }
     };
 
-    // A new plan applies at once; a strategy change, or the same plan republished by the
-    // planner, only before the start (decision 8): made during a race, it waits until this
-    // window's race is over.
+    // A new plan applies at once. A strategy changes any time (Dave, 2026-11-09): racing, in
+    // place, the clock and the W' carrying on. The same plan republished by the planner during
+    // a race, or a strategy chosen after the finish, waits until this window's race is over.
     const beforeStart = () => engine.state.status === 'idle' || engine.state.status === 'armed';
     const syncPlan = () => {
         const code = store.getActiveCode();
         const card = store.getActiveCard();
         const savedAt = savedAtOf(code);
-        const step = activePlanStep({code, card, savedAt}, {code: activeCode, card: activeCard, savedAt: activeSavedAt}, beforeStart());
+        const step = activePlanStep({code, card, savedAt}, {code: activeCode, card: activeCard, savedAt: activeSavedAt}, engine.state.status);
         if (step === 'same') {
             cardWaiting = false;
             return;
@@ -108,6 +109,11 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         activeCard = card;
         activeSavedAt = savedAt;
         cardWaiting = false;
+        if (step === 'swap') {
+            // The rider's offset and bias stay with the race.
+            engine.event('strategy', {plan: activePlan(), code});
+            return;
+        }
         engine.event('plan', {plan: activePlan(), code});
         // The engine starts a new plan with neutral controls; the store holds the rider's.
         const c = store.getControls();
@@ -163,6 +169,9 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         // The rider's own ticks only, as the engine: spectating, the pen is someone else's.
         if (!engine.state.spectating) {
             tickSubgroup = data?.state?.eventSubgroupId ?? data?.eventSubgroupId ?? null;
+            if (!tickSubgroup && !sauce.isReplay) {
+                pickForRoute(data);
+            }
         }
         const sg = engine.state.event.subgroupId ?? tickSubgroup;
         if (sg && (engine.state.event.kind == null || String(engine.state.event.infoFor) !== String(sg)) && !eventInfoAsked.has(String(sg))) {
@@ -190,21 +199,60 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     };
     // Plans from here are the rest of one ride: never the plan for an event or the next TT.
     const eventPlans = () => store.listPlans().filter(p => !p.raw?.meta?.from_here).map(planEntry);
+    const eventOf = info => ({eventId: info.eventId, subgroupId: info.subgroupId, routeId: info.routeId, laps: info.laps, distanceM: info.distanceM});
+    // Where the rider is, for an arriving plan (chooseActivation): the pen (with its course
+    // once the event info is in), else the route of a free ride, else nowhere.
+    const placeNow = () => {
+        const sg = engine.state.event.subgroupId ?? tickSubgroup;
+        if (sg) {
+            return {event: lastEventInfo && String(lastEventInfo.subgroupId) === String(sg) ? eventOf(lastEventInfo) : {subgroupId: sg}};
+        }
+        const routeId = engine.state.tick?.state?.routeId;
+        return routeId ? {routeId} : null;
+    };
     const pickForEvent = info => {
         if (!info?.subgroupId || pickedFor === String(info.subgroupId) || !beforeStart()) {
             return;
         }
         pickedFor = String(info.subgroupId);
-        const code = choosePlanForEvent({
-            plans: eventPlans(),
-            event: {eventId: info.eventId, subgroupId: info.subgroupId, routeId: info.routeId, laps: info.laps, distanceM: info.distanceM},
-            activeCode: store.getActiveCode(),
-        });
+        const event = eventOf(info);
+        const activeCode = store.getActiveCode();
+        const code = choosePlanForEvent({plans: eventPlans(), event, activeCode});
         if (code) {
             store.setActive(code);
             store.setShelf({offer: null});
             syncPlan();
             note(`Plan ${code} for ${info.name ?? 'the event'}.`);
+            return;
+        }
+        // Nothing fits this pen: a plan for another course is put away rather than raced here
+        // (Dave, 2026-11-09). Only when the event's course is known; a plan from here looks
+        // after itself; the rider can load it again by hand and it stays (once per pen).
+        const active = activeCode ? eventPlans().find(p => p.code === activeCode) : null;
+        if (active && info.routeId != null && !fitsEvent(active, event)) {
+            store.setActive(null);
+            syncPlan();
+            note(`Plan ${activeCode} is for another course: put away for ${info.name ?? 'this event'}. Load it from the list to ride it anyway.`);
+        }
+    };
+    // A free ride on a route with no plan: the newest plan for that route comes up, once per
+    // route, so a plan the rider puts away stays away (Dave, 2026-11-09).
+    let pickedRoute = null;
+    const pickForRoute = data => {
+        const routeId = data?.state?.routeId;
+        if (!routeId || String(routeId) === pickedRoute) {
+            return;
+        }
+        pickedRoute = String(routeId);
+        if (store.getActiveCode() || !beforeStart()) {
+            return;
+        }
+        const code = planForPlace(eventPlans(), {routeId});
+        if (code) {
+            store.setActive(code);
+            store.setShelf({offer: null});
+            syncPlan();
+            note(`Plan ${code} for this route.`);
         }
     };
 
@@ -353,7 +401,9 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             file.meta = {...(file.meta ?? {}), from_here: {...(file.meta?.from_here ?? {}), anchor: {
                 ride_m: target.anchor.rideM, world_ms: target.anchor.worldMs, subgroup_id: target.anchor.subgroupId, route_id: target.anchor.routeId,
             }}};
-            store.savePlan(result.code, file, {activate: true, shelf: true, source: 'here', event: file.meta?.event ?? null, publishedAt: file.meta?.published?.at ?? null, expiresAt: result.meta?.expires_at ?? null});
+            store.savePlan(result.code, file, {activate: false, shelf: true, source: 'here', event: file.meta?.event ?? null, publishedAt: file.meta?.published?.at ?? null, expiresAt: result.meta?.expires_at ?? null});
+            // Balanced unless the setting says otherwise; the strategy chip changes it any time.
+            store.setActive(result.code, hereCard(file, settings?.get('hereStrategy')));
             store.setShelf({offer: null});
             syncPlan();
             const fh = result.meta?.from_here ?? file.meta.from_here;
@@ -436,8 +486,8 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
                 linkSupported = true;
                 store.setShelf({etag: r.etag, lastSyncAt: Date.now(), unsupportedAt: null});
                 if (r.added.length) {
-                    const {activate, offer} = chooseActivation({added: r.added, plans: r.plans, activeCode: store.getActiveCode(),
-                        inEvent: Boolean(engine.state.event.subgroupId), beforeStart: beforeStart()});
+                    const {activate, offer} = chooseActivation({added: r.added, plans: r.plans, entries: eventPlans(),
+                        activeCode: store.getActiveCode(), where: placeNow(), beforeStart: beforeStart()});
                     // The active plan republished (edited in the planner, same code): the store
                     // tells the other windows; this one, which saved it, applies it itself.
                     const republished = store.getActiveCode();
@@ -449,7 +499,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
                         store.setActive(activate);
                         store.setShelf({offer: null});
                         syncPlan();
-                        note(`Plan ${activate} from the planner.`);
+                        note(`Plan ${activate} from the planner, for where you are.`);
                     } else if (offer) {
                         const e = store.getPlanEntry(offer);
                         store.setShelf({offer: {code: offer, routeName: e?.routeName ?? null, timeText: e?.timeText ?? null, at: Date.now()}});
@@ -489,9 +539,21 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             draw();
             return code;
         },
-        /** Ride one of the plan's strategy cards (null: the plan as shared); before the start only. */
+        /** Ride with no plan (the HUD's Clear plan): the race is cleared; a pen or route does not bring it back. */
+        clearPlan() {
+            const code = store.getActiveCode();
+            if (!code) {
+                return false;
+            }
+            store.setActive(null);
+            syncPlan();
+            note(`Plan ${code} cleared: Plan from here, Plan it or a code when you want one.`);
+            draw();
+            return true;
+        },
+        /** Ride one of the plan's strategy cards (null: the plan as shared): before the start, or racing (in place). */
         setStrategy(card) {
-            if (!beforeStart() || !activeCode) {
+            if (!(beforeStart() || engine.state.status === 'racing') || !activeCode) {
                 return false;
             }
             store.setActiveCard(card);

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {syncOnce, needsFetch, chooseActivation, activePlanStep, shouldPoll, linkStart, linkStatus, serverSupportsLink, signedUpTimeTrials, POLL_GUARD_MS} from '../pages/src/views/shelf-sync.mjs';
+import {syncOnce, needsFetch, chooseActivation, activePlanStep, planForPlace, fitsEvent, shouldPoll, linkStart, linkStatus, serverSupportsLink, signedUpTimeTrials, POLL_GUARD_MS} from '../pages/src/views/shelf-sync.mjs';
 
 // A fetch that answers from a script: [{match: url substring, status, json, etag}].
 function fakeFetch(script) {
@@ -93,25 +93,49 @@ test('a failed plan download leaves the plan for the next poll and the listing r
     assert.equal(fetchFn.calls.filter(c => c.method === 'POST').length, 1, 'only the saved plan is acknowledged');
 });
 
-test('a new plan becomes the plan when nothing is active outside an event; otherwise it is offered before the start', () => {
+test('an arriving plan comes up only where it fits (its pen, its event, the route being ridden); otherwise it is offered', () => {
     const plans = [plan('NEW111'), plan('OLD111')];
-    assert.deepEqual(chooseActivation({added: ['OLD111', 'NEW111'], plans, activeCode: null, inEvent: false, beforeStart: true}), {activate: 'NEW111', offer: null}, 'the newest of the arrivals, in the shelf\'s order');
-    assert.deepEqual(chooseActivation({added: ['NEW111'], plans, activeCode: 'OLD111', inEvent: false, beforeStart: true}), {activate: null, offer: 'NEW111'});
-    assert.deepEqual(chooseActivation({added: ['NEW111'], plans, activeCode: null, inEvent: true, beforeStart: true}), {activate: null, offer: 'NEW111'}, 'in an event nothing arms itself by arrival (the event match does that)');
-    assert.deepEqual(chooseActivation({added: ['NEW111'], plans, activeCode: 'OLD111', inEvent: false, beforeStart: false}), {activate: null, offer: null}, 'racing: nothing');
-    assert.deepEqual(chooseActivation({added: ['OLD111'], plans, activeCode: 'OLD111', inEvent: false, beforeStart: true}), {activate: null, offer: null}, 'the active plan republished is no offer');
-    assert.deepEqual(chooseActivation({added: [], plans, activeCode: null, inEvent: false, beforeStart: true}), {activate: null, offer: null});
+    const entry = (code, extra = {}) => ({code, routeId: '3395698268', laps: 1, lengthM: 10710, event: null, ...extra});
+    const entries = [entry('NEW111'), entry('OLD111')];
+    const flatOutFast = {routeId: '3395698268'};
+    const elsewhere = {routeId: '1111111111'};
+    assert.deepEqual(chooseActivation({added: ['OLD111', 'NEW111'], plans, entries, activeCode: null, where: flatOutFast, beforeStart: true}), {activate: 'NEW111', offer: null}, 'riding its route: the newest of the arrivals, in the shelf\'s order');
+    assert.deepEqual(chooseActivation({added: ['NEW111'], plans, entries, activeCode: null, where: elsewhere, beforeStart: true}), {activate: null, offer: 'NEW111'}, 'warming up on another route: offered, not loaded');
+    assert.deepEqual(chooseActivation({added: ['NEW111'], plans, entries, activeCode: null, where: null, beforeStart: true}), {activate: null, offer: 'NEW111'}, 'nowhere yet (no route): offered');
+    assert.deepEqual(chooseActivation({added: ['NEW111'], plans, entries, activeCode: 'OLD111', where: flatOutFast, beforeStart: true}), {activate: 'NEW111', offer: null}, 'a newer plan for this route replaces the one loaded');
+    const penPlans = [entry('PEN111', {event: {id: 5727315, subgroup_id: 7380880}}), entry('NEW111')];
+    const pen = {event: {eventId: 5727315, subgroupId: 7380880, routeId: '3395698268', laps: 1}};
+    assert.deepEqual(chooseActivation({added: ['PEN111'], plans: [plan('PEN111')], entries: penPlans, activeCode: null, where: pen, beforeStart: true}), {activate: 'PEN111', offer: null}, 'in its pen');
+    assert.deepEqual(chooseActivation({added: ['PEN111'], plans: [plan('PEN111')], entries: penPlans, activeCode: null, where: {event: {subgroupId: 7380880}}, beforeStart: true}), {activate: 'PEN111', offer: null}, 'in its pen before the event info is in');
+    assert.deepEqual(chooseActivation({added: ['PEN111'], plans: [plan('PEN111')], entries: penPlans, activeCode: null, where: {event: {eventId: 1, subgroupId: 2, routeId: '1111111111', laps: 1}}, beforeStart: true}), {activate: null, offer: 'PEN111'}, 'in another pen: offered');
+    assert.deepEqual(chooseActivation({added: ['NEW111'], plans, entries, activeCode: 'OLD111', where: flatOutFast, beforeStart: false}), {activate: null, offer: null}, 'racing: nothing');
+    assert.deepEqual(chooseActivation({added: ['OLD111'], plans, entries, activeCode: 'OLD111', where: flatOutFast, beforeStart: true}), {activate: null, offer: null}, 'the active plan republished is no offer');
+    assert.deepEqual(chooseActivation({added: [], plans, entries, activeCode: null, where: flatOutFast, beforeStart: true}), {activate: null, offer: null});
 });
 
-test('the active plan republished under its code reaches the engine before the start, after the race', () => {
+test('a plan fits a pen by pen, event, or route with the same laps or length; a free ride by route', () => {
+    const e = (code, extra = {}) => ({code, routeId: '3395698268', laps: 1, lengthM: 10710, event: null, ...extra});
+    const event = {eventId: 9, subgroupId: 90, routeId: '3395698268', laps: 1};
+    assert.equal(fitsEvent(e('A'), event), true, 'same route and laps');
+    assert.equal(fitsEvent(e('A', {laps: 2}), event), false, 'other laps');
+    assert.equal(fitsEvent(e('A', {routeId: '1'}), event), false, 'other route');
+    assert.equal(fitsEvent(e('A', {routeId: '1', event: {id: 9}}), event), true, 'made for the event');
+    assert.equal(planForPlace([e('NEWER'), e('OLDER')], {routeId: '3395698268'}), 'NEWER', 'free ride: the newest for the route');
+    assert.equal(planForPlace([e('A')], {routeId: '1'}), null);
+    assert.equal(planForPlace([e('A')], null), null);
+});
+
+test('the active plan republished reaches the engine before the start; a strategy changes any time', () => {
     const had = {code: 'OLD111', card: null, savedAt: 1000};
-    assert.equal(activePlanStep({...had}, had, true), 'same', 'nothing changed');
-    assert.equal(activePlanStep({...had, savedAt: 2000}, had, true), 'apply', 'edited in the planner, same code: the new file before the start');
-    assert.equal(activePlanStep({...had, savedAt: 2000}, had, false), 'wait', 'racing: the edit waits for the race to end');
-    assert.equal(activePlanStep({...had, card: 'fastest'}, had, true), 'apply', 'a strategy change before the start');
-    assert.equal(activePlanStep({...had, card: 'fastest'}, had, false), 'wait', 'a strategy change while racing waits');
-    assert.equal(activePlanStep({code: 'NEW111', card: null, savedAt: 3000}, had, false), 'apply', 'another plan applies at once, racing or not');
-    assert.equal(activePlanStep({code: null, card: null, savedAt: null}, had, true), 'apply', 'the plan cleared');
+    assert.equal(activePlanStep({...had}, had, 'armed'), 'same', 'nothing changed');
+    assert.equal(activePlanStep({...had, savedAt: 2000}, had, 'armed'), 'apply', 'edited in the planner, same code: the new file before the start');
+    assert.equal(activePlanStep({...had, savedAt: 2000}, had, 'racing'), 'wait', 'racing: the edit waits for the race to end');
+    assert.equal(activePlanStep({...had, card: 'balanced'}, had, 'idle'), 'apply', 'a strategy change before the start');
+    assert.equal(activePlanStep({...had, card: 'balanced'}, had, 'racing'), 'swap', 'a strategy change while racing: in place');
+    assert.equal(activePlanStep({...had, card: 'balanced', savedAt: 2000}, had, 'racing'), 'wait', 'a new file and a strategy while racing: after the race');
+    assert.equal(activePlanStep({...had, card: 'balanced'}, had, 'finished'), 'wait', 'after the finish: for the next ride');
+    assert.equal(activePlanStep({code: 'NEW111', card: null, savedAt: 3000}, had, 'racing'), 'apply', 'another plan applies at once, racing or not');
+    assert.equal(activePlanStep({code: null, card: null, savedAt: null}, had, 'armed'), 'apply', 'the plan cleared');
 });
 
 test('one window polls a minute, only while linked, quiet and visible', () => {

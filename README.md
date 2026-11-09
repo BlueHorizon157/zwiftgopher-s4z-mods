@@ -62,10 +62,11 @@ Link once and the codes go away: in the HUD's settings, under **Plans**, press *
 planner**. The HUD shows a six-letter pairing code (ten minutes). In the planner, open your
 plan's **Share** dialog, press **Link Sauce** and type the code. From then on every plan you
 optimise in that browser arrives in the mod by itself, within a minute, while a HUD window is
-open and no race is running. With no plan loaded, the new plan becomes the plan; with one
-loaded, the HUD offers it (*new plan: Urumaze · 14:57*, **Use**) before the start. The
-planner shows *Sauce has it ✓* once the mod has saved the plan. Nothing is ever changed while
-you race.
+open and no race is running. A plan comes up where it belongs: in its event's pen, or on its
+route on a free ride. Anywhere else the HUD offers it (*new plan: Urumaze · 14:57*, **Use**)
+and **Use** loads it now, say to look it over while warming up on another route. An edited
+plan sent again under the same code replaces the one loaded before the start. The planner
+shows *Sauce has it ✓* once the mod has saved the plan. Nothing arrives while you race.
 
 The link is a token the mod keeps for itself; the planner keeps only its hash, and either side
 can end it (settings → Plans → **Unlink**, or the planner's Devices list). Linking needs the
@@ -76,8 +77,11 @@ before.
 
 A plan made from the planner's event picker knows its event. When you join that event's pen,
 the HUD arms the plan by itself before the start; failing a plan for the event, it arms the
-plan for the same route with the same laps, or within 1 % of a distance event's length. A
-plan you choose by hand after joining stays. With nothing happening, the plan panel shows the
+plan for the same route with the same laps, or within 1 % of a distance event's length. With
+no plan for the event, a plan for another course is put away rather than raced there (load it
+again from the list to ride it anyway). On a free ride with nothing loaded, the newest plan for
+the route you are on comes up. A plan you choose by hand after joining stays, and so does
+**Clear plan** (the plan panel): the pen or the route does not bring the plan back. With nothing happening, the plan panel shows the
 next time trial you are signed up for (*next TT: Urumaze 19:20 (in 42 min) · plan ready*),
 from what Sauce has loaded (about four hours ahead) and from the plans the planner sent; the
 settings page lists them. While linked, the mod tells the planner which events you signed up
@@ -97,7 +101,8 @@ way.
 Riding with no plan: dropped, clear on your own, or on a free ride? Linked, the plan panel has
 **Plan from here** with how far there is to go (*to the finish · 8.6 km* in a race, *to the
 end of the lap · 12.3 km* on a free ride on a route). The planner plans the rest from where
-you are and the HUD rides it at once, measured from the moment you pressed.
+you are and the HUD rides it at once, measured from the moment you pressed, on *Balanced*
+(settings → Advanced → *Plan from here starts on*; the strategy chip changes it any time).
 
 - **What the ride has cost you.** The power Sauce kept for the ride goes with the request:
   the planner replays it for the W′ you have left, and takes your NP so far with the time the
@@ -109,19 +114,22 @@ you are and the HUD rides it at once, measured from the moment you pressed.
   (the plan ends where the route's lap does). Not a race ridden for a time, not a free ride
   with no route, not the last 500 m.
 - **For this ride only.** Leave the race or the route and the plan is put away. With a plan
-  already running there is no new one: the tray's **bias** turns every target down instead.
-  The banner reads *from here · road bike*, with *tired legs* when the ride has taken some
-  of your CP.
+  from here running, the plan panel (**Plan** in the tray) offers it *again from here*: the
+  planner replays the whole ride, so the new plan starts from the W′ you have now. Over any
+  other plan, pick a safer strategy, turn the tray's **bias** down, or **Clear plan** and plan
+  from here. The banner reads *from here · road bike*, with *tired legs* when the ride has
+  taken some of your CP.
 
 It shares Plan it's six plans an hour.
 
 ### Choosing a strategy
 
 An optimised plan carries the optimiser's three ways to ride it: *Fastest*, *Balanced* and
-*Safe finish*. Before the start the HUD's top line shows the one you are on; click it (or
-**Plan** in the tray, or settings → Plans) and pick another. Every window rides the new one.
-Once the race starts the choice is locked, so the race HUD never changes under you; a change
-made on the settings page during a race waits until it is over.
+*Safe finish*. The HUD's top line shows the one you are on; click it (or **Plan** in the
+tray, or settings → Plans) and pick another, before the start or during the race. Every window
+rides the new one. During a race the targets change in place: the clock, your position and
+your W′ carry on, and the interval you are in starts its statistics again. A plan edited in
+the planner during a race waits until it is over.
 
 ![plan panel](docs/screenshots/hud-strategy-jungle.png)
 
@@ -212,7 +220,7 @@ the library, code entry and the active plan's strategy. Look: background (clear,
 size, and for the HUD its layout, band words and cadence/HR/speed. Pacing: power smoothing,
 on-target band, the amber warning time, how the clock starts. Field: gap on the
 clock or the road, every category. Rivals: riders named each side. Advanced: what Plan it
-plans with, Plan from here's bike, debug log, the telemetry recorder.
+plans with, Plan from here's bike and the strategy it starts on, debug log, the telemetry recorder.
 
 ## Development
 

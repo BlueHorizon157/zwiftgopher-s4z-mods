@@ -2,6 +2,7 @@
 // plan for the ride, the planner plans the rest of a race, or of a free ride's route lap,
 // from where the rider is, with the W' and the CP the ride so far has left them. Pure: the
 // window gives it the tick, the event info, Sauce's streams and the settings.
+import {normalisePlan} from '../engine/plan.mjs';
 
 export const MIN_REMAINING_M = 500;      // less to go: no plan, just go (the planner says the same)
 export const MAX_HISTORY_S = 6 * 3600;   // the power sent: the newest six hours
@@ -9,6 +10,10 @@ export const SHORT_GAP_S = 3;            // a gap in Sauce's samples up to this 
 export const DRAFTED_S = 10;             // seconds of draft that make it a road bike (TT bikes get none)
 export const NO_DRAFT_RACE_S = 180;      // this long into a draft-legal race with no draft at all: a TT bike
 export const PAUSED = -1;
+// The strategy a plan from here starts on (Dave, 2026-11-09): Balanced unless the setting says
+// otherwise, the tiredness from the ride so far being a model not yet calibrated.
+export const HERE_STRATEGIES = ['fastest', 'balanced', 'safe_finish'];
+export const HERE_STRATEGY_DEFAULT = 'balanced';
 
 /**
  * What a plan from here would plan, from the rider's tick: {ok: true, kind: 'event'|'route',
@@ -169,17 +174,16 @@ export function chooseBike({setting = 'auto', target = null, draftS = 0, raceS =
 
 /**
  * Whether the HUD offers Plan from here: linked, the rider's own ride, a target, and no plan
- * running for this ride: nothing loaded, a plan waiting for another ride, a plan from here
- * that is over, or a plan for another distance being raced (mismatch).
+ * running for this ride (nothing loaded, a plan waiting for another ride, a plan for another
+ * distance being raced), or a plan from here, to make again later in the ride (Dave,
+ * 2026-11-09): the planner replays the whole ride, so the new one starts from the W' left now.
+ * A plan the rider wants gone for good: Clear plan, then this.
  */
 export function hereOffered({linked, spectating = false, status, plan = null, mismatchM = null, spent = false, target}) {
     if (!linked || spectating || !target?.ok) {
         return false;
     }
-    if (!plan || status === 'idle' || spent) {
-        return true;
-    }
-    if (plan.fromHere && status === 'finished') {
+    if (!plan || status === 'idle' || spent || plan.fromHere) {
         return true;
     }
     return status === 'racing' && Number.isFinite(mismatchM);
@@ -214,4 +218,14 @@ export function bikeWords({bike, reason}) {
         case 'no draft in the race': return `${what} (no draft all race)`;
         default: return what;
     }
+}
+
+/**
+ * The strategy card a new plan from here is ridden on, as the store keeps it: the card's key,
+ * or null for the plan as shared (the setting's card is the shared one, or the file lacks it).
+ */
+export function hereCard(file, setting = HERE_STRATEGY_DEFAULT) {
+    const key = HERE_STRATEGIES.includes(setting) ? setting : HERE_STRATEGY_DEFAULT;
+    const card = normalisePlan(file)?.cards?.find(c => c.key === key);
+    return card && card.switchable && !card.isShared ? key : null;
 }

@@ -4,7 +4,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {hereTarget, powerHistory, chooseBike, hereOffered, hereWords, bikeWords, MAX_HISTORY_S, PAUSED} from '../pages/src/views/from-here.mjs';
+import {hereTarget, powerHistory, chooseBike, hereOffered, hereWords, bikeWords, MAX_HISTORY_S, PAUSED, hereCard, HERE_STRATEGY_DEFAULT} from '../pages/src/views/from-here.mjs';
 import {createEngine} from '../pages/src/engine/engine.mjs';
 import {normalisePlan} from '../pages/src/engine/plan.mjs';
 
@@ -127,7 +127,8 @@ test('offered when riding with no plan for the ride, linked, on the rider\'s own
     assert.equal(hereOffered({linked: true, spectating: true, status: 'idle', target}), false);
     assert.equal(hereOffered({linked: true, status: 'idle', plan: null, target: {ok: false}}), false);
     assert.equal(hereOffered({linked: true, status: 'idle', plan: {code: 'A'}, target}), true, 'a plan for another ride');
-    assert.equal(hereOffered({linked: true, status: 'racing', plan: {code: 'A'}, target}), false, 'a plan for this race: the bias, not a new plan');
+    assert.equal(hereOffered({linked: true, status: 'racing', plan: {code: 'A'}, target}), false, 'a plan for this race: its strategy or Clear plan, not a new plan over it');
+    assert.equal(hereOffered({linked: true, status: 'racing', plan: {code: 'H', fromHere: {}}, target}), true, 'a plan from here running: made again from here');
     assert.equal(hereOffered({linked: true, status: 'racing', plan: {code: 'A'}, mismatchM: 6000, target}), true, 'a plan for another distance');
     assert.equal(hereOffered({linked: true, status: 'finished', plan: {code: 'H', fromHere: {}}, target}), true, 'the lap after a plan from here');
     assert.equal(hereOffered({linked: true, status: 'finished', plan: {code: 'A'}, target}), false);
@@ -243,4 +244,14 @@ test('a new plan after a spent one starts afresh', () => {
     engine.tick(tick({distance: 60200, worldTime: 1.7e12 + 1.02e6, routeId: ROUTE}), 1.7e12 + 1.02e6);
     assert.equal(engine.view().status, 'racing');
     assert.equal(engine.view().race.planM, 100);
+});
+
+test('a plan from here starts on Balanced unless the setting says otherwise', () => {
+    const file = JSON.parse(readFileSync(new URL('./fixtures/plans/flat.fit.optimise.json', import.meta.url), 'utf8'));
+    assert.equal(HERE_STRATEGY_DEFAULT, 'balanced');
+    assert.equal(hereCard(file), 'balanced', 'the default');
+    assert.equal(hereCard(file, 'safe_finish'), 'safe_finish');
+    assert.equal(hereCard(file, 'fastest'), null, 'Fastest is the plan as shared: no card');
+    assert.equal(hereCard(file, 'nonsense'), 'balanced', 'an unknown setting: the default');
+    assert.equal(hereCard({...file, cards: []}), null, 'no cards: the plan as shared');
 });

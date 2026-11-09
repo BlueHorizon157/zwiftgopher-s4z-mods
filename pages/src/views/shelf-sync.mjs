@@ -147,39 +147,67 @@ export function needsFetch(entry, have) {
 
 /**
  * What a window does with the active plan after a change in the store: 'same' (nothing to do),
- * 'wait' (racing: a new strategy, or the same plan republished, waits for the race to end,
- * decision 8) or 'apply' (hand it to the engine). A plan is its code, its strategy card and when
- * the library saved it: the planner republishes an edited plan under the same code, so the save
- * time is what tells the new file from the old one. {code, card, savedAt} each.
+ * 'apply' (hand it to the engine), 'swap' (racing: another strategy of the same plan, its
+ * targets in place, the clock and the W' carrying on; Dave, 2026-11-09, any plan) or 'wait'
+ * (the same plan republished during a race, or a strategy chosen after the finish: for the next
+ * ride). A plan is its code, its strategy card and when the library saved it: the planner
+ * republishes an edited plan under the same code, so the save time tells the new file from the
+ * old one. {code, card, savedAt} each; status: the engine's.
  */
-export function activePlanStep(now, had, beforeStart) {
+export function activePlanStep(now, had, status) {
     if (now.code === had.code && now.card === had.card && now.savedAt === had.savedAt) {
         return 'same';
     }
-    if (now.code === had.code && !beforeStart) {
-        return 'wait';
+    if (now.code !== had.code || status === 'idle' || status === 'armed') {
+        return 'apply';
     }
-    return 'apply';
+    return status === 'racing' && now.savedAt === had.savedAt ? 'swap' : 'wait';
 }
 
 /**
- * What a new plan does (decision 3): with nothing active and the rider outside an event, the
- * newest arrival becomes the plan; with a plan active and the start not yet made, it is
- * offered; while racing nothing moves (the caller does not sync then anyway).
+ * What a new plan does (decision 3, revised by Dave 2026-11-09: a plan comes up on its course
+ * or in its pen, not wherever the rider happens to be). Before the start, the newest arrival
+ * that fits where the rider is (planForPlace) becomes the plan; any other arrival is offered,
+ * to load by hand. While racing nothing moves (the caller does not sync then anyway).
+ * entries: planEntry()s for the library (code, routeId, laps, lengthM, event), newest first;
+ * where: {event: {eventId, subgroupId, routeId, laps, distanceM}} in a pen, {routeId} on a
+ * free ride, or null.
  */
-export function chooseActivation({added, plans, activeCode, inEvent, beforeStart}) {
-    if (!added.length) {
+export function chooseActivation({added, plans, entries = [], activeCode, where = null, beforeStart}) {
+    if (!added.length || !beforeStart) {
         return {activate: null, offer: null};
     }
     const order = (plans ?? []).map(p => p.code);
-    const newest = [...added].sort((a, b) => order.indexOf(a) - order.indexOf(b))[0] ?? added[0];
-    if (!activeCode && !inEvent) {
-        return {activate: newest, offer: null};
+    const arrived = [...added].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    const fit = planForPlace(arrived.map(code => entries.find(e => e.code === code)).filter(Boolean), where);
+    if (fit && fit !== activeCode) {
+        return {activate: fit, offer: null};
     }
-    if (beforeStart && newest !== activeCode) {
-        return {activate: null, offer: newest};
+    const newest = arrived[0];
+    return {activate: null, offer: newest !== activeCode && newest !== fit ? newest : null};
+}
+
+/**
+ * The plan for where the rider is, from entries (newest first): in a pen, choosePlanForEvent's
+ * (the pen's, the event's, the route's with the same laps or length); on a free ride, the newest
+ * plan for the route. Null when none fits.
+ */
+export function planForPlace(entries, where) {
+    if (!entries?.length || !where) {
+        return null;
     }
-    return {activate: null, offer: null};
+    if (where.event) {
+        return choosePlanForEvent({plans: entries, event: where.event});
+    }
+    if (where.routeId != null) {
+        return entries.find(e => e.routeId != null && String(e.routeId) === String(where.routeId))?.code ?? null;
+    }
+    return null;
+}
+
+/** Whether a plan fits an event: what choosePlanForEvent would pick from it alone. */
+export function fitsEvent(entry, event) {
+    return Boolean(entry && event) && choosePlanForEvent({plans: [entry], event}) === entry.code;
 }
 
 /** Whether this window should poll the shelf now (one window a minute for all of them). */

@@ -113,6 +113,7 @@
           <input type="text" id="plan-code" maxlength="6" placeholder="plan code" autocomplete="off" spellcheck="false" aria-label="Plan code">
           <button type="button" class="primary" id="load-plan">Load</button>
           <button type="button" id="close-panel" title="Keep this plan (Esc)" hidden>Close</button>
+          <button type="button" id="clear-plan" title="Ride with no plan: then Plan from here, or Plan it in a pen" hidden>Clear plan</button>
         </div>
         <div class="hint" id="idle-hint">The six-letter code from the planner's Share page, or paste its link.</div>
         <div class="message" id="idle-message"></div>
@@ -134,7 +135,7 @@
         <div class="group">
           <button type="button" class="primary" data-action="clip-load" id="tray-clip" title="Load the plan whose code is on your clipboard" hidden>Load</button>
           <button type="button" data-action="reset" title="Clear this race's statistics">Reset</button>
-          <button type="button" data-action="change-plan" title="Load another plan">Plan</button>
+          <button type="button" data-action="change-plan" title="Change the strategy, clear the plan, plan again from here, or load another">Plan</button>
           <a class="button-link open-settings" href="settings.html?for=hud&width=420&height=720&child-window" target="zg-tt-settings" title="Settings"><ms>settings</ms></a>
         </div>
       </div>
