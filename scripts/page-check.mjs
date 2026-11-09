@@ -517,7 +517,8 @@ try {
 
     // Pass 4: the link states (TT/RIDE_DAY_PLAN.md Phase 1), seeded through the store: the
     // pairing code in the plan panel, the toast for a plan that arrived while another is
-    // active and what Use does, and the idle title while linked with no plan.
+    // active and what Use does, the idle title while linked with no plan, the next time
+    // trial with Plan it, and Plan it for the event the rider is in.
     if (LINKS) {
         const page = 'hud';
         await b.size(...SIZES[page]);
@@ -533,8 +534,10 @@ try {
             fail(`${page}: the pairing code is not shown in the plan panel`);
         }
         await b.eval(`document.getElementById('close-panel').click()`);
+        // The offered plan is on another route: the engine keeps riding a plan whose signature
+        // (route and intervals) matches the one it has, whatever its code or name.
         await b.eval(`(() => { const s = window.zgtt.store; s.setLink({token: 'zgt_pagecheck', state: 'linked', zwiftId: 1, riderName: 'Page Check', linkedAt: Date.now()});
-            const raw = JSON.parse(JSON.stringify(s.getActivePlanRaw())); raw.route = {...raw.route, name: 'Urumaze'};
+            const raw = JSON.parse(JSON.stringify(s.getActivePlanRaw())); raw.route = {...raw.route, id: '4092230492', name: 'Urumaze'};
             s.savePlan('NEW111', raw, {activate: false, shelf: true, source: 'planner', publishedAt: new Date().toISOString()});
             s.setShelf({offer: {code: 'NEW111', routeName: 'Urumaze', timeText: raw.summary?.time_text ?? null, at: Date.now()}}); window.zgtt.api.draw(); })()`);
         await sleep(300);
@@ -555,9 +558,15 @@ try {
         if (used.active !== 'NEW111' || !used.toastHidden || used.route !== 'Urumaze') {
             fail(`${page}: Use did not switch to the offered plan`);
         }
-        // Linked, no plan: the panel waits for the planner instead of asking for a code.
+        // Linked, no plan, not in an event: the panel waits for the planner instead of asking
+        // for a code, and shows the next time trial with Plan it. No replay here (the replayed
+        // rider is in the synthetic event from the first second, and the HUD then shows "this
+        // event", checked below), so the window is live on Sauce: run it outside an event. The
+        // planner is pointed at a closed port first, so the made-up token never reaches it.
+        const offline = await b.send('Page.addScriptToEvaluateOnNewDocument', {source: `window.ZG_PLANNER_BASE = 'http://127.0.0.1:9/TT';`});
+        await b.goto(`${MOD}/${page}.html?windowId=zg-link-idle`);
         await b.eval('localStorage.clear()');
-        await b.goto(`${MOD}/${page}.html?replay=${REPLAY}&speed=1&windowId=zg-link-idle`);
+        await b.goto(`${MOD}/${page}.html?windowId=zg-link-idle`);
         await b.waitFor('window.zgtt', 15000);
         await b.eval(`window.zgtt.store.setLink({token: 'zgt_pagecheck', state: 'linked', zwiftId: 1, riderName: 'Page Check', linkedAt: Date.now()}); window.zgtt.api.draw()`);
         await sleep(300);
@@ -584,6 +593,21 @@ try {
         console.log(`-- ${page} Plan it: ${JSON.stringify(planIt)}`);
         if (!planIt.shown || planIt.target !== '4092230492') {
             fail(`${page}: Plan it is not offered for the next time trial`);
+        }
+        await b.send('Page.removeScriptToEvaluateOnNewDocument', {identifier: offline.identifier});
+        // In the pen of an event with no plan for it: "this event … no plan yet" with Plan it,
+        // aimed at the event itself once Sauce's event info has arrived (2.5).
+        await b.eval('localStorage.clear()');
+        await b.goto(`${MOD}/${page}.html?replay=${REPLAY}&speed=1&seek=20&windowId=zg-link-event`);
+        await b.waitFor('window.zgtt', 15000);
+        await b.eval(`window.zgtt.store.setLink({token: 'zgt_pagecheck', state: 'linked', zwiftId: 1, riderName: 'Page Check', linkedAt: Date.now()}); window.zgtt.api.draw()`);
+        const eventKnown = await b.waitFor('window.zgtt.api.planTarget()?.inEvent', 15000);
+        await sleep(300);
+        const thisEvent = await b.eval(`(() => ({shown: !document.getElementById('next-tt').hidden, label: document.getElementById('next-tt-label').textContent, text: document.getElementById('next-tt-text').textContent, planIt: !document.getElementById('next-tt-plan').hidden, target: window.zgtt.api.planTarget()}))()`);
+        await b.screenshot(join(OUT, `${page}-link-this-event.png`));
+        console.log(`-- ${page} in the event, no plan: ${JSON.stringify({...thisEvent, target: thisEvent.target && {routeId: thisEvent.target.routeId, eventId: thisEvent.target.eventId, inEvent: thisEvent.target.inEvent}})}`);
+        if (!eventKnown || !thisEvent.shown || thisEvent.label !== 'this event' || !/no plan yet/.test(thisEvent.text) || !thisEvent.planIt) {
+            fail(`${page}: Plan it is not offered for the event the rider is in`);
         }
         await b.eval('localStorage.clear()');
     }

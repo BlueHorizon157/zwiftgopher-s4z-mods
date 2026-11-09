@@ -69,6 +69,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     const engine = createEngine({plan: activePlan(), prefs: prefs(), controls: store.getControls()});
     let lastResetAt = store.getControls().resetAt;
     const eventInfoAsked = new Set();
+    let tickSubgroup = null;            // the pen in the last tick, plan or not (see the tick handler)
     const messages = [];
     const note = message => {
         messages.unshift({t: Date.now(), msg: message});
@@ -140,8 +141,15 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         if (cardWaiting && beforeStart()) {
             syncPlan();
         }
-        const sg = engine.state.event.subgroupId;
-        if (sg && engine.state.event.kind == null && !eventInfoAsked.has(String(sg))) {
+        // The pen the rider is in, from the tick: the engine only tracks the event while it has
+        // a plan, and Plan it and the plan for the event (pickForEvent) need it before there is
+        // one. What activates an arriving plan (chooseActivation) still goes by the engine's.
+        // The rider's own ticks only, as the engine: spectating, the pen is someone else's.
+        if (!engine.state.spectating) {
+            tickSubgroup = data?.state?.eventSubgroupId ?? data?.eventSubgroupId ?? null;
+        }
+        const sg = engine.state.event.subgroupId ?? tickSubgroup;
+        if (sg && (engine.state.event.kind == null || String(engine.state.event.infoFor) !== String(sg)) && !eventInfoAsked.has(String(sg))) {
             eventInfoAsked.add(String(sg));
             fetchEventInfo(sg).then(info => {
                 lastEventInfo = info;
@@ -221,7 +229,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     // the plan with the rider's last planner settings (or its defaults) and the shelf keeps it.
     let planning = null;
     const planTarget = () => {
-        const sg = engine.state.event.subgroupId;
+        const sg = engine.state.event.subgroupId ?? tickSubgroup;
         if (sg && lastEventInfo && String(lastEventInfo.subgroupId) === String(sg) && lastEventInfo.routeId != null) {
             return {routeId: String(lastEventInfo.routeId), laps: lastEventInfo.laps ?? 1, distanceM: lastEventInfo.distanceM ?? 0, eventId: lastEventInfo.eventId, subgroupId: lastEventInfo.subgroupId, ts: lastEventInfo.startMs ?? null, name: lastEventInfo.name ?? null, inEvent: true};
         }

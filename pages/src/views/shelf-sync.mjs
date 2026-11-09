@@ -15,7 +15,9 @@ const base = () => (typeof window !== 'undefined' && window.ZG_PLANNER_BASE) || 
 async function request(fetchFn, url, {method = 'GET', token = null, body = null, headers = {}} = {}) {
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), TIMEOUT_MS) : null;
-    const h = {...headers};
+    // Ask for JSON: the planner keeps PHP's error text out of a JSON request (a CORS-safelisted
+    // header, so no preflight of its own).
+    const h = {Accept: 'application/json', ...headers};
     if (token) {
         h.Authorization = `Bearer ${token}`;
     }
