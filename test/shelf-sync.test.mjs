@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {syncOnce, needsFetch, chooseActivation, shouldPoll, linkStart, linkStatus, serverSupportsLink, signedUpTimeTrials, POLL_GUARD_MS} from '../pages/src/views/shelf-sync.mjs';
+import {syncOnce, needsFetch, chooseActivation, activePlanStep, shouldPoll, linkStart, linkStatus, serverSupportsLink, signedUpTimeTrials, POLL_GUARD_MS} from '../pages/src/views/shelf-sync.mjs';
 
 // A fetch that answers from a script: [{match: url substring, status, json, etag}].
 function fakeFetch(script) {
@@ -101,6 +101,17 @@ test('a new plan becomes the plan when nothing is active outside an event; other
     assert.deepEqual(chooseActivation({added: ['NEW111'], plans, activeCode: 'OLD111', inEvent: false, beforeStart: false}), {activate: null, offer: null}, 'racing: nothing');
     assert.deepEqual(chooseActivation({added: ['OLD111'], plans, activeCode: 'OLD111', inEvent: false, beforeStart: true}), {activate: null, offer: null}, 'the active plan republished is no offer');
     assert.deepEqual(chooseActivation({added: [], plans, activeCode: null, inEvent: false, beforeStart: true}), {activate: null, offer: null});
+});
+
+test('the active plan republished under its code reaches the engine before the start, after the race', () => {
+    const had = {code: 'OLD111', card: null, savedAt: 1000};
+    assert.equal(activePlanStep({...had}, had, true), 'same', 'nothing changed');
+    assert.equal(activePlanStep({...had, savedAt: 2000}, had, true), 'apply', 'edited in the planner, same code: the new file before the start');
+    assert.equal(activePlanStep({...had, savedAt: 2000}, had, false), 'wait', 'racing: the edit waits for the race to end');
+    assert.equal(activePlanStep({...had, card: 'fastest'}, had, true), 'apply', 'a strategy change before the start');
+    assert.equal(activePlanStep({...had, card: 'fastest'}, had, false), 'wait', 'a strategy change while racing waits');
+    assert.equal(activePlanStep({code: 'NEW111', card: null, savedAt: 3000}, had, false), 'apply', 'another plan applies at once, racing or not');
+    assert.equal(activePlanStep({code: null, card: null, savedAt: null}, had, true), 'apply', 'the plan cleared');
 });
 
 test('one window polls a minute, only while linked, quiet and visible', () => {

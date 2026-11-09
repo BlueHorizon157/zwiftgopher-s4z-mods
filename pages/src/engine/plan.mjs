@@ -163,10 +163,11 @@ function normaliseCard(card, sharedRows) {
     };
 }
 
-// Tells two plans apart without serialising the whole plan: route, length and the
-// intervals' metres and watts, to a tenth.
+// Tells two plans apart without serialising the whole plan: route, length, the intervals'
+// metres and watts to a tenth, and their times to the second (a plan edited in the planner
+// can keep its watts and change its times: weight, CdA, the bike).
 export function signatureOf(intervals, route = {}) {
-    const parts = intervals.map(iv => `${Math.round(iv.startM * 10)}:${Math.round(iv.endM * 10)}:${Math.round(iv.powerW * 10)}`);
+    const parts = intervals.map(iv => `${Math.round(iv.startM * 10)}:${Math.round(iv.endM * 10)}:${Math.round(iv.powerW * 10)}:${Math.round(iv.durationS ?? 0)}`);
     return `${route.id ?? ''}|${intervals.length}|${hash(parts.join(','))}`;
 }
 

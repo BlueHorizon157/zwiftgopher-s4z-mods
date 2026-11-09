@@ -146,6 +146,23 @@ export function needsFetch(entry, have) {
 }
 
 /**
+ * What a window does with the active plan after a change in the store: 'same' (nothing to do),
+ * 'wait' (racing: a new strategy, or the same plan republished, waits for the race to end,
+ * decision 8) or 'apply' (hand it to the engine). A plan is its code, its strategy card and when
+ * the library saved it: the planner republishes an edited plan under the same code, so the save
+ * time is what tells the new file from the old one. {code, card, savedAt} each.
+ */
+export function activePlanStep(now, had, beforeStart) {
+    if (now.code === had.code && now.card === had.card && now.savedAt === had.savedAt) {
+        return 'same';
+    }
+    if (now.code === had.code && !beforeStart) {
+        return 'wait';
+    }
+    return 'apply';
+}
+
+/**
  * What a new plan does (decision 3): with nothing active and the rider outside an event, the
  * newest arrival becomes the plan; with a plan active and the start not yet made, it is
  * offered; while racing nothing moves (the caller does not sync then anyway).

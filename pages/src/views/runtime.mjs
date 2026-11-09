@@ -10,7 +10,7 @@ import {fetchEventInfo} from '../eventinfo.mjs';
 import {createEngine} from '../engine/engine.mjs';
 import {normalisePlan} from '../engine/plan.mjs';
 import {loadPlanByCode, fetchPlanByCode, loadReplayPlan} from './plan-loader.mjs';
-import {syncOnce, chooseActivation, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, shelfPlan, shelfPlanFromHere, PENDING_POLL_MS} from './shelf-sync.mjs';
+import {syncOnce, chooseActivation, activePlanStep, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, shelfPlan, shelfPlanFromHere, PENDING_POLL_MS} from './shelf-sync.mjs';
 import {hereTarget, powerHistory, chooseBike, hereOffered, bikeWords} from './from-here.mjs';
 
 export const SETTINGS_DEFAULTS = {
@@ -67,6 +67,10 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     const activePlan = () => normalisePlan(store.getActivePlanRaw(), {code: activeCode, card: activeCard});
     let activeCode = store.getActiveCode();
     let activeCard = store.getActiveCard();
+    // When the library saved the active plan: the planner republishes an edited plan under
+    // the same code, and this is what tells the engine it has a new file.
+    const savedAtOf = code => store.getPlanEntry(code)?.loadedAt ?? null;
+    let activeSavedAt = savedAtOf(activeCode);
     let cardWaiting = false;
     const engine = createEngine({plan: activePlan(), prefs: prefs(), controls: store.getControls()});
     let lastResetAt = store.getControls().resetAt;
@@ -83,22 +87,26 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         }
     };
 
-    // A new plan applies at once; a strategy change only before the start (decision 8): made
-    // during a race (from the settings page), it waits until this window's race is over.
+    // A new plan applies at once; a strategy change, or the same plan republished by the
+    // planner, only before the start (decision 8): made during a race, it waits until this
+    // window's race is over.
     const beforeStart = () => engine.state.status === 'idle' || engine.state.status === 'armed';
     const syncPlan = () => {
         const code = store.getActiveCode();
         const card = store.getActiveCard();
-        if (code === activeCode && card === activeCard) {
+        const savedAt = savedAtOf(code);
+        const step = activePlanStep({code, card, savedAt}, {code: activeCode, card: activeCard, savedAt: activeSavedAt}, beforeStart());
+        if (step === 'same') {
             cardWaiting = false;
             return;
         }
-        if (code === activeCode && !beforeStart()) {
+        if (step === 'wait') {
             cardWaiting = true;
             return;
         }
         activeCode = code;
         activeCard = card;
+        activeSavedAt = savedAt;
         cardWaiting = false;
         engine.event('plan', {plan: activePlan(), code});
         // The engine starts a new plan with neutral controls; the store holds the rider's.
@@ -430,6 +438,13 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
                 if (r.added.length) {
                     const {activate, offer} = chooseActivation({added: r.added, plans: r.plans, activeCode: store.getActiveCode(),
                         inEvent: Boolean(engine.state.event.subgroupId), beforeStart: beforeStart()});
+                    // The active plan republished (edited in the planner, same code): the store
+                    // tells the other windows; this one, which saved it, applies it itself.
+                    const republished = store.getActiveCode();
+                    if (republished && r.added.includes(republished) && !activate) {
+                        syncPlan();
+                        note(`Plan ${republished} updated from the planner.`);
+                    }
                     if (activate) {
                         store.setActive(activate);
                         store.setShelf({offer: null});
