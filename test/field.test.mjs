@@ -1,11 +1,11 @@
-// The field model (pages/src/engine/field.mjs) on the synthetic recording's six rivals:
+// The field model (pages/src/engine/field-model.mjs) on the synthetic recording's six rivals:
 // each rides the plan's speeds times a known factor, released a known number of seconds
 // from the home rider, so the gaps, trends and sector speeds have expected values.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {parseJsonl} from '../pages/src/replay.mjs';
-import {createField, ingest, rows, rivals, lastSector, resetField, FIELD_DEFAULTS} from '../pages/src/engine/field.mjs';
+import {createField, ingest, rows, rivals, lastSector, resetField, FIELD_DEFAULTS} from '../pages/src/engine/field-model.mjs';
 
 const recording = parseJsonl(readFileSync(new URL('./fixtures/telemetry/synthetic-flat-tt.jsonl', import.meta.url), 'utf8'));
 const plan = JSON.parse(readFileSync(new URL('./fixtures/plans/flat.fit.optimise.json', import.meta.url), 'utf8'));

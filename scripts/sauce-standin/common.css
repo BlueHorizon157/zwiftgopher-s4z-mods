@@ -1,0 +1,39 @@
+/* A stand-in for Sauce4Zwift's /pages/css/common.css (scripts/sauce-standin): the font, the
+   hidden titlebar outside settings mode, and the dark settings page, near enough for
+   screenshots. Sauce's own stylesheet is pages/scss/common.scss in its repository. */
+@import url("https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600;700;800&display=swap");
+
+html {
+  /* as Sauce: the window is the size container the mod's @container root-html rules query */
+  box-sizing: border-box;
+  container: root-html / size;
+  width: 100%;
+  height: 100%;
+  padding: 2px;
+  overflow: hidden;
+  font-family: 'Saira', sans-serif;
+  font-size: 15px;
+  color: #eee;
+}
+*, *::before, *::after { box-sizing: inherit; }
+body { margin: 0; height: 100%; }
+body.transparent-bg { background: transparent; }
+ms { font-family: sans-serif; font-style: normal; }
+ms:empty::before { content: '⚙'; }
+
+html:not(.settings-mode):not(.settings-page) #titlebar { display: none; }
+#titlebar header { display: flex; align-items: center; gap: 0.5em; padding: 0.3em 0.6em; background: #232a33; }
+#titlebar .logo img { width: 1.4em; height: 1.4em; }
+#titlebar .title { font-weight: 600; }
+#titlebar .filler { flex: 1; }
+#titlebar .buttons { display: flex; gap: 0.4em; }
+#titlebar .button { opacity: 0.7; }
+
+html.settings-page body { background: #1b2027; color: #e8ecf1; }
+html.settings-page #settings .section { padding: 0.6em 0 0.9em; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+html.settings-page #settings .section > .title { font-size: 1.15em; font-weight: 700; margin: 0.2em 0 0.4em; color: #fff; }
+html.settings-page #settings form label { display: flex; align-items: center; gap: 0.6em; margin: 0.35em 0; }
+html.settings-page select, html.settings-page input[type="text"] {
+  font: inherit; color: inherit; background: #10141a; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 0.3em; padding: 0.2em 0.4em;
+}
+html.settings-page table { color: inherit; }

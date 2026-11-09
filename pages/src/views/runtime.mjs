@@ -1,14 +1,16 @@
 // What every engine window does the same way (docs/REVAMP_PLAN.md 1.8, 2.2, 2.4): one
 // engine on its own subscription, the plan library and controls from store.mjs, the window's
-// preferences from Sauce's settingsStore, event info on a new subgroup, replay support and
-// no work while the window is hidden. The window supplies render(view).
+// preferences from Sauce's settingsStore, event info on a new subgroup, the shelf sync with
+// the planner (TT/RIDE_DAY_PLAN.md 2.4), replay support and no work while the window is
+// hidden. The window supplies render(view).
 import * as common from '/pages/src/common.mjs';
 import * as sauce from '../sauce.mjs';
 import * as store from '../store.mjs';
 import {fetchEventInfo} from '../eventinfo.mjs';
 import {createEngine} from '../engine/engine.mjs';
 import {normalisePlan} from '../engine/plan.mjs';
-import {loadPlanByCode, loadReplayPlan} from './plan-loader.mjs';
+import {loadPlanByCode, fetchPlanByCode, loadReplayPlan} from './plan-loader.mjs';
+import {syncOnce, chooseActivation, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, shelfPlan, PENDING_POLL_MS} from './shelf-sync.mjs';
 
 export const SETTINGS_DEFAULTS = {
     layout: 'auto',           // auto = the manifest window's ?layout
@@ -21,10 +23,13 @@ export const SETTINGS_DEFAULTS = {
     bandWidthW: 5,
     soonSec: 10,              // the boundary moment starts this many seconds before a change
     startRule: 'auto',        // auto | time | distance
+    finishShows: 'remaining', // the finish cell while racing: remaining (time to go) | finish (predicted finish time)
+    planItInputs: 'last',     // Plan it plans with the rider's last planner settings, or the planner's defaults
     showDebug: false,
-    gapMode: 'clock',         // field: clock (standings) | road (who is physically ahead)
+    gapMode: 'clock',         // field: clock (standings) | finish (predicted) | road (who is physically ahead)
     allSubgroups: false,      // field: riders of every category
     rivalsEach: 2,            // rivals strip: riders shown each side
+    rivalsRange: 'play',      // rivals track: play (±1 min, wider for riders in play) | 30 | 60 | 120 | 300 (s each way) | field
 };
 
 /**
@@ -139,13 +144,227 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         if (sg && engine.state.event.kind == null && !eventInfoAsked.has(String(sg))) {
             eventInfoAsked.add(String(sg));
             fetchEventInfo(sg).then(info => {
+                lastEventInfo = info;
                 engine.event('eventInfo', info);
+                pickForEvent(info);
                 draw();
             }).catch(() => {});
         }
         draw();
     }, {record: true});
     setInterval(draw, 1000);
+
+    // ---- the plan for the event (TT/RIDE_DAY_PLAN.md 2.4, rules 1 and 2) ----
+    // Joining a subgroup: the plan made for this pen, else for this event, else for this route
+    // with the same laps or length, arms itself before the start; once per subgroup, so a
+    // plan the rider then chooses by hand stays.
+    let pickedFor = null;
+    let lastEventInfo = null;
+    const planEntry = p => {
+        const n = normalisePlan(p.raw, {code: p.code});
+        return {code: p.code, routeId: p.routeId, laps: n?.laps ?? p.raw?.route?.laps ?? null, lengthM: n?.lengthM ?? null, routeName: p.routeName, event: p.event ?? p.raw?.meta?.event ?? null};
+    };
+    const pickForEvent = info => {
+        if (!info?.subgroupId || pickedFor === String(info.subgroupId) || !beforeStart()) {
+            return;
+        }
+        pickedFor = String(info.subgroupId);
+        const code = choosePlanForEvent({
+            plans: store.listPlans().map(planEntry),
+            event: {eventId: info.eventId, subgroupId: info.subgroupId, routeId: info.routeId, laps: info.laps, distanceM: info.distanceM},
+            activeCode: store.getActiveCode(),
+        });
+        if (code) {
+            store.setActive(code);
+            store.setShelf({offer: null});
+            syncPlan();
+            note(`Plan ${code} for ${info.name ?? 'the event'}.`);
+        }
+    };
+
+    // ---- the next time trial (2.4) and the rider's sign-ups for the planner ----
+    // Sauce's event cache holds about four hours ahead with the rider's sign-ups marked; the
+    // shelf's event-tagged plans cover the rest. While linked, the sign-ups Sauce can see go to
+    // the planner's picker once they change.
+    let nextTT = null;
+    let nextTTOverride = null;
+    const refreshNextTT = async () => {
+        if (sauce.isReplay || !beforeStart() || !common.isVisible()) {
+            return;
+        }
+        let events = [];
+        try {
+            events = await common.rpc.getCachedEvents();
+        } catch (err) {
+            return;
+        }
+        const now = Date.now();
+        const signedUp = signedUpTimeTrials(events ?? [], now);
+        nextTT = nextTimeTrial({signedUp, plans: store.listPlans().map(planEntry), now});
+        const link = store.getLink();
+        if (link?.state === 'linked') {
+            const rows = signupRows(signedUp);
+            const key = JSON.stringify(rows.map(r => r.subgroup_id).sort());
+            const shelf = store.getShelf();
+            if (shelf.signupsSent !== key && now - (shelf.signupsSentAt ?? 0) > 60000) {
+                store.setShelf({signupsSent: key, signupsSentAt: now});
+                shelfSignups(fetch, link.token, rows).catch(() => {});
+            }
+        }
+        draw();
+    };
+    setInterval(() => refreshNextTT().catch(() => {}), 60000);
+    setTimeout(() => refreshNextTT().catch(() => {}), 2500);
+
+    // ---- Plan it (2.5): an optimised plan for the event, from the bike, no options ----
+    // The target is the event the rider is in, else the next time trial; the planner builds
+    // the plan with the rider's last planner settings (or its defaults) and the shelf keeps it.
+    let planning = null;
+    const planTarget = () => {
+        const sg = engine.state.event.subgroupId;
+        if (sg && lastEventInfo && String(lastEventInfo.subgroupId) === String(sg) && lastEventInfo.routeId != null) {
+            return {routeId: String(lastEventInfo.routeId), laps: lastEventInfo.laps ?? 1, distanceM: lastEventInfo.distanceM ?? 0, eventId: lastEventInfo.eventId, subgroupId: lastEventInfo.subgroupId, ts: lastEventInfo.startMs ?? null, name: lastEventInfo.name ?? null, inEvent: true};
+        }
+        const next = nextTTOverride ?? nextTT;
+        return next?.routeId ? {...next, inEvent: false} : null;
+    };
+    const planIt = async (target = null) => {
+        const link = store.getLink();
+        if (link?.state !== 'linked') {
+            throw new Error('Link the mod to the planner first (settings → Plans → Link to the planner).');
+        }
+        target ??= planTarget();
+        if (!target?.routeId) {
+            throw new Error('Nothing to plan: join a time trial, or sign up for one.');
+        }
+        if (planning) {
+            return null;
+        }
+        planning = {startedAt: Date.now(), target};
+        draw();
+        try {
+            const inputsSource = settings?.get('planItInputs') === 'defaults' ? 'defaults' : 'last';
+            let result;
+            try {
+                result = await shelfPlan(fetch, link.token, target, {inputsSource});
+            } catch (err) {
+                if (err.status === 503 && err.retryAfter) {
+                    await new Promise(r => setTimeout(r, Math.min(10, err.retryAfter) * 1000));
+                    result = await shelfPlan(fetch, link.token, target, {inputsSource});
+                } else {
+                    if (err.status === 401) {
+                        store.clearLink();
+                    }
+                    throw err;
+                }
+            }
+            const file = result.file;
+            store.savePlan(result.code, file, {activate: beforeStart(), shelf: true, source: 'mod', event: file?.meta?.event ?? null, publishedAt: file?.meta?.published?.at ?? null, expiresAt: result.meta?.expires_at ?? null});
+            if (beforeStart()) {
+                store.setShelf({offer: null});
+                syncPlan();
+            }
+            note(`Planned ${result.meta?.route_name ?? target.name ?? 'the event'}: ${result.code}${result.meta?.inputs_source === 'defaults' ? ' (the planner\'s default settings)' : ''}.`);
+            refreshNextTT().catch(() => {});
+            return result;
+        } finally {
+            planning = null;
+            draw();
+        }
+    };
+
+    // ---- the shelf: plans from the planner arrive by themselves (TT/RIDE_DAY_PLAN.md 2.4) ----
+    // One window polls a minute for all of them (store.getShelf().lastPollAt is the guard),
+    // only while idle or armed and visible, never while racing. A pending pairing is checked
+    // every few seconds, so the planner's claim is seen even with the settings page closed.
+    const windowId = Math.random().toString(36).slice(2, 8);
+    let linkSupported = null;
+    let syncing = false;
+    const pendingStatus = async () => {
+        const link = store.getLink();
+        if (!link || link.state !== 'pending' || sauce.isReplay) {
+            return;
+        }
+        if (Date.now() - (link.lastStatusAt ?? 0) < PENDING_POLL_MS) {
+            return;
+        }
+        store.setLink({...link, lastStatusAt: Date.now()});
+        const st = await linkStatus(fetch, link.token);
+        const current = store.getLink();
+        if (!current || current.token !== link.token) {
+            return;
+        }
+        if (st.state === 'linked') {
+            const planner = (st.link?.devices ?? []).find(d => d.kind === 'planner');
+            store.setLink({...current, state: 'linked', linkedAt: Date.now(), code: null, expiresAt: null,
+                zwiftId: st.link?.zwift_id ?? current.zwiftId, riderName: st.link?.rider_name ?? current.riderName, plannerLabel: planner?.label ?? null});
+            note('Linked to the planner.');
+            draw();
+            pollShelf(true);
+        } else if (st.state === 'expired' || st.state === 'revoked' || st.state === 'unknown') {
+            store.setLink({...current, state: st.state});
+            draw();
+        }
+    };
+    const pollShelf = async (force = false) => {
+        const link = store.getLink();
+        const shelf = store.getShelf();
+        if (syncing || linkSupported === false || sauce.isReplay) {
+            return;
+        }
+        if (!shouldPoll({link, quiet: beforeStart(), visible: common.isVisible(), lastPollAt: shelf.lastPollAt, now: Date.now(), force})) {
+            return;
+        }
+        store.setShelf({lastPollAt: Date.now(), lastPollBy: windowId});
+        syncing = true;
+        try {
+            const r = await syncOnce({
+                fetchFn: fetch,
+                token: link.token,
+                etag: shelf.etag ?? null,
+                library: {has: store.getPlanEntry, save: (code, raw, meta) => store.savePlan(code, raw, {activate: false, ...meta})},
+                loadPlan: fetchPlanByCode,
+            });
+            if (r.status === 'revoked') {
+                store.clearLink();
+                note('The planner link has ended: link again from the settings page.');
+            } else if (r.status === 'unsupported') {
+                linkSupported = false;
+                store.setShelf({unsupportedAt: Date.now()});
+            } else if (r.status === 'ok') {
+                linkSupported = true;
+                store.setShelf({etag: r.etag, lastSyncAt: Date.now(), unsupportedAt: null});
+                if (r.added.length) {
+                    const {activate, offer} = chooseActivation({added: r.added, plans: r.plans, activeCode: store.getActiveCode(),
+                        inEvent: Boolean(engine.state.event.subgroupId), beforeStart: beforeStart()});
+                    if (activate) {
+                        store.setActive(activate);
+                        store.setShelf({offer: null});
+                        syncPlan();
+                        note(`Plan ${activate} from the planner.`);
+                    } else if (offer) {
+                        const e = store.getPlanEntry(offer);
+                        store.setShelf({offer: {code: offer, routeName: e?.routeName ?? null, timeText: e?.timeText ?? null, at: Date.now()}});
+                        note(`New plan ${offer} from the planner.`);
+                    }
+                }
+            } else if (r.status === 'unchanged') {
+                linkSupported = true;
+                store.setShelf({lastSyncAt: Date.now()});
+            } else if (r.error) {
+                note(`Shelf: ${r.error}`);
+            }
+        } finally {
+            syncing = false;
+            draw();
+        }
+    };
+    setInterval(() => {
+        pendingStatus().catch(() => {});
+        pollShelf().catch(() => {});
+    }, 5000);
+    window.addEventListener('focus', () => pollShelf(true).catch(() => {}));
+    setTimeout(() => pollShelf(true).catch(() => {}), 1500);
 
     const api = {
         engine,
@@ -197,8 +416,45 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             engine.control('bias', bias);
             draw();
         },
+        // The link and the shelf (TT/RIDE_DAY_PLAN.md 2.4).
+        link: () => store.getLink(),
+        shelf: () => store.getShelf(),
+        /** A plan that arrived while another was active: offered until used or dismissed. */
+        offer() {
+            const o = store.getShelf().offer;
+            return o && store.getPlanEntry(o.code) ? o : null;
+        },
+        useOffer() {
+            const o = api.offer();
+            if (!o || !beforeStart()) {
+                return false;
+            }
+            store.setActive(o.code);
+            store.setShelf({offer: null});
+            syncPlan();
+            note(`Plan ${o.code} from the planner.`);
+            draw();
+            return true;
+        },
+        dismissOffer() {
+            store.setShelf({offer: null});
+            draw();
+        },
+        syncNow: () => pollShelf(true),
+        linkSupported: () => linkSupported,
+        /** The next time trial the rider is signed up for or has a plan for: {id, name, ts, subgroupId, planCode}. */
+        nextTT: () => nextTTOverride ?? nextTT,
+        /** What Plan it would plan: the event the rider is in, else the next time trial; null when neither. */
+        planTarget,
+        /** {startedAt, target} while a plan is being built, else null. */
+        planning: () => planning,
+        planIt,
+        setNextTT(value) {       // scripts/page-check.mjs
+            nextTTOverride = value;
+            draw();
+        },
     };
-    window.zgtt = {engine, view: api.view, replay: sauce.replayState, settings};   // scripts/page-check.mjs and DevTools
+    window.zgtt = {engine, view: api.view, replay: sauce.replayState, settings, store, api};   // scripts/page-check.mjs and DevTools
     onReady?.(api);
     applyLook(api.prefs());
     onSettings?.(api.prefs());
@@ -227,7 +483,7 @@ export function enginePrefs(p = {}) {
 /** Plain words for the engine's status, for any window. */
 export function statusWords(v) {
     switch (v.status) {
-        case 'idle': return v.plan ? 'waiting for Zwift' : 'no plan loaded';
+        case 'idle': return v.plan ? 'waiting for Zwift' : (store.getLink()?.state === 'linked' ? 'waiting for a plan from the planner' : 'no plan loaded');
         case 'armed': return v.event?.inEvent ? 'ready, waiting for the start' : 'ready on the route';
         case 'racing': return 'racing';
         case 'finished': return 'finished';

@@ -1,17 +1,21 @@
 // Shared state between the mod's windows (docs/REVAMP_PLAN.md §4.3): the plan library,
-// the active plan and the rider's controls, in Sauce's global storage keys (they start
-// with '/'), written when the rider changes them, never per tick. Migrates what 0.6.x
-// kept under 'tt-dashboard-state' and '/tt-dashboards/shared-state' once.
+// the active plan, the rider's controls, the rider link and the shelf sync state
+// (TT/RIDE_DAY_PLAN.md 2.1, 2.4), in Sauce's global storage keys (they start with '/'),
+// written when something changes, never per tick. Migrates what 0.6.x kept under
+// 'tt-dashboard-state' and '/tt-dashboards/shared-state' once.
 import {storage} from './sauce.mjs';
 
 export const KEYS = {
     plans: '/zg-tt/plans',
     active: '/zg-tt/active',
     controls: '/zg-tt/controls',
+    link: '/zg-tt/link',
+    shelf: '/zg-tt/shelf',
 };
 const LEGACY_SHARED = '/tt-dashboards/shared-state';
 const LEGACY_WINDOW = 'tt-dashboard-state';
-const MAX_PLANS = 5;
+// A week of event plans from the shelf fits; each entry is a 6–17 KB plan file.
+export const MAX_PLANS = 10;
 
 export function library() {
     const lib = storage?.get(KEYS.plans);
@@ -28,8 +32,17 @@ export function getPlanRaw(code) {
     return code ? library().plans[code]?.raw ?? null : null;
 }
 
-/** Keep a plan under its code (the newest five), and make it active. */
-export function savePlan(code, raw, {activate = true, expiresAt = null} = {}) {
+/** The library entry for a code (raw plus what the shelf said about it), or null. */
+export function getPlanEntry(code) {
+    return code ? library().plans[code] ?? null : null;
+}
+
+/**
+ * Keep a plan under its code (the newest ten), and make it active. A plan from the shelf
+ * carries its event, source and publication, so the windows can pick it for the event and
+ * tell a republished plan from the one they have.
+ */
+export function savePlan(code, raw, {activate = true, expiresAt = null, event = null, source = null, publishedAt = null, shelf = false} = {}) {
     const lib = library();
     lib.plans[code] = {
         raw,
@@ -38,6 +51,10 @@ export function savePlan(code, raw, {activate = true, expiresAt = null} = {}) {
         routeId: raw?.route?.id != null ? String(raw.route.id) : null,
         routeName: raw?.route?.name ?? null,
         timeText: raw?.summary?.time_text ?? null,
+        event: event ?? raw?.meta?.event ?? null,
+        source,
+        publishedAt: publishedAt ?? raw?.meta?.published?.at ?? null,
+        shelf,
     };
     const codes = Object.keys(lib.plans).sort((a, b) => (lib.plans[b].loadedAt ?? 0) - (lib.plans[a].loadedAt ?? 0));
     for (const old of codes.slice(MAX_PLANS)) {
@@ -92,6 +109,47 @@ export function planForRoute(routeId) {
         return null;
     }
     return listPlans().find(p => p.routeId === String(routeId)) ?? null;
+}
+
+/** The newest plan made for this event: by its pen first, then by the event (TT/RIDE_DAY_PLAN.md 2.4). */
+export function planForEvent(eventId, subgroupId = null) {
+    const plans = listPlans();
+    return (subgroupId != null ? plans.find(p => p.event?.subgroup_id != null && String(p.event.subgroup_id) === String(subgroupId)) : null)
+        ?? (eventId != null ? plans.find(p => p.event?.id != null && String(p.event.id) === String(eventId)) : null)
+        ?? null;
+}
+
+// ---- the rider link and the shelf (TT/RIDE_DAY_PLAN.md 2.1, 2.4) ----
+
+/**
+ * The link to the planner: {token, state: 'pending' | 'linked' | 'expired' | 'revoked', code,
+ * expiresAt, deviceId, linkId, zwiftId, riderName, plannerLabel, startedAt, linkedAt}, or
+ * null. The token is the mod's own; the server keeps its hash.
+ */
+export function getLink() {
+    const link = storage?.get(KEYS.link);
+    return link && typeof link === 'object' && link.token ? link : null;
+}
+
+export function setLink(link) {
+    storage.set(KEYS.link, link && link.token ? {...link} : null);
+}
+
+export function clearLink() {
+    storage.set(KEYS.link, null);
+}
+
+/**
+ * Shelf sync state every window shares: {etag, lastPollAt, lastPollBy, lastSyncAt, offer:
+ * {code, routeName, timeText, at} | null, unsupportedAt}. One window polls a minute.
+ */
+export function getShelf() {
+    const shelf = storage?.get(KEYS.shelf);
+    return shelf && typeof shelf === 'object' ? shelf : {};
+}
+
+export function setShelf(patch) {
+    storage.set(KEYS.shelf, {...getShelf(), ...patch});
 }
 
 export function getControls() {

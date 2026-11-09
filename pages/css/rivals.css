@@ -62,10 +62,9 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
   flex: 0 1 auto;
 }
 .side li .gp { font-weight: 800; font-variant-numeric: tabular-nums; }
-.side li .tr { font-weight: 600; font-variant-numeric: tabular-nums; }
-.side li .sc { color: var(--ink-2); font-variant-numeric: tabular-nums; font-size: max(11px, 0.92em); flex: 0 10 auto; min-width: 0; overflow: hidden; text-overflow: clip; }
-.side li .sc.trend-gaining { color: var(--gain); }
-.side li .sc.trend-losing { color: var(--lose); }
+.side li .rt { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.side li .rt.trend-gaining { color: var(--gain); }
+.side li .rt.trend-losing { color: var(--lose); }
 .side li + li { color: var(--ink-2); }
 .side li + li .gp { font-weight: 700; }
 
@@ -77,6 +76,13 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
   padding: 0 0.4em;
 }
 .me .me-label { font-size: max(11px, 0.85em); color: var(--ink-3); }
+/* in a race: the verdict over your place, and the place it is heading for */
+.me.defend .me-label { color: var(--lose); font-weight: 800; }
+.me.chase .me-label { color: var(--gain); font-weight: 800; }
+.me.contested .me-label { color: var(--soon); font-weight: 800; }
+.me.clear .me-label { color: var(--ink-2); font-weight: 700; }
+.me.up small { color: var(--gain); font-weight: 700; }
+.me.down small { color: var(--lose); font-weight: 700; }
 .me b { font-size: 1.45em; font-weight: 800; }
 .me small { font-size: max(11px, 0.8em); color: var(--ink-2); }
 
@@ -88,6 +94,26 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
   height: 1.1em;
 }
 .track .end { font-size: max(11px, 0.85em); color: var(--ink-3); white-space: nowrap; }
+.track .end.good { color: var(--gain); font-weight: 600; }
+.track .end.warn { color: var(--lose); font-weight: 600; }
+/* the tags: how it ends with a rider at the pace of the last minutes. Solid: you meet before
+ * the finish; outlined: close at the finish (in reach ahead, pressure behind). */
+.side li .tg.none { display: none; }
+.side li .tg i { font-style: normal; }
+.side li .tg i::after { content: ' '; white-space: pre; }
+.side li .tg {
+  display: inline-block;
+  padding: 0 0.45em;
+  border-radius: 0.65em;
+  font-weight: 800;
+  line-height: 1.25;
+  text-shadow: none;
+  font-variant-numeric: tabular-nums;
+}
+.side li .tg.catch { background: var(--gain); color: #08130c; }
+.side li .tg.caught { background: var(--lose); color: #1a0703; }
+.side li .tg.reach { color: var(--gain); box-shadow: inset 0 0 0 1.5px var(--gain); background: rgba(8, 19, 12, 0.45); }
+.side li .tg.pressure { color: var(--lose); box-shadow: inset 0 0 0 1.5px var(--lose); background: rgba(26, 7, 3, 0.45); }
 .lane {
   position: relative;
   height: 100%;
@@ -126,7 +152,10 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
 .lane .dot.trend-gaining { background: var(--gain); }
 .lane .dot.trend-losing { background: var(--lose); }
 .lane .dot.named { width: 0.78em; height: 0.78em; margin: -0.39em 0 0 -0.39em; }
-.lane .dot.edge { opacity: 0.55; }
+/* in play: you catch them, or they catch you, before the finish at the current trend */
+.lane .dot.in-play { box-shadow: 0 0 0 2px var(--halo), 0 0 0 3.5px var(--ink); }
+/* near: close at the finish (in reach, pressure) */
+.lane .dot.near { outline: 1.5px dashed var(--ink); outline-offset: 2px; }
 
 .empty {
   display: none;
@@ -137,13 +166,13 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
 .rivals.alone .track { display: none; }
 .rivals.alone .empty { display: block; }
 
-/* narrower strips keep the nearest rider each side, then drop the sector speed and the rate */
+/* narrower strips drop the rate beside a tag, then keep the nearest rider each side */
 @container root-html (width < 560px) {
-  .side li .sc { display: none; }
+  .side li .tg:not(.none) + .rt { display: none; }
 }
 @container root-html (width < 440px) {
   .side li + li { display: none; }
-  .side li .tr .rate { display: none; }
+  .side li .tg i { display: none; }   /* the colour and outline say which */
 }
 @media (prefers-reduced-motion: reduce) {
   .lane .dot { transition: none; }

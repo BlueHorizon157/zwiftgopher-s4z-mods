@@ -33,11 +33,12 @@
         <span class="count" id="count"></span>
         <span class="place tnum" id="place"></span>
       </header>
+      <div class="verdict" id="verdict" hidden><b id="verdict-head"></b> <span id="verdict-detail"></span></div>
       <div class="cols">
         <span class="c pos">pos</span>
         <span class="c name">rider</span>
-        <button type="button" class="c gap" id="gap-mode" title="Click: gap on the clock (the standings) or on the road (who is physically ahead)">gap</button>
-        <span class="c trend" title="Time you gain (+) or lose (−) on the rider per minute, over the last minute">/min</span>
+        <button type="button" class="c gap" id="gap-mode" title="Click: the gap on the clock now (the standings), at the finish (predicted at the pace of the last minutes) or on the road (who is physically ahead)">gap</button>
+        <span class="c trend" title="Time you gain (+) or lose (−) on the rider per minute, over the last four minutes (the last minute until there are four)">/min</span>
         <span class="c kmh">km/h</span>
         <span class="c wkg">w/kg</span>
         <span class="c wbal">W′</span>

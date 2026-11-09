@@ -36,3 +36,10 @@ baseline the revamp is judged against; fill it in before Phase 1 lands.
 | Storage writes per tick | 0–2 | 0 | 0 | 0 |
 
 Date measured: — · Sauce version: — · Machine: —
+
+## 0.8.0: the link and the shelf
+
+While idle or armed and visible, one window a minute makes one small request to the planner
+(the shelf listing, a 304 when nothing changed) and one local RPC (`getCachedEvents`); a
+pairing waiting for the planner adds one status request every five seconds from one window.
+While racing, nothing: no polling, no plan changes. Nothing per tick changed.

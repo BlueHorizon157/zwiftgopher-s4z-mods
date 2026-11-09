@@ -4,7 +4,7 @@
 // sits a third of the way down so more of what is coming is in view.
 import {startWindow, statusWords} from './views/runtime.mjs';
 import {clipboardCode} from './views/plan-loader.mjs';
-import {setText, setHidden, setClass, fmtTime, deltaWords} from './views/dom.mjs';
+import {setText, setHidden, setClass, fmtTime, deltaWords, finishFigure} from './views/dom.mjs';
 import {planTimeAtMetre} from './engine/tracking.mjs';
 
 const MANUAL_SCROLL_HOLD_MS = 5000;
@@ -85,13 +85,9 @@ function render(v) {
     // Header.
     setText(els.route, plan.routeName ?? 'Custom route');
     const planTime = fmtTime(race.planTimeFromStartS ?? plan.timeS);
-    if (v.status === 'finished') {
-        setText(els.finish, fmtTime(race.elapsedS));
-    } else if (race.running && race.totalS != null) {
-        setText(els.finish, fmtTime(race.totalS));
-    } else {
-        setText(els.finish, planTime);
-    }
+    // The time to go while racing (or, by the setting, the predicted finish), else the plan's or the ride's time.
+    const fig = finishFigure(v, win.prefs().finishShows);
+    setText(els.finish, fig.label === 'to go' ? `${fmtTime(fig.seconds)} to go` : fmtTime(fig.seconds));
     // The strategy ridden, when the plan has the optimiser's cards: "balanced plan 14:23 ...".
     const strategy = plan.strategyLabel ? `${plan.strategyLabel.toLowerCase()} ` : '';
     // A plan for another distance is said in both states (the finish is predicted to the event's end).

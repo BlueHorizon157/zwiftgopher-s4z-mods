@@ -5,7 +5,7 @@
   "description": "Ride a ZwiftGopher TT plan in Zwift: the target now, the next change and when, W' and the finish, as a HUD over the game.",
   "author": "ZwiftGopher",
   "website_url": "https://zwiftgopher.com/TT/",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "content_js": [],
   "content_css": [],
   "web_root": "pages",
@@ -28,7 +28,7 @@
       "file": "pages/hud-dial.html",
       "id": "hud-dial",
       "name": "TT HUD: dial",
-      "description": "A round gauge: live power against the target band, W' on the inner ring, the next change below.",
+      "description": "A round gauge: live power against the target, the time left in the interval and W' as rings, the next change in the opening below.",
       "overlay": true,
       "frame": false,
       "default_bounds": {

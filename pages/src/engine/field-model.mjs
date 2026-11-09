@@ -9,7 +9,9 @@
 //              a TT riders start apart, so a rider behind on the road can be ahead on time).
 // Both are measured at the trailing rider's latest checkpoint, so they are always fresh. The
 // trend is the change of the gap over the trailing rider's last 60 s; the clock gap and the
-// road gap differ by a constant (the start offset), so they share it. A sector speed is each
+// road gap differ by a constant (the start offset), so they share it. The pace is the
+// sustained trend: the least-squares slope of the gap over the last four minutes (at least
+// 90 s of history), which a sprint barely moves; catch predictions use only the pace. A sector speed is each
 // rider's average speed over the last complete plan interval (1 km sections without a plan).
 
 export const FIELD_DEFAULTS = {
@@ -18,6 +20,8 @@ export const FIELD_DEFAULTS = {
     evictMs: 600_000,          // unseen this long: gone
     trendWindowS: 60,
     minTrendS: 20,             // less history than this: no trend yet
+    paceWindowS: 240,          // the sustained trend (pace) for catch predictions
+    minPaceS: 90,              // less shared history than this: no pace, so no prediction
     holdSPerMin: 0.15,         // |trend| under this is "holding"
     minSectorM: 400,           // shorter plan intervals are merged backwards for sector speeds
     gridSectorM: 1000,
@@ -294,6 +298,39 @@ export function compare(field, home, r, {boundaries = null} = {}) {
     }
     const trend = gainSPerMin == null ? null
         : Math.abs(gainSPerMin) < o.holdSPerMin ? 'holding' : gainSPerMin > 0 ? 'gaining' : 'losing';
+    // The pace: the slope of the gap against the trailing rider's time over paceWindowS, by
+    // least squares over every checkpoint, so one fast minute moves it a quarter as much.
+    let paceSPerMin = null;
+    let paceSpanS = 0;
+    const xs = [];
+    const ys = [];
+    for (let j = k; j >= 1; j--) {
+        const g = gapAt(j);
+        if (g == null || !Number.isFinite(trail.cp[j])) {
+            break;
+        }
+        const ageS = (trail.cp[k] - trail.cp[j]) / 1000;
+        if (ageS > o.paceWindowS) {
+            break;
+        }
+        xs.push(-ageS);
+        ys.push(g);
+        paceSpanS = ageS;
+    }
+    if (paceSpanS >= o.minPaceS && xs.length >= 3) {
+        const n = xs.length;
+        const mx = xs.reduce((a, b) => a + b, 0) / n;
+        const my = ys.reduce((a, b) => a + b, 0) / n;
+        let sxy = 0;
+        let sxx = 0;
+        for (let i = 0; i < n; i++) {
+            sxy += (xs[i] - mx) * (ys[i] - my);
+            sxx += (xs[i] - mx) ** 2;
+        }
+        if (sxx > 0) {
+            paceSPerMin = -(sxy / sxx) * 60;
+        }
+    }
     // Sector speeds over the last sector both have completed.
     const trailM = Math.min(home.lastM ?? 0, r.lastM ?? 0);
     const bounds = boundaries?.length ? boundaries : gridBoundaries(field, trailM);
@@ -308,7 +345,7 @@ export function compare(field, home, r, {boundaries = null} = {}) {
         };
         sector = {startM, endM: sec.endM, homeKmh: speed(home), riderKmh: speed(r)};
     }
-    return {roadS, clockS, gainSPerMin, trend, trendSpanS, sector, atM: k * o.spacingM};
+    return {roadS, clockS, gainSPerMin, trend, trendSpanS, paceSPerMin, paceSpanS, sector, atM: k * o.spacingM};
 }
 
 /**
@@ -341,6 +378,8 @@ export function rows(field, {nowMs, allSubgroups = false, boundaries = null, gap
             roadS: cmp?.roadS ?? null,
             clockS: cmp?.clockS ?? null,
             gainSPerMin: cmp?.gainSPerMin ?? null,
+            paceSPerMin: cmp?.paceSPerMin ?? null,
+            paceSpanS: cmp?.paceSpanS ?? 0,
             trend: cmp?.trend ?? null,
             trendSpanS: cmp?.trendSpanS ?? 0,
             sector: cmp?.sector ?? null,
@@ -369,9 +408,141 @@ export function rivals(field, {nowMs, each = 2, boundaries = null} = {}) {
     const behind = list.filter(r => r.roadS <= 0).sort((a, b) => b.roadS - a.roadS);
     const home = field.homeId ? field.riders.get(field.homeId) : null;
     return {
-        home: home ? {id: home.id, name: home.name, distanceM: home.distanceM, speedKmh: home.speedKmh} : null,
+        home: home ? {id: home.id, name: home.name, distanceM: home.distanceM, speedKmh: home.speedKmh, position: home.position, participants: home.participants} : null,
         ahead: ahead.slice(0, each),
         behind: behind.slice(0, each),
         all: list,
+    };
+}
+
+// ---- the rivals track's scale ----
+
+export const TRACK_MODES = ['play', '30', '60', '120', '300', 'field'];
+const PLAY_STEPS_S = [60, 90, 120, 180, 300, 600, 900, 1200, 1800];
+const FIELD_STEPS_S = [15, 30, 60, 120, 300, 600];
+const PLAY_HORIZON_S = 600;     // with no time to go known, "in play" looks ten minutes ahead
+
+export const PLAY_ENTER = 1;          // in play when you meet before the finish
+export const PLAY_LEAVE = 1.15;       // out again only when the meeting moves 15 % past it
+export const MIN_PACE_S_PER_MIN = 0.3; // a slower closing is no prediction
+
+/**
+ * When a rider and you meet on the road at their pace (the sustained trend over the last
+ * four minutes, never the last minute's), in seconds; null when the gap is not closing or
+ * there is not enough history yet. A rider ahead (roadS > 0) is caught while you gain on them;
+ * a rider behind catches you while you lose on them (paceSPerMin < 0).
+ */
+export function meetInS(r) {
+    const pace = r?.paceSPerMin;
+    if (!Number.isFinite(r?.roadS) || !Number.isFinite(pace) || Math.abs(pace) < MIN_PACE_S_PER_MIN) {
+        return null;
+    }
+    const closing = r.roadS > 0 ? pace > 0 : pace < 0;
+    return closing ? Math.abs(r.roadS) / Math.abs(pace) * 60 : null;
+}
+
+/**
+ * Which way the gap to a rider is going, for display: the sustained pace (the last four
+ * minutes) once there is enough of it, the last minute's trend until then. Returns
+ * {sPerMin (+ you gain), word: 'gaining' | 'losing' | 'holding', sustained} or null.
+ */
+export function drift(r) {
+    const pace = r?.paceSPerMin;
+    if (Number.isFinite(pace)) {
+        return {sPerMin: pace, word: Math.abs(pace) < MIN_PACE_S_PER_MIN ? 'holding' : pace > 0 ? 'gaining' : 'losing', sustained: true};
+    }
+    return r?.trend ? {sPerMin: r.gainSPerMin, word: r.trend, sustained: false} : null;
+}
+
+export const NEAR_S_PER_MIN = 1;      // "close at the finish": within a minute's 1 s per minute to go,
+export const NEAR_MIN_S = 5;          //   no less than 5 s and no more than 30 s
+export const NEAR_MAX_S = 30;
+export const NEAR_LEAVE = 1.25;       // and out again only beyond 25 % more
+
+/**
+ * The gap to a rider when you finish, at their pace (seconds, + ahead), or null with no pace yet.
+ * The pace is the sustained trend over the last minutes, so a sprint does not move it much.
+ */
+export function finishGapS(r, remainingS) {
+    const pace = r?.paceSPerMin;
+    if (!Number.isFinite(r?.roadS) || !Number.isFinite(pace) || !Number.isFinite(remainingS)) {
+        return null;
+    }
+    return r.roadS - pace * remainingS / 60;
+}
+
+/**
+ * How each rider's race goes from here to the finish, at the pace of the last minutes:
+ *   in play  you catch them (catching), or they catch you (caught), before the finish;
+ *   near     not caught, but close when you finish: a rider ahead you could still catch if
+ *            you find a little more or they fade (reach), or one close behind (pressure).
+ *            Close is 1 s per minute to go, between 5 and 30 s.
+ * Riders come in at the line and leave only past a margin (15 % for in play, 25 % for near), so
+ * one on the edge does not flicker. prev is the last call's result (or a Set of in-play ids).
+ * Returns {inPlay: Set, meetS: Map(id → s), catching: Set, caught: Set, near: Map(id → {kind:
+ * 'reach' | 'pressure', finishGapS, needSPerMin}), reach: Set, pressure: Set}.
+ */
+export function playSet(all, {remainingS = null, prev = null} = {}) {
+    const horizon = Number.isFinite(remainingS) && remainingS > 0 ? remainingS : PLAY_HORIZON_S;
+    const wasPlay = prev instanceof Set ? prev : prev?.inPlay;
+    const wasNear = prev instanceof Set ? null : prev?.near;
+    const nearS = Math.min(NEAR_MAX_S, Math.max(NEAR_MIN_S, horizon / 60 * NEAR_S_PER_MIN));
+    const inPlay = new Set();
+    const meetS = new Map();
+    const catching = new Set();
+    const caught = new Set();
+    const near = new Map();
+    const reach = new Set();
+    const pressure = new Set();
+    for (const r of all) {
+        const t = meetInS(r);
+        if (t != null) {
+            meetS.set(r.id, t);
+            if (t <= horizon * (wasPlay?.has(r.id) ? PLAY_LEAVE : PLAY_ENTER)) {
+                inPlay.add(r.id);
+                (r.roadS > 0 ? catching : caught).add(r.id);
+                continue;
+            }
+        }
+        // Close at the finish (a crossing too slow or too late to be in play counts as close).
+        const g = finishGapS(r, horizon);
+        if (g != null && Math.abs(g) <= nearS * (wasNear?.has(r.id) ? NEAR_LEAVE : 1)) {
+            const kind = r.roadS > 0 ? 'reach' : 'pressure';
+            near.set(r.id, {kind, finishGapS: g, needSPerMin: Math.abs(g) / (horizon / 60)});
+            (kind === 'reach' ? reach : pressure).add(r.id);
+        }
+    }
+    return {inPlay, meetS, catching, caught, near, reach, pressure};
+}
+
+/**
+ * The track's range each way and which riders it shows (the rivals strip). Modes:
+ *   'play' (default): ±1 min, widened to hold every rider in play (you catch them, or they
+ *                     catch you, before the finish) or near (close at the finish), see playSet;
+ *   '30' | '60' | '120' | '300': a fixed range in seconds;
+ *   'field': wide enough for everyone (15 s up to 10 min), as before.
+ * Riders outside the range are left off the track and counted per side.
+ * Returns {rangeS, shown: [riders], hiddenAhead, hiddenBehind} and playSet's result.
+ */
+export function trackScale(all, {mode = 'play', remainingS = null, prev = null} = {}) {
+    const play = playSet(all, {remainingS, prev});
+    const {inPlay} = play;
+    let rangeS;
+    if (mode === 'field') {
+        const far = all.reduce((m, x) => Math.max(m, Math.abs(x.roadS)), 0);
+        rangeS = FIELD_STEPS_S.find(x => x >= far) ?? FIELD_STEPS_S.at(-1);
+    } else if (/^\d+$/.test(String(mode))) {
+        rangeS = Math.max(5, Number(mode));
+    } else {
+        const far = all.filter(r => inPlay.has(r.id) || play.near.has(r.id)).reduce((m, x) => Math.max(m, Math.abs(x.roadS)), 0);
+        rangeS = PLAY_STEPS_S.find(x => x >= far) ?? PLAY_STEPS_S.at(-1);
+    }
+    const shown = all.filter(r => Math.abs(r.roadS) <= rangeS);
+    return {
+        rangeS,
+        shown,
+        ...play,
+        hiddenAhead: all.filter(r => r.roadS > rangeS).length,
+        hiddenBehind: all.filter(r => r.roadS < -rangeS).length,
     };
 }

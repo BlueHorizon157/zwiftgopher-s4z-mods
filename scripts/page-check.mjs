@@ -10,7 +10,13 @@
 //   node scripts/page-check.mjs [--base=http://127.0.0.1:1080] [--replay=synthetic-flat-tt]
 //        [--plan=flat.fit.optimise] [--speed=20] [--out=/tmp/zg-page-check]
 //        [--pages=hud,hud-dial,hud-stack,list,field,rivals,settings]
-//        [--replays=1|0] [--looks=1|0] [--moments=armed:20,racing:200,soon:349,finished:940] [--backgrounds=snow,jungle,night]
+//        [--replays=1|0] [--looks=1|0] [--links=1|0] [--moments=armed:20,racing:200,soon:349,finished:940] [--backgrounds=snow,jungle,night]
+//   node scripts/page-check.mjs --probe [--probe-url=https://zwiftgopher.com/TT/share-plan.php?action=load&code=PROBE1]
+//        the ride-day probe (TT/RIDE_DAY_PLAN.md Phase 0.1), nothing else: from a mod page inside
+//        Sauce, the rider's id (rpc.getAthlete('self')), what rpc.getCachedEvents() holds (how far
+//        ahead, which signed-up events) before and after three loadNewerEvents() calls, whether
+//        rpc.getUpcomingEvents() exists and what rpc.getAthleteEvents() answers, and whether a fetch to the planner with an
+//        Authorization header passes the CORS preflight. Prints JSON and writes probe.json to --out.
 // Needs Sauce running with the web server on (Settings → Web server) and the mod enabled;
 // the mod id is zwiftgopher-tt. Chrome: /usr/bin/google-chrome or $CHROME.
 import {spawn} from 'node:child_process';
@@ -27,8 +33,11 @@ const OUT = opt.out || join(tmpdir(), 'zg-page-check');
 const PAGES = String(opt.pages || 'hud,hud-dial,hud-stack,list,field,rivals,settings').split(',');
 const LOOKS = opt.looks == null ? true : !['0', 'false', 'no'].includes(String(opt.looks));
 const STRATEGY = opt.strategy == null ? true : !['0', 'false', 'no'].includes(String(opt.strategy));
+const LINKS = opt.links == null ? true : !['0', 'false', 'no'].includes(String(opt.links));
 const REPLAYS = opt.replays == null ? true : !['0', 'false', 'no'].includes(String(opt.replays));
 const BACKGROUNDS = String(opt.backgrounds || 'snow,jungle,night').split(',');
+const PROBE = Boolean(opt.probe);
+const PROBE_URL = opt['probe-url'] || 'https://zwiftgopher.com/TT/share-plan.php?action=load&code=PROBE1';
 const CHROME = process.env.CHROME || '/usr/bin/google-chrome';
 const PORT = 9400 + Math.floor(Math.random() * 400);
 const MOD = `${BASE}/mods/zwiftgopher-tt/pages`;
@@ -152,8 +161,82 @@ const MINFONT_EXPR = `(() => { const root = document.querySelector('main'); if (
 const WINDOW_EXPR = `(() => ({listRows: document.querySelectorAll('#list .row').length, listNow: document.querySelector('#list .row.now')?.dataset.index ?? null, fieldRows: document.querySelectorAll('#field .row').length, fieldHome: Boolean(document.querySelector('#field .row.home')), fieldStale: document.querySelectorAll('#field .row.stale').length, rivalsNamed: document.querySelectorAll('#rivals .side li').length, rivalsDots: document.querySelectorAll('#rivals .dot').length, place: document.getElementById('place')?.textContent ?? null, head: [...document.querySelectorAll('.head .line, .head > span')].map(e => e.textContent.trim().replace(/\\s+/g, ' ')).filter(Boolean).slice(0, 4), sides: [...document.querySelectorAll('#rivals .side li')].map(li => li.textContent.trim().replace(/\\s+/g, ' '))}))()`;
 const DOM_EXPR = `(() => { const ids = ['now-label','now-w','live-w','band-word','next-label','next-w','next-in-m','next-in-s','wbal-kj','wbal-word','finish-label','finish-time','finish-delta','banner','idle-title','plan-route','summary-duration','spectate-banner']; const o = {}; for (const id of ids) { const el = document.getElementById(id); if (el) o[id] = (el.hidden ? '[hidden] ' : '') + el.textContent.trim().replace(/\\s+/g, ' ').slice(0, 60); } o.hudClass = document.getElementById('hud')?.className ?? null; o.rows = document.querySelectorAll('#interval-table tbody tr').length; const lbl = document.getElementById('now-label'); o.u = lbl ? parseFloat(getComputedStyle(lbl).fontSize).toFixed(1) : null; return o; })()`;
 
+
+// The ride-day probe (TT/RIDE_DAY_PLAN.md Phase 0.1). Runs inside a mod page so the calls go
+// through Sauce's own common.mjs, exactly as the mod's code would make them.
+const PROBE_EXPR = url => `(async () => {
+    const c = await import('/pages/src/common.mjs');
+    const out = {};
+    const now = Date.now();
+    const hours = ts => Math.round((ts - now) / 36e5 * 10) / 10;
+    const isTT = e => e.eventType === 'TIME_TRIAL' || (e.rulesSet || []).includes('NO_DRAFTING');
+    const summarise = evs => {
+        const ts = evs.map(e => e.ts).filter(Boolean);
+        return {
+            events: evs.length,
+            timeTrials: evs.filter(isTT).length,
+            oldestHours: ts.length ? hours(Math.min(...ts)) : null,
+            horizonHours: ts.length ? hours(Math.max(...ts)) : null,
+            signedUp: evs.filter(e => (e.eventSubgroups || []).some(sg => sg.signedUp))
+                .map(e => ({id: e.id, name: e.name, start: new Date(e.ts).toISOString(), hoursAhead: hours(e.ts), timeTrial: isTT(e)})),
+        };
+    };
+    try {
+        const a = await c.rpc.getAthlete('self');
+        out.self = a ? {id: a.id, name: [a.firstName, a.lastName].filter(Boolean).join(' ')} : null;
+    } catch (e) { out.self = 'ERR ' + e.message; }
+    try { out.cached = summarise(await c.rpc.getCachedEvents()); } catch (e) { out.cached = 'ERR ' + e.message; }
+    try {
+        for (let i = 0; i < 3; i++) { await c.rpc.loadNewerEvents(); }
+        out.afterLoadNewer3 = summarise(await c.rpc.getCachedEvents());
+    } catch (e) { out.afterLoadNewer3 = 'ERR ' + e.message; }
+    try {
+        const up = await c.rpc.getUpcomingEvents();
+        out.upcomingRpc = Array.isArray(up) ? {count: up.length, sample: up.slice(0, 3)} : up;
+    } catch (e) { out.upcomingRpc = 'ERR ' + e.message; }
+    try {
+        const id = out.self && typeof out.self === 'object' ? out.self.id : 'self';
+        const ev = await c.rpc.getAthleteEvents(id);
+        out.athleteEventsRpc = Array.isArray(ev) ? {count: ev.length, sample: ev.slice(0, 3)} : ev;
+    } catch (e) { out.athleteEventsRpc = 'ERR ' + e.message; }
+    out.probeUrl = ${JSON.stringify(url)};
+    try { const r = await fetch(out.probeUrl); out.fetchPlain = {status: r.status, body: (await r.text()).slice(0, 120)}; } catch (e) { out.fetchPlain = 'ERR ' + e.message; }
+    try { const r = await fetch(out.probeUrl, {headers: {Authorization: 'Bearer probe'}}); out.fetchAuthorization = {status: r.status, body: (await r.text()).slice(0, 120)}; } catch (e) { out.fetchAuthorization = 'ERR ' + e.message; }
+    return out;
+})()`;
+
+async function runProbe(b) {
+    await b.size(420, 720);
+    await b.goto(`${MOD}/settings.html?for=hud&windowId=zg-probe`);
+    await sleep(1200);
+    const r = await b.eval(PROBE_EXPR(PROBE_URL));
+    writeFileSync(join(OUT, 'probe.json'), JSON.stringify(r, null, 2));
+    console.log(JSON.stringify(r, null, 2));
+    const say = (ok, text) => console.log(`${ok ? 'ok  ' : 'note'} ${text}`);
+    say(r.self && typeof r.self === 'object', `rpc.getAthlete('self'): ${typeof r.self === 'object' && r.self ? `id ${r.self.id}` : r.self}`);
+    if (r.cached && typeof r.cached === 'object') {
+        say(true, `event cache at start: ${r.cached.events} events to ${r.cached.horizonHours} h ahead, ${r.cached.timeTrials} time trials, ${r.cached.signedUp.length} signed up`);
+    }
+    if (r.afterLoadNewer3 && typeof r.afterLoadNewer3 === 'object') {
+        say(true, `after three loadNewerEvents: ${r.afterLoadNewer3.events} events to ${r.afterLoadNewer3.horizonHours} h ahead, ${r.afterLoadNewer3.signedUp.length} signed up`);
+    }
+    say(typeof r.upcomingRpc === 'object', `rpc.getUpcomingEvents: ${typeof r.upcomingRpc === 'object' ? `${r.upcomingRpc.count} upcoming sign-ups` : r.upcomingRpc}`);
+    say(typeof r.athleteEventsRpc === 'object', `rpc.getAthleteEvents(self): ${typeof r.athleteEventsRpc === 'object' ? `${r.athleteEventsRpc.count} ridden-event slices (Sauce's per-event stats, not sign-ups; see probe.json)` : r.athleteEventsRpc}`);
+    say(typeof r.fetchPlain === 'object', `plain fetch to the planner: ${typeof r.fetchPlain === 'object' ? `HTTP ${r.fetchPlain.status}` : r.fetchPlain}`);
+    say(typeof r.fetchAuthorization === 'object', `fetch with Authorization: ${typeof r.fetchAuthorization === 'object' ? `HTTP ${r.fetchAuthorization.status} (preflight passed)` : `${r.fetchAuthorization} (the preflight was refused: the endpoint must answer OPTIONS with 204 and name Authorization)`}`);
+    console.log(`\nwritten: ${join(OUT, 'probe.json')}`);
+}
+
 mkdirSync(OUT, {recursive: true});
 const b = await launch();
+if (PROBE) {
+    try {
+        await runProbe(b);
+    } finally {
+        await b.close();
+    }
+    process.exit(0);
+}
 let failures = 0;
 const fail = msg => { failures++; console.log(`FAIL: ${msg}`); };
 try {
@@ -430,6 +513,79 @@ try {
             // Leave the library as the other passes expect it.
             await b.eval('localStorage.clear()');
         }
+    }
+
+    // Pass 4: the link states (TT/RIDE_DAY_PLAN.md Phase 1), seeded through the store: the
+    // pairing code in the plan panel, the toast for a plan that arrived while another is
+    // active and what Use does, and the idle title while linked with no plan.
+    if (LINKS) {
+        const page = 'hud';
+        await b.size(...SIZES[page]);
+        await b.goto(`${MOD}/${page}.html?replay=${REPLAY}&plan=${PLAN}&speed=1&seek=20&windowId=zg-link`);
+        await b.waitFor('window.zgtt && window.zgtt.view().status === "armed"', 15000);
+        await b.eval(`window.zgtt.store.setLink({token: 'zgt_pagecheck', state: 'pending', code: '7KQ2MF', expiresAt: new Date(Date.now() + 600000).toISOString(), zwiftId: 1, startedAt: Date.now()})`);
+        await b.eval(`document.querySelector('[data-action="change-plan"]').click()`);
+        await sleep(300);
+        const pending = await b.eval(`(() => { const p = document.getElementById('pairing'); return {shown: !p.hidden, code: document.getElementById('pairing-code').textContent}; })()`);
+        await b.screenshot(join(OUT, `${page}-link-pending.png`));
+        console.log(`-- ${page} link pending: ${JSON.stringify(pending)}`);
+        if (!pending.shown || pending.code !== '7KQ2MF') {
+            fail(`${page}: the pairing code is not shown in the plan panel`);
+        }
+        await b.eval(`document.getElementById('close-panel').click()`);
+        await b.eval(`(() => { const s = window.zgtt.store; s.setLink({token: 'zgt_pagecheck', state: 'linked', zwiftId: 1, riderName: 'Page Check', linkedAt: Date.now()});
+            const raw = JSON.parse(JSON.stringify(s.getActivePlanRaw())); raw.route = {...raw.route, name: 'Urumaze'};
+            s.savePlan('NEW111', raw, {activate: false, shelf: true, source: 'planner', publishedAt: new Date().toISOString()});
+            s.setShelf({offer: {code: 'NEW111', routeName: 'Urumaze', timeText: raw.summary?.time_text ?? null, at: Date.now()}}); window.zgtt.api.draw(); })()`);
+        await sleep(300);
+        const toast = await b.eval(`(() => { const t = document.getElementById('toast'); return {shown: !t.hidden, text: document.getElementById('toast-text').textContent}; })()`);
+        const font = await b.eval(MINFONT_EXPR);
+        await b.screenshot(join(OUT, `${page}-link-toast.png`));
+        console.log(`-- ${page} toast: ${JSON.stringify(toast)}, min font ${JSON.stringify(font)}`);
+        if (!toast.shown || !/Urumaze/.test(toast.text)) {
+            fail(`${page}: no toast for the plan that arrived`);
+        }
+        if (font && font.min < 11) {
+            fail(`${page}: text under 11 px with the toast (${font.which})`);
+        }
+        await b.eval(`document.getElementById('toast-use').click()`);
+        await sleep(300);
+        const used = await b.eval(`({active: window.zgtt.store.getActiveCode(), toastHidden: document.getElementById('toast').hidden, route: window.zgtt.view().plan?.routeName})`);
+        console.log(`-- ${page} after Use: ${JSON.stringify(used)}`);
+        if (used.active !== 'NEW111' || !used.toastHidden || used.route !== 'Urumaze') {
+            fail(`${page}: Use did not switch to the offered plan`);
+        }
+        // Linked, no plan: the panel waits for the planner instead of asking for a code.
+        await b.eval('localStorage.clear()');
+        await b.goto(`${MOD}/${page}.html?replay=${REPLAY}&speed=1&windowId=zg-link-idle`);
+        await b.waitFor('window.zgtt', 15000);
+        await b.eval(`window.zgtt.store.setLink({token: 'zgt_pagecheck', state: 'linked', zwiftId: 1, riderName: 'Page Check', linkedAt: Date.now()}); window.zgtt.api.draw()`);
+        await sleep(300);
+        const idle = await b.eval(`document.getElementById('idle-title').textContent`);
+        await b.screenshot(join(OUT, `${page}-link-idle.png`));
+        console.log(`-- ${page} idle while linked: ${idle}`);
+        if (!/planner/i.test(idle)) {
+            fail(`${page}: the idle title does not say it waits for the planner (${idle})`);
+        }
+        // The next time trial the rider is signed up for, in the panel (2.4).
+        await b.eval(`window.zgtt.api.setNextTT({id: 1, name: 'Zwift TT Club Racing - Urumaze', ts: Date.now() + 42 * 60000, subgroupId: 2, planCode: null})`);
+        await sleep(200);
+        const nextTT = await b.eval(`(() => { const n = document.getElementById('next-tt'); return {shown: !n.hidden, text: document.getElementById('next-tt-text').textContent}; })()`);
+        await b.screenshot(join(OUT, `${page}-link-next-tt.png`));
+        console.log(`-- ${page} next TT: ${JSON.stringify(nextTT)}`);
+        if (!nextTT.shown || !/Urumaze/.test(nextTT.text) || !/no plan yet/.test(nextTT.text)) {
+            fail(`${page}: the next time trial is not shown in the panel`);
+        }
+        // Plan it offers itself for a signed-up event with a route and no plan (2.5).
+        await b.eval(`window.zgtt.api.setNextTT({id: 1, name: 'Zwift TT Club Racing - Urumaze', ts: Date.now() + 42 * 60000, subgroupId: 2, routeId: '4092230492', laps: 1, planCode: null})`);
+        await sleep(200);
+        const planIt = await b.eval(`(() => { const btn = document.getElementById('next-tt-plan'); return {shown: !btn.hidden, text: btn.textContent, target: window.zgtt.api.planTarget()?.routeId}; })()`);
+        await b.screenshot(join(OUT, `${page}-link-plan-it.png`));
+        console.log(`-- ${page} Plan it: ${JSON.stringify(planIt)}`);
+        if (!planIt.shown || planIt.target !== '4092230492') {
+            fail(`${page}: Plan it is not offered for the next time trial`);
+        }
+        await b.eval('localStorage.clear()');
     }
 } finally {
     await b.close();

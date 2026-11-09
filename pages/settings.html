@@ -27,7 +27,31 @@
     <div id="settings">
       <div class="section" id="plans">
         <div class="title">Plans</div>
-        <p class="desc">Load a plan with the six-letter code from the planner's Share page (or paste its link). Codes last seven days; the newest five plans are kept here and the one for the event's route is picked automatically.</p>
+        <div class="link" id="link">
+          <p class="desc">Link this mod to the planner once and the plans you optimise there arrive here by themselves; a new plan becomes the plan when none is loaded, and is offered otherwise.</p>
+          <div id="link-unlinked">
+            <div class="button-row"><button type="button" class="btn primary" id="link-start">Link to the planner</button></div>
+          </div>
+          <div id="link-pending" hidden>
+            <div class="pairing-code tnum" id="link-code">——————</div>
+            <p class="desc">Enter this code in the planner: open your plan's <b>Share</b> dialog and press <b>Link Sauce</b>. The code lasts ten minutes<span id="link-countdown"></span>.</p>
+            <div class="button-row"><button type="button" class="btn" id="link-cancel">Cancel</button></div>
+          </div>
+          <div id="link-linked" hidden>
+            <p class="desc" id="link-linked-text"></p>
+            <ul class="devices" id="link-devices"></ul>
+            <div class="button-row">
+              <button type="button" class="btn" id="link-sync">Sync now</button>
+              <button type="button" class="btn" id="link-unlink">Unlink</button>
+            </div>
+          </div>
+          <p class="message" id="link-message"></p>
+        </div>
+        <div class="next" id="next-tts" hidden>
+          <p class="desc">Your next time trials (the ones Sauce has loaded, about four hours ahead, and the ones a plan here was made for):</p>
+          <ul class="devices" id="next-tts-list"></ul>
+        </div>
+        <p class="desc">Or load a plan with the six-letter code from the planner's Share page (or paste its link). Codes last seven days; the newest ten plans are kept here and the one for the event's route is picked automatically.</p>
         <div class="code-row">
           <input type="text" id="plan-code" maxlength="80" placeholder="plan code or link" autocomplete="off" spellcheck="false" aria-label="Plan code">
           <button type="button" id="load-plan" class="btn primary">Load</button>
@@ -114,6 +138,13 @@
             <option value="20">20 s</option>
           </select>
         </label>
+        <label title="While racing: the predicted time left to the finish line, or the predicted finish time. The delta from the plan shows beside it either way">
+          <key>Finish shows:</key>
+          <select name="finishShows">
+            <option value="remaining">Time to go</option>
+            <option value="finish">Predicted finish time</option>
+          </select>
+        </label>
         <label title="How the race clock starts in a time trial: auto tries the game's timer first, then the start line's distance">
           <key>Clock start:</key>
           <select name="startRule">
@@ -126,10 +157,11 @@
 
       <form id="field-options" class="section" data-for="field">
         <div class="title">Field</div>
-        <label title="On the clock: who is ahead in the standings at the same distance. On the road: who is physically ahead of you">
+        <label title="On the clock: who is ahead in the standings at the same distance. At the finish: the gaps and places predicted at the pace of the last minutes. On the road: who is physically ahead of you">
           <key>Gap:</key>
           <select name="gapMode">
             <option value="clock">On the clock (standings)</option>
+            <option value="finish">At the finish (predicted)</option>
             <option value="road">On the road</option>
           </select>
         </label>
@@ -137,7 +169,7 @@
           <key>Every category:</key>
           <input type="checkbox" name="allSubgroups">
         </label>
-        <p class="desc">Gaps are measured where both riders have been, every 50 m of the event, so they compare like with like. The trend is the time you gained or lost on each rider over the last minute.</p>
+        <p class="desc">Gaps are measured where both riders have been, every 50 m of the event, so they compare like with like. The trend (/min) is the time you gain or lose on each rider a minute, over the last four minutes, so a sprint barely moves it (over the last minute until four have passed). At that pace, carried to the line from your plan's time to go, each rider's tag says how it ends: <b>you beat</b> / <b>beats you</b> by so much, or outlined, close when you finish: <b>in reach</b> ahead, <b>pressure</b> behind (on the road gap: <b>catch</b> / <b>catches you</b> and when). Riders who finish nowhere near you fade back. The line under the header sums it up: <b>Clear</b> (ride your plan), <b>Defend</b>, <b>Chase</b> or <b>Contested</b>, with your place heading for (4th → 3rd). Click <i>gap</i> for the gaps and places predicted at the finish.</p>
       </form>
 
       <form id="rivals-options" class="section" data-for="rivals">
@@ -149,11 +181,30 @@
             <option value="2">2</option>
           </select>
         </label>
-        <p class="desc">Behind you on the left, ahead on the right. Green: you are gaining time on that rider over the last minute; orange: losing. The speed is theirs over the last part of the plan you have both ridden, green when it was slower than yours.</p>
+        <label title="How far the track under the names reaches each way">
+          <key>Track range:</key>
+          <select name="rivalsRange">
+            <option value="play">±1 min, wider for the riders that matter</option>
+            <option value="30">±30 s</option>
+            <option value="60">±1 min</option>
+            <option value="120">±2 min</option>
+            <option value="300">±5 min</option>
+            <option value="field">The whole field</option>
+          </select>
+        </label>
+        <p class="desc">Behind you on the left, ahead on the right: the nearest rider each side, then the nearest that matters. Each says how it ends at the pace of the last four minutes (a sprint barely moves it): <b>catch 4:10</b> (you catch them in 4:10) or <b>catches you 3:20</b>; outlined, close when you finish: <b>in reach 8 s</b> (a little more from you, or a fade from them, and you catch them) or <b>pressure 5 s</b> (they finish 5 s behind you). Beside it, how much you gain (green) or lose (orange) on them a minute. In the middle, your place and the verdict on the finish (as the field's): <b>clear</b>, <b>defend</b>, <b>chase</b> or <b>contested</b>, and the place you are heading for (→ 3rd).</p>
+        <p class="desc">On the track, riders you meet before the finish are ringed and those close at the finish ring-dashed; the track widens to hold both. The ends count who you catch and who catches you, and the riders beyond the range (+3). Close is a second for each minute to go, 5 s to 30 s.</p>
       </form>
 
       <form id="advanced" class="section">
         <div class="title">Advanced</div>
+        <label data-for="hud" title="Plan it (the HUD's button for the event you are in or signed up for) builds the plan in the planner with these settings">
+          <key>Plan it uses:</key>
+          <select name="planItInputs">
+            <option value="last">My last planner settings</option>
+            <option value="defaults">The planner's defaults</option>
+          </select>
+        </label>
         <label title="Show the engine's log in the window">
           <key>Debug log:</key>
           <input type="checkbox" name="showDebug">

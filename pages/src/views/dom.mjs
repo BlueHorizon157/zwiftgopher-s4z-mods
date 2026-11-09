@@ -71,3 +71,26 @@ export function fmtGrade(pct) {
     const t = pct.toFixed(1);
     return `${t === '-0.0' ? '0.0' : t}%`;
 }
+
+/**
+ * The finish cell for any window: {label, seconds}. While racing it is the predicted time to
+ * go (finishShows 'remaining', the default) or the predicted finish time ('finish'); before
+ * the start the plan's time, which is both; after the finish the rider's time. The delta from
+ * the plan (ahead, behind, on plan) goes beside it either way.
+ */
+export function finishFigure(v, finishShows = 'remaining') {
+    const race = v.race ?? {};
+    const plan = v.plan;
+    if (!plan) {
+        return {label: finishShows === 'finish' ? 'finish' : 'to go', seconds: null};
+    }
+    if (v.status === 'finished') {
+        return {label: 'finished', seconds: race.elapsedS ?? null};
+    }
+    if (race.running && race.totalS != null) {
+        return finishShows === 'finish'
+            ? {label: 'finish', seconds: race.totalS}
+            : {label: 'to go', seconds: race.remainingS ?? Math.max(0, race.totalS - (race.elapsedS ?? 0))};
+    }
+    return {label: 'plan', seconds: race.planTimeFromStartS ?? plan.timeS ?? null};
+}

@@ -173,6 +173,30 @@ html[data-band-words="false"] .live .word { display: none; }
 .banner .name { color: var(--ink); }
 .hud.spectating .hud-grid { opacity: 0.45; }
 
+/* a plan from the planner, offered before the start (TT/RIDE_DAY_PLAN.md 2.4) */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 0.4em;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  max-width: 96%;
+  padding: 0.25em 0.6em;
+  font-size: max(11px, 0.95em);
+  background: rgba(8, 12, 18, 0.88);
+  border: 1px solid var(--on);
+  border-radius: 0.5em;
+  white-space: nowrap;
+  z-index: 2;
+}
+.toast[hidden] { display: none; }
+.toast .text { overflow: hidden; text-overflow: ellipsis; }
+.toast button { padding: 0.1em 0.5em; }
+.hud:hover .toast,
+.hud.tray-pinned .toast { bottom: 2.3em; }
+
 /* idle: the plan code, obvious; the figures stay out of the way */
 .hud.choosing .hud-grid, .hud.choosing .progress, .hud.choosing .dial-svg, .hud.choosing .banner { visibility: hidden; }
 .idle {
@@ -315,8 +339,15 @@ html[data-layout="stack"] .progress {
 html[data-layout="stack"] .progress-fill { width: 100%; height: 0; transition: height 500ms linear; }
 html[data-layout="stack"] .dial-svg { display: none; }
 
-/* ---- dial ---- */
+/* ---- dial ----
+ * A 270° gauge open at the bottom (the opening holds the next change, clear of every ring).
+ * Rings from the outside in: power (live arc in the band colour over the target band, the
+ * next target as a tick), time left in the interval (drains to the change, amber in the
+ * warning time), W' left (with the plan's floor; red under 25 %). Every line of text has its
+ * own row inside the inner ring, laid out in the SVG's 260-unit space: --t is one unit. */
 html[data-layout="dial"] .hud {
+  --t: calc(min(100cqw, 100cqh) / 260);
+  --f: calc(var(--t) * var(--hud-scale));
   aspect-ratio: 1;
   margin: auto;
   max-height: 100%;
@@ -335,41 +366,85 @@ html[data-layout="dial"] .hud-grid {
   position: absolute;
   inset: 0;
 }
-html[data-layout="dial"] .cell { position: absolute; align-items: center; text-align: center; }
+html[data-layout="dial"] .cell { position: absolute; align-items: center; text-align: center; transform: translateY(-50%); }
 html[data-layout="dial"] .cell + .cell { border: 0; }
-html[data-layout="dial"] .now { left: 22%; right: 22%; top: 29%; }
-html[data-layout="dial"] .now .num { font-size: 3.4em; }
-html[data-layout="dial"] .finish { left: 22%; right: 22%; top: 19%; flex-direction: row; gap: 0.4em; align-items: baseline; justify-content: center; }
-html[data-layout="dial"] .finish .num { font-size: 1.35em; }
-html[data-layout="dial"] .finish .label { font-size: max(11px, 0.9em); }
-html[data-layout="dial"] .next { left: 18%; right: 18%; bottom: 8%; }
-html[data-layout="dial"] .next .figure { justify-content: center; }
-html[data-layout="dial"] .next .meta { display: flex; gap: 0.6em; justify-content: center; }
-html[data-layout="dial"] .wbal { left: 20%; right: 20%; top: 61%; flex-direction: row; gap: 0.35em; align-items: baseline; justify-content: center; }
-html[data-layout="dial"] .wbal .figure .num { font-size: 1.35em; }
-html[data-layout="dial"] .wbal .bar { display: none; }
-html[data-layout="dial"] .wbal .label { font-size: max(11px, 0.9em); }
-html[data-layout="dial"] .wbal .sub { display: none; }
-html[data-layout="dial"] .wbal.low .sub { display: block; width: 100%; text-align: center; }
-html[data-layout="dial"] .progress { display: none; }
-html[data-layout="dial"] .tray { font-size: max(11px, 0.9em); left: 12%; right: 12%; bottom: 14%; border-radius: 0.5em; padding: 0.4em; }
-html[data-layout="dial"] .banner { position: absolute; top: 11%; left: 16%; right: 16%; padding: 0; text-align: center; font-size: max(11px, 0.9em); }
+html[data-layout="dial"] .label { color: rgba(245, 247, 250, 0.82); font-weight: 600; font-size: max(11px, calc(var(--f) * 10.5)); }
+html[data-layout="dial"] .unit { color: rgba(245, 247, 250, 0.85); font-weight: 600; font-size: max(11px, calc(var(--f) * 11)); }
 
-.dial-svg .track { fill: none; stroke: var(--ink-line); stroke-width: 10; }
+/* finish: "to go 10:24" near the top, the delta from the plan on a short line under it */
+html[data-layout="dial"] .finish { top: calc(var(--t) * 76); left: calc(var(--t) * 56); right: calc(var(--t) * 56); flex-direction: row; flex-wrap: wrap; column-gap: 0.35em; row-gap: 0; align-items: baseline; justify-content: center; }
+html[data-layout="dial"] .finish .delta { flex-basis: 100%; text-align: center; line-height: 1.1; }
+html[data-layout="dial"] .finish .delta:empty { display: none; }
+html[data-layout="dial"] .finish .num { font-size: max(11px, calc(var(--f) * 19)); font-weight: 800; }
+html[data-layout="dial"] .finish .delta { font-size: max(11px, calc(var(--f) * 11.5)); font-weight: 700; }
+
+/* now: the label, the target (the hero) and the live power under it */
+html[data-layout="dial"] .now { top: calc(var(--t) * 130); left: calc(var(--t) * 44); right: calc(var(--t) * 44); gap: calc(var(--t) * 1); }
+html[data-layout="dial"] .now .figure { line-height: 1; }
+html[data-layout="dial"] .now .num { font-size: max(11px, calc(var(--f) * 46)); line-height: 0.9; }
+html[data-layout="dial"] .now .unit { font-size: max(11px, calc(var(--f) * 13)); }
+html[data-layout="dial"] .now .live { font-size: max(11px, calc(var(--f) * 18)); }
+html[data-layout="dial"] .now .live .glyph { font-size: max(11px, calc(var(--f) * 13)); }
+html[data-layout="dial"] .now .live .word { font-size: max(11px, calc(var(--f) * 12)); }
+
+/* W' left: one row under the live power */
+html[data-layout="dial"] .wbal { top: calc(var(--t) * 180); left: calc(var(--t) * 52); right: calc(var(--t) * 52); flex-direction: row; gap: 0.3em; align-items: baseline; justify-content: center; }
+html[data-layout="dial"] .wbal .num { font-size: max(11px, calc(var(--f) * 16)); font-weight: 800; }
+html[data-layout="dial"] .wbal .bar { display: none; }
+html[data-layout="dial"] .wbal .sub { display: none; }
+html[data-layout="dial"] .wbal.low .sub { display: inline; font-size: max(11px, calc(var(--f) * 10)); color: var(--low); }
+
+/* next: in the opening at the bottom, two rows */
+html[data-layout="dial"] .next { top: calc(var(--t) * 214); left: calc(var(--t) * 34); right: calc(var(--t) * 34); flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: baseline; column-gap: 0.35em; row-gap: calc(var(--t) * 1); }
+html[data-layout="dial"] .next .num { font-size: max(11px, calc(var(--f) * 22)); font-weight: 800; }
+html[data-layout="dial"] .next .figure { justify-content: center; }
+html[data-layout="dial"] .next .meta { flex-basis: 100%; display: flex; gap: 0.6em; justify-content: center; font-size: max(11px, calc(var(--f) * 11.5)); }
+html[data-layout="dial"] .next .grade, html[data-layout="dial"] .next .in { font-size: 1em; }
+html[data-layout="dial"] .next .in { color: rgba(245, 247, 250, 0.88); }
+
+html[data-layout="dial"] .vitals { display: none; }
+html[data-layout="dial"] .progress { display: none; }
+html[data-layout="dial"] .tray { font-size: max(11px, calc(var(--f) * 10)); left: 14%; right: 14%; bottom: 3%; border-radius: 0.5em; padding: 0.4em; }
+/* the banner (starts in, ready, finished, a length mismatch): a row above the finish */
+html[data-layout="dial"] .banner { position: absolute; top: calc(var(--t) * 51); left: calc(var(--t) * 76); right: calc(var(--t) * 76); padding: 0; text-align: center; font-size: max(11px, calc(var(--f) * 10)); color: rgba(245, 247, 250, 0.88); }
+html[data-layout="dial"] .banner .chip { display: none; }
+html[data-layout="dial"] .finish .chip {
+  pointer-events: auto;
+  padding: 0 0.55em;
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink);
+  background: rgba(8, 12, 18, 0.55);
+  border: 1px solid rgba(245, 247, 250, 0.4);
+  border-radius: 1em;
+  cursor: pointer;
+}
+html[data-layout="dial"] .finish .chip:hover { border-color: var(--ink); }
+/* the route name and the finish banner repeat what the rows say: the dial has no room for them */
+html[data-layout="dial"] .banner .name { display: none; }
+html[data-layout="dial"] .hud[data-state="finished"] .banner { display: none; }
+
+/* the rings */
+.dial-svg .disc { fill: transparent; }
+html[data-bg="smoke"] .dial-svg .disc { fill: rgba(4, 8, 14, 0.34); }
+html[data-bg="dark"] .dial-svg .disc { fill: rgba(4, 8, 14, 0.2); }
+.dial-svg .track { fill: none; stroke: rgba(245, 247, 250, 0.2); stroke-width: 12; stroke-linecap: round; }
+.dial-svg .target-arc { fill: none; stroke: rgba(245, 247, 250, 0.3); stroke-width: 18; stroke-linecap: butt; }
+.dial-svg .target-tick { fill: none; stroke: var(--ink); stroke-width: 4; stroke-linecap: round; filter: drop-shadow(0 0 1.5px var(--halo)); }
 .dial-svg .under-stroke { fill: none; stroke: var(--halo); stroke-width: 14; stroke-linecap: round; }
 .dial-svg .live-arc { fill: none; stroke: var(--ink-2); stroke-width: 10; stroke-linecap: round; }
 .dial-svg .live-arc.band-under { stroke: var(--under); }
 .dial-svg .live-arc.band-on { stroke: var(--on); }
 .dial-svg .live-arc.band-over { stroke: var(--over); }
-.dial-svg .target-arc { fill: none; stroke: var(--ink); stroke-width: 4; opacity: 0.9; }
-.dial-svg .next-tick { fill: none; stroke: var(--ink-2); stroke-width: 2.5; }
-.hud.soon .dial-svg .next-tick { stroke: var(--soon); stroke-width: 3.5; }
-.dial-svg .wbal-track { fill: none; stroke: var(--ink-line); stroke-width: 5; }
-.dial-svg .wbal-arc { fill: none; stroke: var(--ink); stroke-width: 5; stroke-linecap: round; }
+.dial-svg .next-tick { fill: none; stroke: rgba(245, 247, 250, 0.75); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 3 2.5; }
+.hud.soon .dial-svg .next-tick { stroke: var(--soon); stroke-width: 4; stroke-dasharray: none; }
+.dial-svg .time-track { fill: none; stroke: rgba(245, 247, 250, 0.16); stroke-width: 6; stroke-linecap: round; }
+.dial-svg .time-arc { fill: none; stroke: rgba(245, 247, 250, 0.7); stroke-width: 6; stroke-linecap: round; }
+.hud.soon .dial-svg .time-arc { stroke: var(--soon); }
+.dial-svg .wbal-track { fill: none; stroke: rgba(245, 247, 250, 0.16); stroke-width: 6; stroke-linecap: round; }
+.dial-svg .wbal-arc { fill: none; stroke: var(--ink); stroke-width: 6; stroke-linecap: round; }
 .dial-svg .wbal-arc.low { stroke: var(--low); }
-.dial-svg .wbal-floor { fill: none; stroke: var(--ink-2); stroke-width: 2; }
-.dial-svg .progress-track { fill: none; stroke: var(--ink-line); stroke-width: 2; }
-.dial-svg .progress-arc { fill: none; stroke: var(--ink-2); stroke-width: 2; }
+.dial-svg .wbal-floor { fill: none; stroke: var(--soon); stroke-width: 2.5; }
 
 /* vitals are shown where the layout has room and the setting is on: the stack, and a strip
  * at least 130 px tall; the dial has no room */
@@ -388,6 +463,16 @@ html[data-show-live="true"][data-layout="stack"] .vitals { display: flex; }
 .idle .strategy .choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.3em; }
 .idle .strategy button .tnum { color: inherit; opacity: 0.8; margin-left: 0.2em; }
 .idle .clip .hint { max-width: none; }
+.idle .pairing { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.3em 0.5em; }
+.idle .pairing[hidden] { display: none; }
+.idle .pairing .label { color: var(--ink-2); }
+.idle .pairing .code { font-size: 1.6em; font-weight: 800; letter-spacing: 0.25em; }
+.idle .pairing .hint { max-width: none; }
+.idle .next-tt { display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0.3em 0.5em; font-size: 1em; }
+.idle .next-tt[hidden] { display: none; }
+.idle .next-tt .label { color: var(--ink-2); }
+html[data-layout="strip"] .idle .next-tt { display: none; }
+html[data-layout="strip"] .hud.choosing .idle .next-tt { display: flex; }
 .hud button * { text-shadow: none; }
 .hud button[aria-pressed="true"] { background: var(--ink); color: var(--panel-ink); border-color: transparent; }
 .hud button:disabled { opacity: 0.5; cursor: default; }

@@ -3,11 +3,12 @@
 // page's override; look settings are data attributes on <html> so the CSS does the rest.
 import {startWindow, statusWords} from './views/runtime.mjs';
 import {clipboardCode} from './views/plan-loader.mjs';
-import {setText, setHidden, setClass, setAttr, fmtTime, deltaWords, fmtGrade} from './views/dom.mjs';
+import {setText, setHtml, setHidden, setClass, setAttr, fmtTime, deltaWords, fmtGrade, finishFigure} from './views/dom.mjs';
 
 const LAYOUTS = ['strip', 'dial', 'stack'];
 const GLYPH = {under: '▼', on: '●', over: '▲'};
-const DIAL = {centre: 130, startDeg: 210, totalDeg: 300, power: 118, wbal: 104, progress: 94};
+// The dial: a 270° gauge open at the bottom (start at 135°, clockwise); rings from the outside in.
+const DIAL = {centre: 130, startDeg: 135, totalDeg: 270, power: 116, time: 102, wbal: 93};
 
 const els = {};
 let win = null;
@@ -96,13 +97,15 @@ function initControls() {
             win.draw();
         }
     });
-    // Before the start the banner's strategy chip opens the plan panel.
-    els.banner.addEventListener('click', ev => {
-        if (ev.target.closest('[data-action="strategy"]')) {
-            changingPlan = true;
-            win.draw();
-        }
-    });
+    // Before the start the strategy chip (in the banner; on the dial, by the plan time) opens the plan panel.
+    for (const el of [els.banner, els.finishLabel]) {
+        el.addEventListener('click', ev => {
+            if (ev.target.closest('[data-action="strategy"]')) {
+                changingPlan = true;
+                win.draw();
+            }
+        });
+    }
     els.planCode.addEventListener('keydown', ev => {
         if (ev.key === 'Enter') {
             loadFromInput();
@@ -112,6 +115,27 @@ function initControls() {
         }
     });
     els.planCode.addEventListener('input', () => message(''));
+    // Plan it (2.5): the event the rider is in, else the next time trial.
+    els.nextTtPlan.addEventListener('click', async () => {
+        message('');
+        try {
+            const r = await win.planIt();
+            if (r) {
+                message(`Plan ${r.code} ready${r.meta?.inputs_source === 'defaults' ? ' (the planner\'s default settings: open the planner to tune them)' : ''}.`, true);
+            }
+        } catch (err) {
+            message(err.message);
+        }
+    });
+    // A plan from the planner, offered while another is active (TT/RIDE_DAY_PLAN.md 2.4).
+    els.toast.addEventListener('click', ev => {
+        const action = ev.target.closest('[data-action]')?.dataset.action;
+        if (action === 'use-offer') {
+            win.useOffer();
+        } else if (action === 'dismiss-offer') {
+            win.dismissOffer();
+        }
+    });
 }
 
 function loadFromInput() {
@@ -165,13 +189,51 @@ function render(v) {
     setHidden(els.idle, !showIdle);
     setClass(hud, 'choosing', showIdle);
     const beforeStart = win.beforeStart();
+    const link = win.link();
+    const linked = link?.state === 'linked';
     if (showIdle) {
-        setText(els.idleTitle, plan ? `Plan ${plan.code ?? ''}: ${plan.routeName ?? 'custom route'}` : 'Enter your plan code');
-        setText(els.idleHint, !plan ? "The six-letter code from the planner's Share page, or paste its link."
+        setText(els.idleTitle, plan ? `Plan ${plan.code ?? ''}: ${plan.routeName ?? 'custom route'}` : (linked ? 'Waiting for a plan from the planner' : 'Enter your plan code'));
+        setText(els.idleHint, !plan
+            ? (linked ? `Optimise a plan in the planner${link.riderName ? ` as ${link.riderName}` : ''}: it arrives here by itself. Or enter a code.`
+                : "The six-letter code from the planner's Share page, or paste its link.")
             : beforeStart ? 'Pick a strategy, or enter another code. Esc keeps this plan.'
                 : 'The strategy can be changed before the start. Esc keeps this plan.');
         renderStrategy(plan, beforeStart);
     }
+    // A pairing waiting for the planner: the code, large, in the panel (2.1).
+    const pairing = link?.state === 'pending' && link.code ? link.code : null;
+    setHidden(els.pairing, !(showIdle && pairing));
+    setText(els.pairingCode, pairing ?? '');
+    // The next time trial the rider is signed up for, in the panel while nothing is happening
+    // (2.4), or the event the rider is in with no plan for it, with Plan it (2.5).
+    const upcoming = win.nextTT();
+    const planning = win.planning();
+    const planFor = win.planTarget();
+    const inEvent = Boolean(v.event?.inEvent);
+    let nextText = '';
+    let nextLabel = 'next TT';
+    let showPlanIt = false;
+    if (planning) {
+        nextLabel = 'plan it';
+        nextText = `planning ${planning.target?.name ?? 'the event'}… ${Math.round((Date.now() - planning.startedAt) / 1000)} s`;
+    } else if (inEvent && !plan && planFor?.inEvent) {
+        nextLabel = 'this event';
+        nextText = `${planFor.name ?? v.event?.name ?? 'event'} · no plan yet`;
+        showPlanIt = linked;
+    } else if (upcoming && !inEvent) {
+        nextText = nextWords(upcoming, plan);
+        showPlanIt = linked && !upcoming.planCode && Boolean(upcoming.routeId);
+    }
+    setHidden(els.nextTt, !(showIdle && nextText));
+    setText(els.nextTtLabel, nextLabel);
+    setText(els.nextTtText, nextText);
+    setHidden(els.nextTtPlan, !showPlanIt);
+    els.nextTtPlan.disabled = Boolean(planning);
+    // A plan that arrived while another is active: offered before the start (decision 3).
+    const shelfOffer = win.offer();
+    const showToast = Boolean(shelfOffer && plan && !showIdle && beforeStart && !v.spectating);
+    setHidden(els.toast, !showToast);
+    setText(els.toastText, shelfOffer ? `new plan: ${shelfOffer.routeName ?? shelfOffer.code}${shelfOffer.timeText ? ` · ${shelfOffer.timeText}` : ''}` : '');
     setHidden(els.closePanel, !(showIdle && plan));
     // A code on the clipboard: in the panel, and in the tray before the start.
     const offer = clipCode && clipCode !== plan?.code ? clipCode : null;
@@ -274,24 +336,30 @@ function render(v) {
         setText(els.wbalWord, '');
     }
 
-    // Finish: the predicted finish time, with the plan's as the baseline, and the delta in words.
-    if (plan) {
-        if (v.status === 'finished') {
-            setText(els.finishLabel, 'finished');
-            setText(els.finishTime, fmtTime(race.elapsedS));
-        } else if (race.running && race.totalS != null) {
-            setText(els.finishLabel, 'finish');
-            setText(els.finishTime, fmtTime(race.totalS));
+    // On the dial the strategy chip labels the plan time before the start ("fastest 14:54"):
+    // the time is that strategy's, and the banner above has no room for both.
+    const dialChip = document.documentElement.dataset.layout === 'dial' && plan && (v.status === 'armed' || v.status === 'idle')
+        && !v.spectating && strategyChoices(plan).length > 1;
+    const finishLabel = text => {
+        if (dialChip) {
+            setHtml(els.finishLabel, `<button type="button" class="chip" data-action="strategy" title="Change the strategy or the plan">${escapeHtml((plan.strategyLabel ?? 'as shared').toLowerCase())}</button>`);
         } else {
-            setText(els.finishLabel, 'plan');
-            setText(els.finishTime, fmtTime(race.planTimeFromStartS ?? plan.timeS));
+            els.finishLabel.__html = null;
+            setText(els.finishLabel, text);
         }
+    };
+    // Finish: the time to go (or, by the setting, the predicted finish time), the plan's time
+    // before the start, and the delta from the plan in words.
+    if (plan) {
+        const fig = finishFigure(v, win.prefs().finishShows);
+        finishLabel(fig.label);
+        setText(els.finishTime, fmtTime(fig.seconds));
         const words = (race.running && race.pacingSampleS > 0) || v.status === 'finished' ? deltaWords(race.deltaS) : '';
         setText(els.finishDelta, words);
         setClass(els.finishDelta, 'ahead', words.startsWith('ahead'));
         setClass(els.finishDelta, 'behind', words.startsWith('behind'));
     } else {
-        setText(els.finishLabel, 'finish');
+        finishLabel('finish');
         setText(els.finishTime, '—');
         setText(els.finishDelta, '');
     }
@@ -373,6 +441,10 @@ function setBanner(v, now) {
         name = v.plan?.routeName ? ` ${v.plan.routeName}` : '';
     } else if (v.status === 'idle' && v.plan) {
         text = `${v.plan.routeName ?? 'plan'}: ${statusWords(v)}`;
+        const upcoming = win.nextTT();
+        if (upcoming) {
+            text += ` · next TT ${nextWords(upcoming, v.plan, true)}`;
+        }
     } else if (v.status === 'racing' && Number.isFinite(v.event?.mismatchM)) {
         // A plan for another distance (the 2026-10-27 race: one lap planned, 16 km raced)
         // stays flagged for the whole race; the finish is predicted to the event's end.
@@ -401,32 +473,42 @@ export function mismatchWords(v) {
 
 function initDial() {
     setArc(els.dialTrack, 0, 1, DIAL.power);
+    setArc(els.dialTimeTrack, 0, 1, DIAL.time);
     setArc(els.dialWbalTrack, 0, 1, DIAL.wbal);
-    setArc(els.dialProgressTrack, 0, 1, DIAL.progress);
 }
 
 function renderDial(v) {
     const plan = v.plan;
     const target = v.target;
     const live = v.live;
+    const racing = v.status !== 'finished';
     const maxPower = plan?.peakPowerW > 0 ? Math.ceil(plan.peakPowerW * 1.25) : 600;
-    const ratio = live.powerW != null ? clamp(live.powerW / maxPower, 0, 1) : 0;
+    // Power: the live arc in the band colour over the target band, the target as a bold tick
+    // and the next target as a dashed one (amber when the change is seconds away).
+    const ratio = racing && live.powerW != null ? clamp(live.powerW / maxPower, 0, 1) : 0;
     setArc(els.dialLive, 0, ratio, DIAL.power);
     setArc(els.dialLiveUnder, 0, ratio, DIAL.power);
     for (const b of ['under', 'on', 'over']) {
         setClass(els.dialLive, `band-${b}`, target?.band === b);
     }
-    if (target) {
+    if (target && racing) {
         const w = win.engine.state.prefs.bandWidthW;
         setArc(els.dialTarget, clamp((target.powerW - w) / maxPower, 0, 1), clamp((target.powerW + w) / maxPower, 0, 1), DIAL.power);
+        setTick(els.dialTargetTick, clamp(target.powerW / maxPower, 0, 1), DIAL.power, 12);
     } else {
         setArc(els.dialTarget, 0, 0, DIAL.power);
+        setAttr(els.dialTargetTick, 'd', '');
     }
-    if (v.next && target && Math.abs(v.next.powerW - target.powerW) > 5) {
-        setTick(els.dialNext, clamp(v.next.powerW / maxPower, 0, 1), DIAL.power, 9);
+    if (racing && v.next && target && Math.abs(v.next.powerW - target.powerW) > 5) {
+        setTick(els.dialNext, clamp(v.next.powerW / maxPower, 0, 1), DIAL.power, 11);
     } else {
         setAttr(els.dialNext, 'd', '');
     }
+    // Time left in the interval: full at its start, empty at the change (by distance, which
+    // is what the change waits for); the whole ring before the start, none after the finish.
+    const left = !target || !racing ? 0 : target.beforePlan ? 1 : clamp(1 - target.progress, 0, 1);
+    setArc(els.dialTime, 0, left, DIAL.time);
+    // W' left, with the plan's floor.
     const w = v.wbal;
     if (w) {
         setArc(els.dialWbal, 0, clamp(w.pct / 100, 0, 1), DIAL.wbal);
@@ -440,7 +522,6 @@ function renderDial(v) {
         setArc(els.dialWbal, 0, 0, DIAL.wbal);
         setAttr(els.dialWbalFloor, 'd', '');
     }
-    setArc(els.dialProgress, 0, target && !target.beforePlan ? clamp(target.progress, 0, 1) : 0, DIAL.progress);
 }
 
 function setArc(el, startRatio, endRatio, radius) {
@@ -471,6 +552,15 @@ function setTick(el, ratio, radius, half) {
 }
 
 // ---- helpers ----
+
+/** "Urumaze 19:20 (in 42 min) · plan ready": the next time trial and whether a plan fits it. */
+function nextWords(next, plan, short = false) {
+    const when = next.ts ? new Date(next.ts).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
+    const minutes = next.ts ? Math.round((next.ts - Date.now()) / 60000) : null;
+    const countdown = minutes == null ? '' : minutes < 0 ? 'started' : minutes < 1 ? 'starting now' : minutes < 120 ? `in ${minutes} min` : minutes < 2880 ? `in ${Math.round(minutes / 60)} h` : `in ${Math.round(minutes / 1440)} days`;
+    const status = next.planCode ? (plan && next.planCode === plan.code ? 'this plan' : short ? 'plan ready' : `plan ${next.planCode} ready`) : 'no plan yet';
+    return `${next.name ?? 'event'} ${when}${countdown ? ` (${countdown})` : ''} · ${status}`;
+}
 
 /** Time-weighted average power over the tracked intervals. */
 function rideAverage(stats) {
