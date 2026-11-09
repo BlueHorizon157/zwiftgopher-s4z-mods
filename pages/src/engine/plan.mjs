@@ -28,6 +28,7 @@ export function normalisePlan(raw, {code = null, card = null} = {}) {
     const cpUsed = num(rider.cp_used) ?? num(rider.ftp) ?? null;
     const cp = num(rider.cp_wbal) ?? cpUsed;
 
+    const here = fromHereOf(meta.from_here, wPrimeJ);
     const shared = normaliseIntervals(raw.intervals);
     const cards = Array.isArray(raw.cards) ? raw.cards.map(c => normaliseCard(c, raw.intervals)).filter(Boolean) : [];
     const chosen = card ? cards.find(c => c.key === card && c.intervals) ?? null : null;
@@ -70,7 +71,40 @@ export function normalisePlan(raw, {code = null, card = null} = {}) {
         peakPowerW: intervals.reduce((m, iv) => Math.max(m, iv.powerW), 0),
         intervals,
         cards: cards.map(({intervals: rows, ...c}) => ({...c, switchable: Boolean(rows)})),
-        signature: signatureOf(intervals, route),
+        // A plan from here is also its moment: two made on the same stretch are two plans.
+        signature: signatureOf(intervals, route) + (here ? `|here:${here.rideM}@${here.worldMs}` : ''),
+        fromHere: here,
+    };
+}
+
+/**
+ * A plan from here (views/from-here.mjs): the rest of a race or route lap, planned where the
+ * rider was. The planner's meta.from_here, with the anchor the mod adds when it saves the plan
+ * ({ride_m, world_ms, subgroup_id, route_id}: the ride metre and world time of plan metre 0).
+ * Null on a plan from the start, or on one whose anchor is missing (it cannot be placed).
+ */
+function fromHereOf(fh, wPrimeJ) {
+    const a = fh?.anchor;
+    const rideM = num(a?.ride_m);
+    const worldMs = num(a?.world_ms);
+    if (!fh || typeof fh !== 'object' || rideM == null || worldMs == null) {
+        return null;
+    }
+    const fraction = num(fh.start_wbal_fraction);
+    return {
+        kind: fh.kind === 'event' ? 'event' : 'route',
+        rideM,
+        worldMs,
+        subgroupId: a.subgroup_id != null ? String(a.subgroup_id) : null,
+        routeId: a.route_id != null ? String(a.route_id) : null,
+        // On the plan's own W' (the one the engine tracks), as a share: the file's W' and the
+        // planner's agree, and a share cannot disagree with either.
+        startWbalJ: fraction != null && wPrimeJ ? Math.max(0, Math.min(1, fraction)) * wPrimeJ : null,
+        cpFactor: num(fh.cp_factor) ?? 1,
+        overBudget: Boolean(fh.over_budget),
+        bike: fh.bike === 'tt' || fh.bike === 'road' ? fh.bike : null,
+        bikeReason: typeof fh.bike_reason === 'string' ? fh.bike_reason : null,
+        remainingM: num(fh.remaining_m),
     };
 }
 

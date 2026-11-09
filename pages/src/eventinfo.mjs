@@ -38,6 +38,8 @@ export async function fetchEventInfo(subgroupId) {
             routeId: sg?.routeId ?? ev?.routeId ?? null,
             laps: sg?.laps ?? ev?.laps ?? null,
             distanceM: sg?.distanceInMeters ?? ev?.distanceInMeters ?? null,
+            // NO_DRAFTING and the like: Plan from here's bike (views/from-here.mjs chooseBike).
+            rules: Array.isArray(sg?.rulesSet) ? sg.rulesSet : (Array.isArray(ev?.rulesSet) ? ev.rulesSet : []),
         };
     })();
     cache.set(key, promise);

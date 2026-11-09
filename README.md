@@ -92,6 +92,29 @@ and the HUD arms it. The plan is on your shelf like any other, so the planner's 
 opens it for tuning. Six plans an hour, twenty a day; the planner itself is not limited that
 way.
 
+### Plan from here
+
+Riding with no plan: dropped, clear on your own, or on a free ride? Linked, the plan panel has
+**Plan from here** with how far there is to go (*to the finish · 8.6 km* in a race, *to the
+end of the lap · 12.3 km* on a free ride on a route). The planner plans the rest from where
+you are and the HUD rides it at once, measured from the moment you pressed.
+
+- **What the ride has cost you.** The power Sauce kept for the ride goes with the request:
+  the planner replays it for the W′ you have left, and takes your NP so far with the time the
+  rest will take for how much of your CP is left. The W′ bar starts where you are.
+- **The bike.** A road bike, unless the event is no-draft or you have raced it with no draft
+  at all (TT bikes get none). Any draft is a road bike. Settings → Advanced → *Plan from
+  here's bike* can say Road or TT for good.
+- **Where it applies.** Races by distance once they have started, and free rides on a route
+  (the plan ends where the route's lap does). Not a race ridden for a time, not a free ride
+  with no route, not the last 500 m.
+- **For this ride only.** Leave the race or the route and the plan is put away. With a plan
+  already running there is no new one: the tray's **bias** turns every target down instead.
+  The banner reads *from here · road bike*, with *tired legs* when the ride has taken some
+  of your CP.
+
+It shares Plan it's six plans an hour.
+
 ### Choosing a strategy
 
 An optimised plan carries the optimiser's three ways to ride it: *Fastest*, *Balanced* and
@@ -188,8 +211,8 @@ its tray). One settings page serves every window and shows what that window uses
 the library, code entry and the active plan's strategy. Look: background (clear, smoke, dark, solid), halo strength,
 size, and for the HUD its layout, band words and cadence/HR/speed. Pacing: power smoothing,
 on-target band, the amber warning time, how the clock starts. Field: gap on the
-clock or the road, every category. Rivals: riders named each side. Advanced: debug log, the
-telemetry recorder.
+clock or the road, every category. Rivals: riders named each side. Advanced: what Plan it
+plans with, Plan from here's bike, debug log, the telemetry recorder.
 
 ## Development
 

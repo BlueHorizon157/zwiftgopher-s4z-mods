@@ -9,12 +9,13 @@ export const POLL_MS = 60000;          // the shelf, while idle or armed and the
 export const POLL_GUARD_MS = 50000;    // another window polled this recently: let it be
 export const PENDING_POLL_MS = 5000;   // the pairing status, while a code waits for the planner
 export const TIMEOUT_MS = 8000;
+export const PLAN_TIMEOUT_MS = 30000;   // Plan it and Plan from here: a rider lookup and an optimise (1-8 s) behind the gate
 
 const base = () => (typeof window !== 'undefined' && window.ZG_PLANNER_BASE) || PLANNER_BASE;
 
-async function request(fetchFn, url, {method = 'GET', token = null, body = null, headers = {}} = {}) {
+async function request(fetchFn, url, {method = 'GET', token = null, body = null, headers = {}, timeoutMs = TIMEOUT_MS} = {}) {
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = ctl ? setTimeout(() => ctl.abort(), TIMEOUT_MS) : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : null;
     // Ask for JSON: the planner keeps PHP's error text out of a JSON request (a CORS-safelisted
     // header, so no preflight of its own).
     const h = {Accept: 'application/json', ...headers};
@@ -290,7 +291,42 @@ export async function shelfPlan(fetchFn, token, target, {inputsSource = 'last'} 
         rules: JSON.stringify(target.rules ?? []),
         inputs_source: inputsSource === 'defaults' ? 'defaults' : 'last',
     };
-    const r = await request(fetchFn, `${base()}/shelf.php`, {method: 'POST', token, body});
+    const r = await request(fetchFn, `${base()}/shelf.php`, {method: 'POST', token, body, timeoutMs: PLAN_TIMEOUT_MS});
+    if (r.ok && r.json?.code && r.json.file) {
+        return {code: r.json.code, file: r.json.file, meta: r.json.meta ?? {}};
+    }
+    const err = new Error(planItErrorWords(r));
+    err.status = r.status;
+    err.retryAfter = Number(r.json?.retry_after) || null;
+    throw err;
+}
+
+/**
+ * Plan from here (README "Plan from here"): the planner plans the rest of the race or route
+ * lap for the linked rider from from-here.mjs's target, the ride's power (powerHistory) and
+ * the bike (chooseBike), and puts it on the shelf: {code, file, meta: {from_here, ...}}.
+ * Throws as shelfPlan does.
+ */
+export async function shelfPlanFromHere(fetchFn, token, req, {inputsSource = 'last'} = {}) {
+    const body = {
+        action: 'plan_here',
+        kind: req.kind === 'event' ? 'event' : 'route',
+        route_id: req.routeId,
+        laps: req.laps ?? 1,
+        distance_m: req.distanceM ?? 0,
+        remaining_m: Math.round(req.remainingM),
+        event_id: req.eventId ?? null,
+        subgroup_id: req.subgroupId ?? null,
+        start: req.startMs ? new Date(req.startMs).toISOString() : null,
+        name: req.name ?? null,
+        rules: JSON.stringify(req.rules ?? []),
+        inputs_source: inputsSource === 'defaults' ? 'defaults' : 'last',
+        bike: req.bike === 'tt' ? 'tt' : 'road',
+        bike_reason: req.bikeReason ?? null,
+        power: (req.power ?? []).join(','),
+        race_from_s: req.raceFromS ?? 0,
+    };
+    const r = await request(fetchFn, `${base()}/shelf.php`, {method: 'POST', token, body, timeoutMs: PLAN_TIMEOUT_MS});
     if (r.ok && r.json?.code && r.json.file) {
         return {code: r.json.code, file: r.json.file, meta: r.json.meta ?? {}};
     }

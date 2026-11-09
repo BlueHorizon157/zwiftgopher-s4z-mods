@@ -9,6 +9,7 @@ import {lineInPlanM} from './align.mjs';
 //   group  a mass-start event: the clock runs from the gun (the subgroup's start time
 //          when known, else the first eventDistance above 0).
 //   manual a free ride: the clock runs from the arm.
+//   here   a plan from here: the clock runs from the moment it was asked for (its anchor).
 //
 // Elapsed seconds come from the telemetry where they can (state.time, state.worldTime)
 // so two windows on the same ticks read the same clock.
@@ -31,7 +32,7 @@ export function lineMetre(plan, tick = null) {
 }
 
 /**
- * Advance the clock with a tick. kind: 'tt' | 'group' | 'manual'. Returns the clock with
+ * Advance the clock with a tick. kind: 'tt' | 'group' | 'manual' | 'here'. Returns the clock with
  * `justStarted` set on the tick that started it.
  */
 export function advanceClock(clock, {kind, rule = 'auto', prev, tick, plan, planM, eventStartMs = null, armedWorldMs = null}) {
@@ -60,6 +61,8 @@ export function advanceClock(clock, {kind, rule = 'auto', prev, tick, plan, plan
             }
         } else if (kind === 'manual' && armedWorldMs != null) {
             signal = 'manual';
+        } else if (kind === 'here' && armedWorldMs != null) {
+            signal = 'here';
         }
         if (!signal) {
             return out;
@@ -67,8 +70,8 @@ export function advanceClock(clock, {kind, rule = 'auto', prev, tick, plan, plan
         out.running = true;
         out.justStarted = true;
         out.signal = signal;
-        out.startPlanM = Number.isFinite(planM) ? planM : null;
-        out.startWorldMs = signal === 'gun' ? eventStartMs : signal === 'manual' ? armedWorldMs : worldMs;
+        out.startPlanM = signal === 'here' ? 0 : (Number.isFinite(planM) ? planM : null);
+        out.startWorldMs = signal === 'gun' ? eventStartMs : (signal === 'manual' || signal === 'here') ? armedWorldMs : worldMs;
         if (signal === 'time') {
             out.startWorldMs = worldMs != null ? worldMs - timeS * 1000 : null;
         } else if (signal === 'distance') {

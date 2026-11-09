@@ -2,6 +2,7 @@
 // engine.view(). The layout comes from the manifest window's ?layout, or the settings
 // page's override; look settings are data attributes on <html> so the CSS does the rest.
 import {startWindow, statusWords} from './views/runtime.mjs';
+import {hereWords} from './views/from-here.mjs';
 import {clipboardCode} from './views/plan-loader.mjs';
 import {setText, setHtml, setHidden, setClass, setAttr, fmtTime, deltaWords, fmtGrade, finishFigure} from './views/dom.mjs';
 
@@ -127,6 +128,20 @@ function initControls() {
             message(err.message);
         }
     });
+    // Plan from here: the rest of the race or route lap, from where the rider is.
+    els.fromHerePlan.addEventListener('click', async () => {
+        message('');
+        try {
+            const r = await win.planFromHere();
+            if (r) {
+                changingPlan = false;
+                message(`Plan ${r.code} from here.`, true);
+            }
+        } catch (err) {
+            message(err.message);
+        }
+        win.draw();
+    });
     // A plan from the planner, offered while another is active (TT/RIDE_DAY_PLAN.md 2.4).
     els.toast.addEventListener('click', ev => {
         const action = ev.target.closest('[data-action]')?.dataset.action;
@@ -209,14 +224,17 @@ function render(v) {
     const upcoming = win.nextTT();
     const planning = win.planning();
     const planFor = win.planTarget();
+    // Once the race is under way, Plan from here plans the rest of it; Plan it (the whole
+    // event from the start) is for the pen.
+    const here = win.hereOffer(v);
     const inEvent = Boolean(v.event?.inEvent);
     let nextText = '';
     let nextLabel = 'next TT';
     let showPlanIt = false;
-    if (planning) {
+    if (planning && !planning.target?.here) {
         nextLabel = 'plan it';
         nextText = `planning ${planning.target?.name ?? 'the event'}… ${Math.round((Date.now() - planning.startedAt) / 1000)} s`;
-    } else if (inEvent && !plan && planFor?.inEvent) {
+    } else if (inEvent && !plan && planFor?.inEvent && !(here.offered && here.target.kind === 'event')) {
         nextLabel = 'this event';
         nextText = `${planFor.name ?? v.event?.name ?? 'event'} · no plan yet`;
         showPlanIt = linked;
@@ -229,6 +247,23 @@ function render(v) {
     setText(els.nextTtText, nextText);
     setHidden(els.nextTtPlan, !showPlanIt);
     els.nextTtPlan.disabled = Boolean(planning);
+    // Plan from here: riding with no plan for this ride (or one for another distance).
+    const herePlanning = Boolean(planning?.target?.here);
+    let hereText = '';
+    if (herePlanning) {
+        hereText = `planning ${planning.target.name}… ${Math.round((Date.now() - planning.startedAt) / 1000)} s`;
+    } else if (here.offered) {
+        hereText = `${here.target.kind === 'event' ? 'to the finish' : 'to the end of the lap'} · ${fmtDistance(here.target.remainingM, true)}`;
+    }
+    setHidden(els.fromHere, !(showIdle && hereText));
+    if (showIdle && !plan && here.offered && !herePlanning) {
+        setText(els.idleHint, here.target.kind === 'event'
+            ? 'Plan from here plans the rest of the race from where you are, with what your legs have left. Or enter a code.'
+            : 'Plan from here plans the rest of this lap from where you are, with what your legs have left. Or enter a code.');
+    }
+    setText(els.fromHereText, hereText);
+    setHidden(els.fromHerePlan, herePlanning);
+    els.fromHerePlan.disabled = Boolean(planning);
     // A plan that arrived while another is active: offered before the start (decision 3).
     const shelfOffer = win.offer();
     const showToast = Boolean(shelfOffer && plan && !showIdle && beforeStart && !v.spectating);
@@ -445,6 +480,8 @@ function setBanner(v, now) {
         if (upcoming) {
             text += ` · next TT ${nextWords(upcoming, v.plan, true)}`;
         }
+    } else if (v.status === 'racing' && v.plan?.fromHere) {
+        text = hereWords(v.plan.fromHere);
     } else if (v.status === 'racing' && Number.isFinite(v.event?.mismatchM)) {
         // A plan for another distance (the 2026-10-27 race: one lap planned, 16 km raced)
         // stays flagged for the whole race; the finish is predicted to the event's end.

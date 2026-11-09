@@ -472,7 +472,7 @@ html[data-show-live="true"][data-layout="stack"] .vitals { display: flex; }
 .idle .next-tt[hidden] { display: none; }
 .idle .next-tt .label { color: var(--ink-2); }
 html[data-layout="strip"] .idle .next-tt { display: none; }
-html[data-layout="strip"] .hud.choosing .idle .next-tt { display: flex; }
+html[data-layout="strip"] .hud.choosing .idle .next-tt:not([hidden]) { display: flex; }
 .hud button * { text-shadow: none; }
 .hud button[aria-pressed="true"] { background: var(--ink); color: var(--panel-ink); border-color: transparent; }
 .hud button:disabled { opacity: 0.5; cursor: default; }

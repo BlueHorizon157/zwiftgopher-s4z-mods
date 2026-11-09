@@ -10,6 +10,10 @@
 // States: idle (no plan or rider) → armed (plan and rider, stats clear) → racing (clock
 // running) → finished. Spectating is a flag over any state: ticks of another rider are
 // ignored. Only an explicit event or a new event subgroup clears statistics.
+//
+// A plan from here (plan.fromHere: views/from-here.mjs) belongs to the moment it was asked
+// for: it races at once from its anchor while the rider is still in that event, or on that
+// route outside one, and once they leave it is spent (idle) and never arms anywhere else.
 
 import {normalisePlan} from './plan.mjs';
 import {locate, at, boundary, BEFORE} from './cursor.mjs';
@@ -54,6 +58,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         tick: null,
         tickMs: null,
         lastPrediction: null,
+        hereSpent: false,
         log: [],
     };
 
@@ -112,27 +117,34 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             return;
         }
 
-        // Event changes clear the race.
-        const subgroupId = data.state?.eventSubgroupId ?? data.eventSubgroupId ?? null;
-        if (subgroupId !== state.event.subgroupId) {
-            if (state.status !== 'idle') {
-                clearRace(subgroupId ? `event ${subgroupId}` : 'left the event', nowMs);
-            }
-            state.event = {subgroupId, kind: subgroupId ? state.event.kind && state.event.infoFor === subgroupId ? state.event.kind : null : null, startMs: null, name: null, infoFor: subgroupId ? state.event.infoFor : null};
-            if (state.status === 'racing' || state.status === 'finished') {
-                setStatus('armed', nowMs);
-            }
-        }
-
         const eventNow = inEvent(data);
-        if (state.status === 'idle') {
-            if (eventNow || routeMatches(data, plan)) {
-                clearRace('ready', nowMs);
-                if (!eventNow) {
-                    state.anchorDistanceM = rideDistanceM(data);
-                    state.armedWorldMs = worldTimeOf(data, nowMs);
+        if (plan.fromHere) {
+            if (!hereInPlace(data, nowMs, plan)) {
+                smoothPower(data, nowMs);
+                return;
+            }
+        } else {
+            // Event changes clear the race.
+            const subgroupId = data.state?.eventSubgroupId ?? data.eventSubgroupId ?? null;
+            if (subgroupId !== state.event.subgroupId) {
+                if (state.status !== 'idle') {
+                    clearRace(subgroupId ? `event ${subgroupId}` : 'left the event', nowMs);
                 }
-                setStatus('armed', nowMs);
+                state.event = {subgroupId, kind: subgroupId ? state.event.kind && state.event.infoFor === subgroupId ? state.event.kind : null : null, startMs: null, name: null, infoFor: subgroupId ? state.event.infoFor : null};
+                if (state.status === 'racing' || state.status === 'finished') {
+                    setStatus('armed', nowMs);
+                }
+            }
+
+            if (state.status === 'idle') {
+                if (eventNow || routeMatches(data, plan)) {
+                    clearRace('ready', nowMs);
+                    if (!eventNow) {
+                        state.anchorDistanceM = rideDistanceM(data);
+                        state.armedWorldMs = worldTimeOf(data, nowMs);
+                    }
+                    setStatus('armed', nowMs);
+                }
             }
         }
 
@@ -144,7 +156,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         }
 
         // The clock.
-        const kind = eventNow ? (state.event.kind ?? 'tt') : 'manual';
+        const kind = plan.fromHere ? 'here' : eventNow ? (state.event.kind ?? 'tt') : 'manual';
         const clock = advanceClock(state.clock, {
             kind,
             rule: state.prefs.startRule,
@@ -153,12 +165,13 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             plan,
             planM,
             eventStartMs: state.event.startMs,
-            armedWorldMs: state.armedWorldMs,
+            armedWorldMs: plan.fromHere ? plan.fromHere.worldMs : state.armedWorldMs,
         });
         state.clock = clock;
         if (clock.justStarted) {
             state.planTimeAtStart = planTimeAtMetre(plan.intervals, clock.startPlanM ?? 0);
-            state.wbalJ = plan.wPrimeJ;
+            // A plan from here starts with the W' the ride so far left (the planner's replay).
+            state.wbalJ = plan.fromHere?.startWbalJ ?? plan.wPrimeJ;
             state.wbalLastMs = worldTimeOf(data, nowMs);
             setStatus('racing', nowMs);
             log(`Clock started (${clock.signal}) at plan metre ${Math.round(clock.startPlanM ?? 0)}`, nowMs);
@@ -210,6 +223,35 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         }
     }
 
+    /**
+     * A plan from here, on a tick: still where it was made (that event's subgroup, or that
+     * route outside an event)? Then it is armed if it was idle, and the caller races it from
+     * its anchor. Once the rider leaves, it is spent: statistics cleared, idle, for good.
+     */
+    function hereInPlace(data, nowMs, plan) {
+        const here = plan.fromHere;
+        const sg = data.state?.eventSubgroupId ?? data.eventSubgroupId ?? null;
+        const routeId = data.state?.routeId;
+        const inPlace = here.kind === 'event'
+            ? sg != null && String(sg) === here.subgroupId
+            : !sg && (here.routeId == null || (routeId != null && String(routeId) === here.routeId));
+        if (state.hereSpent) {
+            return false;
+        }
+        if (!inPlace) {
+            state.hereSpent = true;
+            clearRace(here.kind === 'event' ? 'left the event the plan from here was made in' : 'left the route the plan from here was made on', nowMs);
+            setStatus('idle', nowMs);
+            return false;
+        }
+        state.event = {...state.event, subgroupId: sg};
+        if (state.status === 'idle') {
+            clearRace('plan from here', nowMs);
+            setStatus('armed', nowMs);
+        }
+        return true;
+    }
+
     function smoothPower(data, nowMs) {
         const p = Number(data.state?.power);
         if (!Number.isFinite(p)) {
@@ -249,6 +291,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                     return;
                 }
                 state.plan = next;
+                state.hereSpent = false;
                 state.controls = {...DEFAULT_CONTROLS};
                 clearRace(next ? `plan ${next.routeName ?? next.code ?? ''}` : 'plan cleared', nowMs);
                 setStatus('idle', nowMs);
@@ -259,7 +302,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             }
             case 'reset':
                 clearRace('reset by the rider', nowMs);
-                setStatus(state.plan && state.tick ? 'armed' : 'idle', nowMs);
+                setStatus(state.plan && state.tick && !state.hereSpent ? 'armed' : 'idle', nowMs);
                 if (state.tick && !inEvent(state.tick)) {
                     state.anchorDistanceM = rideDistanceM(state.tick);
                     state.armedWorldMs = worldTimeOf(state.tick, nowMs);
@@ -324,6 +367,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 intervals: intervals.length, source: plan.source, strategy: plan.strategy, cards: plan.cards,
                 card: plan.card, strategyLabel: plan.strategyLabel, sharedTimeText: plan.sharedTimeText,
                 peakPowerW: plan.peakPowerW, floorKj: plan.wbalFloorKj,
+                fromHere: plan.fromHere ? {...plan.fromHere, spent: state.hereSpent} : null,
             } : null,
             controls: {...state.controls},
             rider: data ? {athleteId: idOf(data), name: nameOf(data), weightKg: Number(data.athlete?.weight) || plan?.weightKg || null} : null,
@@ -386,6 +430,9 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
 function finishMetre(data, plan) {
     if (!plan) {
         return null;
+    }
+    if (plan.fromHere) {
+        return plan.lengthM;     // made to end at the finish (or the route lap's end)
     }
     const eventM = eventLengthM(data);
     return eventM == null ? plan.lengthM : Math.min(plan.lengthM, eventM + lineInPlanM(data, plan));

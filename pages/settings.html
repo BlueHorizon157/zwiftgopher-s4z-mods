@@ -205,6 +205,14 @@
             <option value="defaults">The planner's defaults</option>
           </select>
         </label>
+        <label data-for="hud" title="Plan from here (the HUD's button when you are riding with no plan) plans on this bike. Auto: a road bike, unless the event is no-draft or you have raced it with no draft at all (TT bikes get no draft)">
+          <key>Plan from here's bike:</key>
+          <select name="hereBike">
+            <option value="auto">Auto (from the draft)</option>
+            <option value="road">Road bike</option>
+            <option value="tt">TT bike</option>
+          </select>
+        </label>
         <label title="Show the engine's log in the window">
           <key>Debug log:</key>
           <input type="checkbox" name="showDebug">

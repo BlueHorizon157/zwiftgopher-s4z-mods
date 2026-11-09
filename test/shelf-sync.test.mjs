@@ -225,3 +225,18 @@ test('sign-ups go to the shelf as rows with event, pen, start and name', async (
     assert.match(fetchFn.calls[0].body, /action=signups&subgroups=%5B%7B%22event_id%22%3A1/);
     assert.equal(fetchFn.calls[0].headers.Authorization, 'Bearer zgt_x');
 });
+
+import {shelfPlanFromHere} from '../pages/src/views/shelf-sync.mjs';
+
+test('Plan from here sends the rest of the ride and the power so far; the file comes back', async () => {
+    const file = {schema: 'zg-tt-plan/1', intervals: [{power_w: 280}], meta: {from_here: {kind: 'event', start_wbal_fraction: 0.6}}};
+    const fetchFn = fakeFetch([{match: 'shelf.php', method: 'POST', status: 200, json: {success: true, code: 'HERE11', file, meta: {from_here: {cp_factor: 0.97}, route_name: 'Watopia Flat · from here'}}}]);
+    const r = await shelfPlanFromHere(fetchFn, 'zgt_x', {kind: 'event', routeId: '3395698268', laps: 2, distanceM: null, remainingM: 8200.4, eventId: '55', subgroupId: '777', startMs: Date.parse('2026-11-20T00:20:00Z'), name: 'Crit', rules: ['NO_POWERUPS'], bike: 'road', bikeReason: 'drafted', power: [200, 210, -1, 250], raceFromS: 1}, {inputsSource: 'defaults'});
+    assert.equal(r.code, 'HERE11');
+    assert.equal(r.file.meta.from_here.start_wbal_fraction, 0.6);
+    const body = fetchFn.calls[0].body;
+    assert.match(body, /^action=plan_here&kind=event&route_id=3395698268&laps=2&distance_m=0&remaining_m=8200&event_id=55&subgroup_id=777&start=2026-11-20T00%3A20%3A00\.000Z&name=Crit&rules=%5B%22NO_POWERUPS%22%5D&inputs_source=defaults&bike=road&bike_reason=drafted&power=200%2C210%2C-1%2C250&race_from_s=1$/);
+    const free = fakeFetch([{match: 'shelf.php', method: 'POST', status: 400, json: {success: false, error: 'Under 500 m to go: no plan needed, empty the tank.'}}]);
+    await assert.rejects(() => shelfPlanFromHere(free, 'zgt_x', {kind: 'route', routeId: '1', remainingM: 300, power: []}), /Under 500 m/);
+    assert.match(free.calls[0].body, /action=plan_here&kind=route&route_id=1&laps=1&distance_m=0&remaining_m=300&rules=%5B%5D&inputs_source=last&bike=road&power=&race_from_s=0/);
+});

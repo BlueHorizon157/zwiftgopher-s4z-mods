@@ -10,7 +10,8 @@ import {fetchEventInfo} from '../eventinfo.mjs';
 import {createEngine} from '../engine/engine.mjs';
 import {normalisePlan} from '../engine/plan.mjs';
 import {loadPlanByCode, fetchPlanByCode, loadReplayPlan} from './plan-loader.mjs';
-import {syncOnce, chooseActivation, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, shelfPlan, PENDING_POLL_MS} from './shelf-sync.mjs';
+import {syncOnce, chooseActivation, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, shelfPlan, shelfPlanFromHere, PENDING_POLL_MS} from './shelf-sync.mjs';
+import {hereTarget, powerHistory, chooseBike, hereOffered, bikeWords} from './from-here.mjs';
 
 export const SETTINGS_DEFAULTS = {
     layout: 'auto',           // auto = the manifest window's ?layout
@@ -25,6 +26,7 @@ export const SETTINGS_DEFAULTS = {
     startRule: 'auto',        // auto | time | distance
     finishShows: 'remaining', // the finish cell while racing: remaining (time to go) | finish (predicted finish time)
     planItInputs: 'last',     // Plan it plans with the rider's last planner settings, or the planner's defaults
+    hereBike: 'auto',         // Plan from here's bike: auto (road unless the draft says TT) | road | tt
     showDebug: false,
     gapMode: 'clock',         // field: clock (standings) | finish (predicted) | road (who is physically ahead)
     allSubgroups: false,      // field: riders of every category
@@ -141,6 +143,12 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         if (cardWaiting && beforeStart()) {
             syncPlan();
         }
+        // A plan from here the rider has left (the race or route it was made for) is put
+        // away, so the panel offers another; any window may, and the store says it once.
+        if (engine.state.hereSpent && engine.state.plan?.fromHere && activeCode && store.getActiveCode() === activeCode) {
+            store.setActive(null);
+            note('The plan from here has ended: you left the race or route it was made for.');
+        }
         // The pen the rider is in, from the tick: the engine only tracks the event while it has
         // a plan, and Plan it and the plan for the event (pickForEvent) need it before there is
         // one. What activates an arriving plan (chooseActivation) still goes by the engine's.
@@ -172,13 +180,15 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         const n = normalisePlan(p.raw, {code: p.code});
         return {code: p.code, routeId: p.routeId, laps: n?.laps ?? p.raw?.route?.laps ?? null, lengthM: n?.lengthM ?? null, routeName: p.routeName, event: p.event ?? p.raw?.meta?.event ?? null};
     };
+    // Plans from here are the rest of one ride: never the plan for an event or the next TT.
+    const eventPlans = () => store.listPlans().filter(p => !p.raw?.meta?.from_here).map(planEntry);
     const pickForEvent = info => {
         if (!info?.subgroupId || pickedFor === String(info.subgroupId) || !beforeStart()) {
             return;
         }
         pickedFor = String(info.subgroupId);
         const code = choosePlanForEvent({
-            plans: store.listPlans().map(planEntry),
+            plans: eventPlans(),
             event: {eventId: info.eventId, subgroupId: info.subgroupId, routeId: info.routeId, laps: info.laps, distanceM: info.distanceM},
             activeCode: store.getActiveCode(),
         });
@@ -208,7 +218,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         }
         const now = Date.now();
         const signedUp = signedUpTimeTrials(events ?? [], now);
-        nextTT = nextTimeTrial({signedUp, plans: store.listPlans().map(planEntry), now});
+        nextTT = nextTimeTrial({signedUp, plans: eventPlans(), now});
         const link = store.getLink();
         if (link?.state === 'linked') {
             const rows = signupRows(signedUp);
@@ -279,6 +289,81 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             planning = null;
             draw();
         }
+    };
+
+    // ---- Plan from here (README "Plan from here"): the rest of the race or route lap ----
+    // With no plan for the ride, the planner plans what is left from where the rider is, with
+    // the W' and the CP the ride so far has left them (the power Sauce has kept), on the bike
+    // from-here.mjs chooses. The plan runs at once; the engine measures it from the moment
+    // the button was pressed (the anchor), so the seconds spent planning are not lost.
+    const ownEventInfo = () => {
+        const sg = engine.state.tick?.state?.eventSubgroupId ?? tickSubgroup;
+        return sg && lastEventInfo && String(lastEventInfo.subgroupId) === String(sg) ? lastEventInfo : null;
+    };
+    const fromHereTarget = () => (engine.state.spectating ? {ok: false, why: 'You are watching another rider.'} : hereTarget(engine.state.tick, ownEventInfo()));
+    const planFromHere = async () => {
+        const link = store.getLink();
+        if (link?.state !== 'linked') {
+            throw new Error('Link the mod to the planner first (settings → Plans → Link to the planner).');
+        }
+        const target = fromHereTarget();
+        if (!target.ok) {
+            throw new Error(target.why);
+        }
+        if (planning) {
+            return null;
+        }
+        planning = {startedAt: Date.now(), target: {name: target.kind === 'event' ? 'the rest of the race' : 'the rest of the lap', here: true}};
+        draw();
+        try {
+            let streams = null;
+            try {
+                streams = sauce.isReplay ? null : await common.rpc.getAthleteStreams('self');
+            } catch (err) {
+                console.warn('[from here] getAthleteStreams', err);
+            }
+            const history = powerHistory(streams, {eventDistanceM: target.kind === 'event' ? Number(engine.state.tick?.state?.eventDistance) : null});
+            const bike = chooseBike({setting: settings?.get('hereBike'), target, draftS: history.draftS, raceS: history.raceS});
+            const inputsSource = settings?.get('planItInputs') === 'defaults' ? 'defaults' : 'last';
+            const req = {...target, power: history.power, raceFromS: history.raceFromS, bike: bike.bike, bikeReason: bike.reason};
+            let result;
+            try {
+                result = await shelfPlanFromHere(fetch, link.token, req, {inputsSource});
+            } catch (err) {
+                if (err.status === 503 && err.retryAfter) {
+                    await new Promise(r => setTimeout(r, Math.min(10, err.retryAfter) * 1000));
+                    result = await shelfPlanFromHere(fetch, link.token, req, {inputsSource});
+                } else {
+                    if (err.status === 401) {
+                        store.clearLink();
+                    }
+                    throw err;
+                }
+            }
+            // The anchor goes in the file, so every window places the plan alike.
+            const file = result.file;
+            file.meta = {...(file.meta ?? {}), from_here: {...(file.meta?.from_here ?? {}), anchor: {
+                ride_m: target.anchor.rideM, world_ms: target.anchor.worldMs, subgroup_id: target.anchor.subgroupId, route_id: target.anchor.routeId,
+            }}};
+            store.savePlan(result.code, file, {activate: true, shelf: true, source: 'here', event: file.meta?.event ?? null, publishedAt: file.meta?.published?.at ?? null, expiresAt: result.meta?.expires_at ?? null});
+            store.setShelf({offer: null});
+            syncPlan();
+            const fh = result.meta?.from_here ?? file.meta.from_here;
+            note(`Plan from here ${result.code}: ${bikeWords(bike)}${history.power.length ? '' : ', with no power from Sauce: W\' as fresh'}${fh?.over_budget ? ', past what the planner thinks you can hold' : ''}.`);
+            return result;
+        } finally {
+            planning = null;
+            draw();
+        }
+    };
+    /** {offered, target}: whether the panel offers Plan from here now, and what it would plan. */
+    const hereOffer = (v = engine.view()) => {
+        const target = fromHereTarget();
+        return {
+            offered: hereOffered({linked: store.getLink()?.state === 'linked', spectating: Boolean(v.spectating), status: v.status, plan: v.plan,
+                mismatchM: v.event?.mismatchM ?? null, spent: Boolean(v.plan?.fromHere?.spent), target}),
+            target,
+        };
     };
 
     // ---- the shelf: plans from the planner arrive by themselves (TT/RIDE_DAY_PLAN.md 2.4) ----
@@ -457,6 +542,9 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         /** {startedAt, target} while a plan is being built, else null. */
         planning: () => planning,
         planIt,
+        /** Plan from here: the rest of the race or route lap, from where the rider is. */
+        planFromHere,
+        hereOffer,
         setNextTT(value) {       // scripts/page-check.mjs
             nextTTOverride = value;
             draw();

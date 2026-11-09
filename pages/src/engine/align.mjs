@@ -37,7 +37,7 @@ export function eventLengthM(tick) {
 /** Plan length minus event length when that is a gate-to-line stretch (0 to LINE_MAX_M); else null. */
 export function lineOffsetM(tick, plan) {
     const eventM = eventLengthM(tick);
-    if (eventM == null || !(plan?.lengthM > 0)) {
+    if (eventM == null || !(plan?.lengthM > 0) || plan.fromHere) {
         return null;
     }
     const diff = plan.lengthM - eventM;
@@ -46,13 +46,20 @@ export function lineOffsetM(tick, plan) {
 
 /** The plan metre of the game's event metre 0: the timing line. */
 export function lineInPlanM(tick, plan) {
+    if (plan?.fromHere) {
+        return 0;     // a plan from here starts where the rider was: no line
+    }
     return lineOffsetM(tick, plan) ?? plan?.startLineM ?? 0;
 }
 
 /** Plan metre for a tick, or null when nothing places the rider. */
 export function planMetre(tick, {offsetM = 0, anchorDistanceM = null, plan = null} = {}) {
     let base = null;
-    if (inEvent(tick)) {
+    if (plan?.fromHere) {
+        // A plan from here: ride distance from where it was made, in an event or out of one.
+        const ride = rideDistanceM(tick);
+        base = ride != null ? ride - plan.fromHere.rideM : null;
+    } else if (inEvent(tick)) {
         const d = eventDistanceM(tick);
         base = d == null ? null : d + lineInPlanM(tick, plan);
     } else if (anchorDistanceM != null) {
@@ -68,7 +75,7 @@ export function planMetre(tick, {offsetM = 0, anchorDistanceM = null, plan = nul
  */
 export function mismatchM(tick, plan) {
     const eventM = eventLengthM(tick);
-    if (eventM == null || !(plan?.lengthM > 0)) {
+    if (eventM == null || !(plan?.lengthM > 0) || plan.fromHere) {
         return null;
     }
     const diff = eventM - plan.lengthM;
