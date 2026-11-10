@@ -21,7 +21,10 @@ file, 5.2 look-ahead) once they land.
 
 ## Status (2026-11-10)
 
-**Released 0.9.0 (2026-11-10):** the course tracker and the
+**Released 0.9.1 (2026-11-10, same evening as 0.9.0):** the field and the stack HUD fit in real Sauce
+(checked by replaying the California Dreamin' race through Sauce 2.4.0-alpha.5), and a test that a Sauce
+without the event's route (no event length, distance to go null) does not end the race at the line
+(0.7.0 to 0.8.2 did; a user's report). **Released 0.9.0 (2026-11-10):** the course tracker and the
 like-for-like field. The plan metre is found by matching the rider's lat/lng onto the planner's
 course (`route.course`, zg-course/1), which locks 38 m into the event on California Dreamin' and
 then holds within 6 m of the road on every locked race tick (the timing line comes out at
