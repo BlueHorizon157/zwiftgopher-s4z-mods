@@ -213,7 +213,8 @@ html[data-band-words="false"] .live .word { display: none; }
 .idle[hidden] { display: none; }
 .idle .title { font-size: 1.4em; font-weight: 700; }
 .idle .hint { font-size: 1em; color: var(--ink-2); max-width: 36ch; }
-.code-row { display: flex; gap: 0.4em; align-items: stretch; }
+/* wraps in a narrow window (the stack), so Close and Clear plan never fall outside it */
+.code-row { display: flex; flex-wrap: wrap; justify-content: center; max-width: 100%; gap: 0.4em; align-items: stretch; }
 .code-row input {
   width: 8ch;
   font: inherit;

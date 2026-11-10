@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {fmtGap, boundariesOf, shortName} from '../pages/src/views/field-units.mjs';
+import {fmtGap, fmtRate, boundariesOf, shortName} from '../pages/src/views/field-units.mjs';
 
 test('fmtGap rounds before choosing the format, so no value outgrows its column', () => {
     assert.equal(fmtGap(4.24), '4.2 s');
@@ -33,4 +33,12 @@ test('boundariesOf turns plan metres into event metres through the timing line',
 test('shortName keeps the first initial and the rest', () => {
     assert.equal(shortName('Rider 14'), 'R. 14');
     assert.equal(shortName('Solo'), 'Solo');
+});
+
+test('fmtRate keeps one decimal under 10 s a minute and whole seconds from there', () => {
+    assert.equal(fmtRate(0.6), '0.6 s');
+    assert.equal(fmtRate(-2.44), '2.4 s');
+    assert.equal(fmtRate(9.96), '10 s');           // "+14.3 s" was cut off in the field's column
+    assert.equal(fmtRate(14.3), '14 s');
+    assert.equal(fmtRate(NaN), '');
 });

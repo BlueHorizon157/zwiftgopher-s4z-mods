@@ -5,7 +5,7 @@
 // cannot compare yet sit below a divider with the reason. Rows are keyed by rider and only their
 // changed cells are written; the home row stays in view.
 import {startWindow} from './views/runtime.mjs';
-import {startFieldFeed, boundariesOf, fmtGap, outlookInputsOf} from './views/field-feed.mjs';
+import {startFieldFeed, boundariesOf, fmtGap, fmtRate, outlookInputsOf} from './views/field-feed.mjs';
 import {rows as fieldRows, drift, gapModeOf, migrateFieldPrefs, GAP_MODES} from './engine/field-model.mjs';
 import {finishOutlook} from './engine/finish-outlook.mjs';
 import {verdictText, ordinal} from './views/verdict.mjs';
@@ -228,7 +228,7 @@ function updateRow(el, r, ctx) {
         put(el, 'gap', c.gap, '');
     }
     const dr = r.isHome || fin || !r.comparable ? null : drift(r);
-    const trendText = dr == null ? '' : dr.word === 'holding' ? 'hold' : `${dr.word === 'gaining' ? '+' : '−'}${Math.abs(dr.sPerMin).toFixed(1)} s`;
+    const trendText = dr == null ? '' : dr.word === 'holding' ? 'hold' : `${dr.word === 'gaining' ? '+' : '−'}${fmtRate(dr.sPerMin)}`;
     put(el, 'trend', c.trend, trendText);
     const trendCls = `c trend${dr ? ` trend-${dr.word}` : ''}`;
     if (el.cache.trendCls !== trendCls) {

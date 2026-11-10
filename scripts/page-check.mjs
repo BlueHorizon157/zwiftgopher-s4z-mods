@@ -20,7 +20,7 @@
 // Needs Sauce running with the web server on (Settings → Web server) and the mod enabled;
 // the mod id is zwiftgopher-tt. Chrome: /usr/bin/google-chrome or $CHROME.
 import {spawn} from 'node:child_process';
-import {mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -28,6 +28,14 @@ const opt = Object.fromEntries(process.argv.slice(2).map(a => a.replace(/^--/, '
 const BASE = (opt.base || 'http://127.0.0.1:1080').replace(/\/$/, '');
 const REPLAY = opt.replay || 'synthetic-flat-tt';
 const PLAN = opt.plan || 'flat.fit.optimise';
+// The list shows one row per plan interval, whichever plan the replay rides.
+const PLAN_INTERVALS = (() => {
+    try {
+        return JSON.parse(readFileSync(new URL(`../pages/fixtures/${PLAN}.json`, import.meta.url), 'utf8')).intervals?.length ?? null;
+    } catch {
+        return null;
+    }
+})();
 const SPEED = Number(opt.speed) || 20;
 const OUT = opt.out || join(tmpdir(), 'zg-page-check');
 const PAGES = String(opt.pages || 'hud,hud-dial,hud-stack,list,field,rivals,settings').split(',');
@@ -262,8 +270,8 @@ try {
             console.log('dom:', JSON.stringify(await b.eval(DOM_EXPR)));
             const win = await b.eval(WINDOW_EXPR);
             console.log('window:', JSON.stringify(win));
-            if (page === 'list' && win.listRows !== 9) {
-                fail(`list: ${win.listRows} rows, expected the plan's 9`);
+            if (page === 'list' && PLAN_INTERVALS != null && win.listRows !== PLAN_INTERVALS) {
+                fail(`list: ${win.listRows} rows, expected the plan's ${PLAN_INTERVALS}`);
             }
             if (page === 'field' && (win.fieldRows < 7 || !win.fieldHome)) {
                 fail(`field: ${win.fieldRows} rows, home row ${win.fieldHome}`);
@@ -400,6 +408,7 @@ try {
     if (STRATEGY) {
         const huds = PAGES.filter(p => KIND(p) === 'hud');
         const SHOW = `(() => ({panel: !document.getElementById('idle').hidden, chip: document.querySelector('#banner .chip')?.textContent ?? null, choices: [...document.querySelectorAll('#strategy-choices button')].map(x => (x.getAttribute('aria-pressed') === 'true' ? '*' : '') + (x.disabled ? '-' : '') + x.textContent.trim().replace(/\\s+/g, ' ')), card: window.zgtt.engine.state.plan?.card ?? null, strategy: window.zgtt.engine.state.plan?.strategy ?? null, timeText: window.zgtt.engine.state.plan?.timeText ?? null, finish: document.getElementById('finish-time')?.textContent, status: window.zgtt.view().status}))()`;
+        let chosen = null;
         for (const [i, page] of huds.entries()) {
             const [w, h] = SIZES[page];
             await b.size(w, h);
@@ -426,7 +435,10 @@ try {
             if (font && font.min < 10.95) {
                 fail(`${page} strategy panel: text at ${font.min} px (${font.which})`);
             }
-            const pick = ['balanced', 'safe_finish', 'fastest'][i % 3];
+            // A strategy other than the one ridden (a planner plan already rides Balanced).
+            const order = ['balanced', 'safe_finish', 'fastest'];
+            const pick = order[i % 3] === before.strategy ? order[(i + 1) % 3] : order[i % 3];
+            chosen = pick;
             await b.eval(`document.querySelector('#strategy-choices button[data-key="${pick}"]')?.click()`);
             await sleep(600);
             const after = await b.eval(SHOW);
@@ -441,7 +453,6 @@ try {
         }
         if (huds.length) {
             // Another window opened now rides the same card; the settings page shows it chosen.
-            const chosen = ['balanced', 'safe_finish', 'fastest'][(huds.length - 1) % 3];
             await b.size(...SIZES.list);
             await b.goto(`${MOD}/list.html?replay=${REPLAY}&plan=${PLAN}&speed=0.1&seek=20&windowId=zg-strategy-list`);
             await b.waitFor('window.zgtt && window.zgtt.engine.state.plan', 10000);
@@ -496,7 +507,7 @@ try {
             }
             await b.eval(`navigator.clipboard.writeText('')`).catch(() => {});
 
-            // Racing: the panel shows the strategy but it cannot be changed.
+            // Racing: the strategy can still be changed (0.8.1: strategies any time).
             const page = huds[0];
             await b.size(...SIZES[page]);
             await b.goto(`${MOD}/${page}.html?replay=${REPLAY}&plan=${PLAN}&speed=1&seek=200&windowId=zg-strategy-race`);
@@ -507,8 +518,8 @@ try {
             const racing = await b.eval(SHOW);
             await b.screenshot(join(OUT, `${page}-strategy-racing.png`));
             console.log(`-- ${page} racing, plan panel: ${JSON.stringify(racing)}`);
-            if (racing.chip || !racing.choices.length || racing.choices.some(c => !c.replace('*', '').startsWith('-'))) {
-                fail(`${page}: strategy changeable while racing (${JSON.stringify(racing)})`);
+            if (!racing.chip || racing.choices.length !== 3 || racing.choices.some(c => c.replace('*', '').startsWith('-'))) {
+                fail(`${page}: strategy not offered while racing (${JSON.stringify(racing)})`);
             }
             // Leave the library as the other passes expect it.
             await b.eval('localStorage.clear()');

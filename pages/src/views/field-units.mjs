@@ -34,6 +34,15 @@ export function fmtGap(s) {
     return `${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`;
 }
 
+/** "4.2 s", "14 s" for a rate in seconds a minute (no sign): whole seconds from 10 s, so it fits the field's column. */
+export function fmtRate(s) {
+    const a = Math.abs(s);
+    if (!Number.isFinite(a)) {
+        return '';
+    }
+    return a < 9.95 ? `${a.toFixed(1)} s` : `${Math.round(a)} s`;
+}
+
 export function shortName(name) {
     const parts = String(name ?? '').trim().split(/\s+/);
     if (parts.length < 2) {

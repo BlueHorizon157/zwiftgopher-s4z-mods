@@ -41,4 +41,4 @@ export function outlookInputsOf(v, list) {
 }
 
 // The pure helpers live in field-units.mjs (testable in node); re-exported here for the windows.
-export {boundariesOf, fmtGap, shortName} from './field-units.mjs';
+export {boundariesOf, fmtGap, fmtRate, shortName} from './field-units.mjs';
