@@ -3,6 +3,8 @@
 // payload saved before the file (the whole planner plan, km fields). Plan metre 0 is the
 // pen (the planner's start_offset_m padding is inside the plan).
 
+import {decodeCourse, scaleOf} from './course.mjs';
+
 export const SCHEMA_V1 = 'zg-tt-plan/1';
 
 export function isPlanFile(raw) {
@@ -50,6 +52,11 @@ export function normalisePlan(raw, {code = null, card = null} = {}) {
         lengthM: last.endM,
         startOffsetM: num(route.start_offset_m),
         startLineM: num(route.start_line_m),
+        // The planner's course on the plan's metres (course.mjs): null when absent or not sound.
+        course: decodeCourse(route.course),
+        routeMPerGameM: scaleOf(route.route_m_per_game_m),
+        lineSource: route.line_source === 'measured' || route.line_source === 'rule' ? route.line_source : null,
+        finishM: num(route.finish_m) > 0 ? num(route.finish_m) : null,
         leadInM: km(route.lead_in_km),
         cp,
         cpUsed,

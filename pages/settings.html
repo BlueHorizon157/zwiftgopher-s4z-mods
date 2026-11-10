@@ -157,19 +157,19 @@
 
       <form id="field-options" class="section" data-for="field">
         <div class="title">Field</div>
-        <label title="On the clock: who is ahead in the standings at the same distance. At the finish: the gaps and places predicted at the pace of the last minutes. On the road: who is physically ahead of you">
+        <label title="Now: how far ahead or behind you each rider is on the clock, at the same distance along the course. At the finish: the gaps predicted at the pace of the last minutes">
           <key>Gap:</key>
           <select name="gapMode">
-            <option value="clock">On the clock (standings)</option>
+            <option value="clock">Now (at the same distance)</option>
             <option value="finish">At the finish (predicted)</option>
-            <option value="road">On the road</option>
           </select>
         </label>
         <label title="Show riders of every category in the event, not only yours">
           <key>Every category:</key>
           <input type="checkbox" name="allSubgroups">
         </label>
-        <p class="desc">Gaps are measured where both riders have been, every 50 m of the event, so they compare like with like. The trend (/min) is the time you gain or lose on each rider a minute, over the last four minutes, so a sprint barely moves it (over the last minute until four have passed). At that pace, carried to the line from your plan's time to go, each rider's tag says how it ends: <b>you beat</b> / <b>beats you</b> by so much, or outlined, close when you finish: <b>in reach</b> ahead, <b>pressure</b> behind (on the road gap: <b>catch</b> / <b>catches you</b> and when). Riders who finish nowhere near you fade back. The line under the header sums it up: <b>Clear</b> (ride your plan), <b>Defend</b>, <b>Chase</b> or <b>Contested</b>, with your place heading for (4th → 3rd). Click <i>gap</i> for the gaps and places predicted at the finish.</p>
+        <p class="desc">Each rider is compared with you at the same distance along the course, on the race clock: the gap is how much more or less time each of you took to get there. A rider who started later can be ahead on the clock while behind on the road, and the clock is what counts. The place is your place among the riders you can compare with: seen in the last two minutes and past the same point as you. A rider who has finished shows the time they finished in. The trend (/min) is the time you gain or lose on each rider a minute, over the last four minutes, so a sprint barely moves it (over the last minute until four have passed). Riders you cannot compare yet sit below a line, with the reason.</p>
+        <p class="desc">Once you are 20 minutes in, or five minutes from the finish, the line under the header says how the finish is shaping up at the pace of the last minutes: <b>Clear</b> (ride your plan), <b>Defend</b>, <b>Chase</b> or <b>Contested</b>, with the place you are heading for (→ 4th). Before that the outlook is too early to call. <b>At the finish</b> shows the gaps and places predicted at that pace.</p>
       </form>
 
       <form id="rivals-options" class="section" data-for="rivals">
@@ -181,10 +181,9 @@
             <option value="2">2</option>
           </select>
         </label>
-        <label title="How far the track under the names reaches each way">
+        <label title="How far the track under the names reaches each way, on the clock">
           <key>Track range:</key>
           <select name="rivalsRange">
-            <option value="play">±1 min, wider for the riders that matter</option>
             <option value="30">±30 s</option>
             <option value="60">±1 min</option>
             <option value="120">±2 min</option>
@@ -192,8 +191,8 @@
             <option value="field">The whole field</option>
           </select>
         </label>
-        <p class="desc">Behind you on the left, ahead on the right: the nearest rider each side, then the nearest that matters. Each says how it ends at the pace of the last four minutes (a sprint barely moves it): <b>catch 4:10</b> (you catch them in 4:10) or <b>catches you 3:20</b>; outlined, close when you finish: <b>in reach 8 s</b> (a little more from you, or a fade from them, and you catch them) or <b>pressure 5 s</b> (they finish 5 s behind you). Beside it, how much you gain (green) or lose (orange) on them a minute. In the middle, your place and the verdict on the finish (as the field's): <b>clear</b>, <b>defend</b>, <b>chase</b> or <b>contested</b>, and the place you are heading for (→ 3rd).</p>
-        <p class="desc">On the track, riders you meet before the finish are ringed and those close at the finish ring-dashed; the track widens to hold both. The ends count who you catch and who catches you, and the riders beyond the range (+3). Close is a second for each minute to go, 5 s to 30 s.</p>
+        <p class="desc">Behind you on the left, ahead on the right: the riders nearest you on the clock, at the same distance along the course. Each says how far they are (the gap now) and how the gap moves at the pace of the last four minutes (a sprint barely moves it): <b>+1.2/min</b> you gain on them, or <b>−0.8/min</b> you lose. In the middle, your place among the riders you can compare with and, once you are 20 minutes in (or five minutes from the finish), the verdict on the finish: <b>clear</b>, <b>defend</b>, <b>chase</b> or <b>contested</b>, with the place you are heading for (→ 3rd).</p>
+        <p class="desc">On the track each rider is a dot at their gap on the clock; a rider who has finished is hollow. The ends count the riders beyond the range.</p>
       </form>
 
       <form id="advanced" class="section">

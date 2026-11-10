@@ -7,6 +7,56 @@ This directory hosts the two browser surfaces that power the Zwift TT toolkit:
 
 Both screens can be opened independently, and they cooperate through `/tt-dashboards/shared-state` in `localStorage`.
 
+## How the plan metre is found (mod, 2026-11-10)
+
+The mod places the rider on the plan's metres (`pages/src/engine/align.mjs`, `course.mjs`,
+`engine.mjs`). Two things had to be found: where the timing line is on the plan's route data,
+and how the game's `eventDistance` (zero at the line) maps onto that data.
+
+- **The course match (the course tracker, `course.mjs`).** When the plan file carries
+  `route.course` (format `zg-course/1`, written by the planner: the planner's own course on the
+  plan's metres, simplified to 1 m, no gap over 100 m), the rider's lat/lng is matched onto the
+  course. A fix counts when it lies within 10 m of the road; the course's segments are indexed on a
+  50 m grid, so a fix costs a few cells, and the course's own crossings and laps are candidates
+  together. Once four fixes agree on a line over 30 m of `eventDistance`, the tracker locks, and the
+  plan metre is the locked metre plus the odometer (`eventDistance` x `route_m_per_game_m`). Each
+  later fix that lies within 40 m of the odometer's metre pulls the metre 15 % of the way to it. The
+  metre never goes backwards. Without a fix for 600 m of odometer the lock is lost, but the line is
+  kept: the metre runs on from it by the odometer (carried) until a fix relocks, and a relock never
+  moves the metre back. Only before the first lock does the old rule place the rider. A zero reading
+  once racing is a dropped reading (missing), and an odometer step no rider could ride in the tick
+  (45 m or more over two seconds) is held back one tick; if it persists it is taken as a real jump.
+- **The old rule (the fallback until the lock, and for plans without a course).** The line is the
+  plan length minus the event length when that is a stretch of 0 to 500 m, else the file's
+  `start_line_m` (0 on most files), and the plan metre is `eventDistance` plus that line.
+  Free rides and plans from here never use the course.
+- **The finish.** With the event's length known, the race ends when Sauce's distance to go is spent,
+  not at the plan's last metre. With the course locked, the finish metre is the rider's metre plus
+  the distance to go, so it can lie past the plan's end; the last interval stays the target until
+  then, and the finished time is the clock's at that tick. The plan's pace carries on past the end.
+- **The clock.** Zwift's clock, or the event distance, starts it at the line. Once the course locks,
+  the plan time at the start is re-anchored to the matched line.
+
+Measured on Dave's California Dreamin' ride (route 966890401, 2026-11-10, plan NYC92U, the
+recording in `test/fixtures/recordings/`): the line is at route-data metre 160.2 (+/- 2) and the
+game's metres are 0.998656 x `eventDistance` + 160.17 (residual sd 1.65 m, max 5 m). The course
+locks at `eventDistance` 37.6 m (the implied line 159.5 m), 3 s after the line. Against the
+formula, over 3,976 locked race ticks: 100 % within 6 m (median error +0.3 m, worst 5.6 m). The
+switches come within 0.6 s of the true crossing on 16 of the 17 boundaries (the tick spacing is 0.4
+to 1.1 s); the one at 10059 m is 1.4 s: the rider's road projection and the tracker agree there, and the formula is 5 m ahead of
+the road at that bend (the rider rides 3.7 m off the planner's line there). The finish comes at
+the Sauce finish (`eventDistance` 21157.7, plan metre 21290 against the true 21287), with the clock
+at 2095.6 s (Zwift: 2095 s). Without the course the same ride is late by 15 s median (34 s worst
+at the bend): the old rule put the line at the pen.
+
+Constants (`course.mjs`): 50 m grid, 15 m search, 10 m accept, 40 m gate, 15 % blend, 4 fixes over
+30 m to lock, 8 m agreement, 300 m of fixes kept, a plausible line between -150 and 300 m, 600 m
+to unlock. The blend strength makes no difference to the switch timing on this ride (0.05 to 0.5
+gave the same). A fix counts on a segment only where it projects inside that segment: a fix just
+past a vertex projects onto the vertex with its along-road distance as the offset, which would
+pass for a fix on the road for the first metres past every vertex (on a straight in the unit tests
+that locked the line 6 m wrong).
+
 ## Finish-time prediction pipeline
 
 1. **Plan ingestion** – Each module loads the shared plan snapshot published by whichever window fetched the plan. A plan is treated as an ordered set of intervals with power targets and durations.

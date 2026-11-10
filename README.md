@@ -25,11 +25,11 @@ Add any of these from Sauce's window menu (right-click the Sauce icon → Window
 | Window | What it is |
 |---|---|
 | **TT HUD: strip** | One line for the top of the screen (600 × 100): now, next, W′, finish. |
-| **TT HUD: dial** | A round gauge (320 × 320) open at the bottom. Rings from the outside in: live power against the target (bold tick) and the next target (dashed tick); time left in the interval, draining to the change and amber in the warning time; W′ left with the plan's floor. Inside: the finish, the target, your live power and W′; the next change sits in the opening. |
+| **TT HUD: dial** | A round gauge (320 × 320) open at the bottom. Rings from the outside in: live power against the target (bold green tick) and the next target (dashed tick); time left in the interval, draining to the change and amber in the warning time; W′ left with the plan's floor. Inside: the finish, the target, your live power and W′; the next change sits in the opening. |
 | **TT HUD: stack** | A narrow column for a screen edge (230 × 430). |
 | **TT interval list** | Every interval with where it ends, its target, time, gradient and W′, and how each one went. |
-| **TT field** | The riders of your event in standings order, with the gap at equal distance and the time you gain or lose on each. |
-| **TT rivals** | One line for a screen edge (600 × 76): the riders nearest you on the road, ahead and behind. |
+| **TT field** | The riders of your event on the clock, with the gap at the same distance along the course (like for like), your place among them, and the time you gain or lose on each. |
+| **TT rivals** | One line for a screen edge (600 × 76): the riders nearest you on the clock, ahead and behind, with the gap and how it moves. |
 
 The three HUDs show the same things in different shapes; add the one you like. Each
 window runs on its own, so they always agree.
@@ -158,6 +158,23 @@ Hover the HUD for the tray: **offset** (nudge the plan ±10 m if its boundaries 
 late), **bias** (every target ±1 %), **Reset** (clear this race's statistics), **Plan** (the
 plan panel: strategy and code) and settings.
 
+## Where you are on the course
+
+In a TT the game's distance starts at the timing line, and the line is not at the start of
+the course's road data: it sits up to about 160 m into it on some routes, and no rule finds it.
+A plan made after the planner's course update carries the course itself. The mod
+matches your position (your latitude and longitude) against that course: after four
+consistent fixes on the road it knows where the line is and where you are on the plan, to
+about 5 m, and the game's distance carries you between fixes. If the position is lost for a
+stretch (up to 600 m of game distance), the plan metre runs on from the last match by the game's
+distance until the road is found again. On California Dreamin' the match locks about 40 m after the line. The plan's intervals switch where you reach them, and the
+finish is the event's length.
+
+Plans made before that update have no course. They keep the old rule, which places the line
+from the event's length or from the plan file, and that can be out by up to about 160 m on
+some routes: the intervals then switch late by that much. Plan the race again to get the
+matching.
+
 ## The list, the field and the rivals strip
 
 The **interval list** shows each interval's end (in km), target, time, gradient and the W′
@@ -166,50 +183,42 @@ a third of the way down so you see what is coming. Once an interval is ridden, s
 show how it went: your average against the target in the band colours, the time against the
 plan, and your W′ against the plan's (orange: you spent more than planned).
 
-The **field** lists the riders of your category in order of the time each took to the same
-point of the course. The gap is measured at equal distance: where both of you have been,
-every 50 m, so it compares like with like.
-By default it is the gap on the clock (in a TT riders start apart, so a rider behind you on
-the road can be ahead on time); click *gap* to switch to the road. The next column is the
-time you gain (+, green) or lose (−, orange) on each rider a minute, over the last four
-minutes (the last minute until four have passed), so a sprint barely moves it. At that pace a
-tag by the name says how it ends, on the gap shown: on the road *catch 4:10* or *catches you
-3:20* (you meet before the finish, and when), on the clock *you beat* or *beats you*; and,
-outlined, riders close when you finish: *in reach 8 s* ahead (a little more from you, or a
-fade from them, and you are past) and *pressure 5 s* behind. Close is a second for each
-minute to go, between 5 and 30 s. Riders who finish nowhere near you fade back. Your row stays
-in view.
+The **field** lists the riders of your event in order of the gap on the clock. The gap is
+measured at the same distance along the course, where you have both been, so it compares like
+with like. In a TT riders start apart, so a rider behind you on the road can be ahead on the
+clock. Each rider's place is their rank among the riders you can compare with, you included.
+A rider who has finished keeps their time: it is frozen at the line on their own clock, and
+their place is among the finishers. Riders you cannot yet compare, or have not seen for two
+minutes, sit below a divider with the reason. Click *gap* to switch between the gap now and
+the gap at the finish (predicted from the pace of the last minutes). The next column is the
+time you gain (+, green) or lose (−, orange) on each rider a minute, over the last four minutes
+(the last minute until four have passed), so a sprint barely moves it. The header sums you up:
+*you 5th of 18 compared*, with the place you are heading for (*→ 4th*) once the outlook has
+settled. After you finish it reads *you finished 2nd of 3 so far*.
 
-The finish outlook carries each rider's clock gap to the line at that pace, using your own
-time to go from the plan (which knows the route), so no rider is modelled on the course. A
-line under the header sums it up for a glance:
+The finish outlook predicts each rider's gap to the line at their pace, using your own time to
+go from the plan (which knows the route), so no rider is modelled on the course. It is not
+shown until 20 minutes of racing or five minutes to go: before that the middle of the rivals
+strip shows your place only. Once it has settled, one word sits in the middle of the rivals
+strip and under the field header:
 
 | Verdict | When |
 |---|---|
-| *Clear: 13 s up, 25 s back at the finish: ride your plan* | nobody close at the finish either way |
-| *Defend 4th: J. Hart 3 s back at the finish, closing 0.8 s/min* | someone beats you, or finishes close behind |
-| *Chase 3rd: S. Patel 6 s up at the finish: +0.9 s/min catches them* | you beat someone, or one finishes close ahead |
-| *Contested: 3rd to 5th within 8 s* | both |
-| *Too early to tell* | until there are a few minutes of pace |
+| *Clear* | nobody close at the finish either way: ride your plan |
+| *Defend 4th* | someone beats you, or finishes close behind (*J. Hart 3 s back at the finish, closing 0.8 s/min*) |
+| *Chase 3rd* | you beat someone, or one finishes close ahead (*S. Patel 6 s up at the finish: +0.9 s/min catches them*) |
+| *Contested* | both |
 
-The header shows the place you are heading for (*you 4th → 3rd of 12*), and clicking *gap*
-cycles the clock gap, the gap **at the finish** (predicted, in predicted order and places,
-faint while the pace is still settling) and the road gap. Early in a race the paces move a
-lot: the outlook is most use in the last third, and *ride your plan* is the right call
-whenever it says clear, since the plan is already your fastest pacing.
-
-The **rivals strip** is for a glance: behind you on the left, ahead on the right. Each side
-names the nearest rider and then the nearest that matters, with how far up or down the road
-they are, how it ends at the pace of the last four minutes (a sprint barely moves it):
-*catch 4:10*, *catches you 3:20*, outlined *in reach 8 s* and *pressure 5 s*, and how much
-you gain (green, *+0.6/min*) or lose (orange) on them a minute. In the middle, your place
-with the field's verdict over it (*defend*, *chase*, *contested*, *clear*) and the place you
-are heading for under it (*→ 3rd*); hover it for the reason. Outside a race it shows your
-speed. Below, everyone around you sits on a track by their road gap,
-ringed when you meet before the finish and ring-dashed when close at it. The track reaches
-±1 min by default and widens to hold those riders; its ends count who you catch, who
-catches you, and the riders beyond the range (*+3*). Settings → Rivals → *Track range* fixes it at ±30 s, ±1, ±2 or
-±5 min, or fits the whole field.
+The **rivals strip** is for a glance: the riders nearest you on the clock, behind on the left and
+ahead on the right. Each side names the nearest rider and then the nearest that matters, with
+the gap now and how it moves at the pace of the last four minutes (a sprint barely moves it):
+*+0.6/min* you gain (green) or lose (orange) on them a minute. There are no catch or pressure
+tags: the gap is the only measure. In the middle, your place among the riders you can compare
+with, with the verdict once it has settled and the place you are heading for under it; hover it
+for the reason. Outside a race it shows your speed. Below, everyone around you sits on a track
+by their gap on the clock: a dot each, your own in the middle, a finished rider a hollow dot.
+The track reaches ±1 min by default. Settings → Rivals → *Track range* fixes it at ±30 s, ±1, ±2
+or ±5 min, or fits the whole field; its ends count the riders beyond the range on each side.
 
 The field and the rivals strip need an event: outside one, riders have no shared distance to
 compare.
@@ -224,8 +233,8 @@ Right-click any window for Sauce's titlebar and its settings button (the HUD als
 its tray). One settings page serves every window and shows what that window uses. Plans:
 the library, code entry and the active plan's strategy. Look: background (clear, smoke, dark, solid), halo strength,
 size, and for the HUD its layout, band words and cadence/HR/speed. Pacing: power smoothing,
-on-target band, the amber warning time, how the clock starts. Field: gap on the
-clock or the road, every category. Rivals: riders named each side. Advanced: what Plan it
+on-target band, the amber warning time, how the clock starts. Field: gap now or at the
+finish, every category. Rivals: the track range. Advanced: what Plan it
 plans with, Plan from here's bike and the strategy it starts on, debug log, the telemetry recorder.
 
 ## Development

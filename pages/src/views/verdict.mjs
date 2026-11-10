@@ -1,5 +1,6 @@
 // The finish outlook's verdict in words (engine/finish-outlook.mjs), for the field window's
-// header and the rivals strip's middle: a word for the kind, a headline and the detail.
+// header and the rivals strip's middle: a word for the kind, a headline and the detail. Shown
+// only once the outlook is settled (the early kind is for the windows to leave out).
 import {fmtGap, shortName} from './field-feed.mjs';
 
 export const VERDICT_WORD = {early: 'early', done: 'finished', clear: 'clear', defend: 'defend', chase: 'chase', contested: 'contested'};
@@ -12,6 +13,7 @@ export function verdictText(o) {
     }
     const place = o.home.place;
     const pred = o.home.predictedPlace;
+    const finished = o.home.finishPlace;
     const x = v.rider;
     const who = x ? shortName(x.name) : '';
     const more = v.others > 0 ? ` (+${v.others})` : '';
@@ -21,11 +23,11 @@ export function verdictText(o) {
     switch (v.kind) {
     case 'early':
         headline = 'Too early to tell';
-        detail = 'the finish outlook needs a few minutes of racing';
+        detail = 'how the finish is shaping up needs a few minutes of racing';
         break;
     case 'done':
-        headline = place ? `Finished ${ordinal(place)}` : 'Finished';
-        detail = place ? 'riders still out can change it' : '';
+        headline = finished ? `Finished ${ordinal(finished)}` : place ? `Finished ${ordinal(place)}` : 'Finished';
+        detail = 'riders still out can change it';
         break;
     case 'clear': {
         headline = 'Clear';
@@ -37,7 +39,7 @@ export function verdictText(o) {
         headline = place ? `Defend ${ordinal(place)}` : 'Defend';
         detail = x.state === 'beaten'
             ? `${who} beats you by ${g(x.finishGapS)}${more}`
-            : `${who} ${g(x.finishGapS)} back at the finish${x.paceSPerMin <= -0.3 ? `, closing ${Math.abs(x.paceSPerMin).toFixed(1)} s/min` : ''}${more}`;
+            : `${who} ${g(x.finishGapS)} back at the finish${x.paceSPerMin <= -0.3 ? `, closing at ${Math.abs(x.paceSPerMin).toFixed(1)} s a minute` : ''}${more}`;
         break;
     case 'chase':
         if (x.state === 'beat') {
@@ -45,7 +47,7 @@ export function verdictText(o) {
             detail = `you beat ${who} by ${g(x.finishGapS)}${more}`;
         } else {
             headline = Number.isFinite(x.place) ? `Chase ${ordinal(x.place)}` : 'Chase';
-            detail = `${who} ${g(x.finishGapS)} up at the finish${x.needSPerMin != null ? `: +${x.needSPerMin.toFixed(1)} s/min catches them` : ''}${more}`;
+            detail = `${who} ${g(x.finishGapS)} up at the finish${x.needSPerMin != null ? `: ${x.needSPerMin.toFixed(1)} s a minute faster catches them` : ''}${more}`;
         }
         break;
     case 'contested':
@@ -63,15 +65,4 @@ export function ordinal(n) {
     const t = n % 100;
     const s = t >= 11 && t <= 13 ? 'th' : {1: 'st', 2: 'nd', 3: 'rd'}[n % 10] ?? 'th';
     return `${n}${s}`;
-}
-
-/** What a rider's outlook state reads as, on the clock: [word, value] for a tag. */
-export function clockTag(x) {
-    const g = x ? (Math.abs(x.finishGapS) < 1 ? '<1 s' : `${Math.round(Math.abs(x.finishGapS))} s`) : '';
-    return {
-        beat: ['you beat', g],
-        beaten: ['beats you', g],
-        reach: ['in reach', g],
-        pressure: ['pressure', g],
-    }[x?.state] ?? ['', ''];
 }

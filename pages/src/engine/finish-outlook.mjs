@@ -1,13 +1,19 @@
 // How the finish is shaping up (the field window and the rivals strip): each rider's gap on the
-// clock when you finish, at the pace of the last four minutes (field-model.mjs), what that does
-// to the places, and one verdict for a glance: clear, defend, chase or contested.
+// clock when you finish, at the pace of the last four minutes (field-model.mjs), the places that
+// gives, and one verdict for a glance: clear, defend, chase or contested.
 //
 // No rider is modelled on the route: your own finish comes from your plan (the engine's
 // prediction knows the climbs), and each rider's is yours less their clock gap carried to the
-// line at their pace against you. Gaps are measured where both of you have been, so a rider
-// who has finished is already at their real gap.
+// line at their pace against you. A rider who has finished is at their real finish time: the
+// line they crossed on their own clock (field-model.mjs finishRaceOf).
 //
-// States, on the clock (your result):
+// The places are the riders' order at the finish (1 + the riders finishing ahead of you), so
+// nothing is clamped and nothing comes from Zwift. They are shown only once the outlook is
+// settled: after OUTLOOK.gateElapsedS of racing, or with OUTLOOK.gateToGoS left (the first
+// minutes of a race gave wrong calls on 2026-11-10: a rider who ends up behind was called
+// beating you before the gate).
+//
+// States, on the clock (the rider's result against yours):
 //   beat      ahead now, and at this pace you finish ahead of them
 //   beaten    behind now, and at this pace they finish ahead of you
 //   reach     ahead, close at the finish: a little more from you, or a fade from them
@@ -15,6 +21,8 @@
 //   clear     not close at the finish either way: nothing to think about
 // Close is a second per minute to go, 5 s to 30 s. A state holds on past its line for a margin
 // (prev, the last result) so a rider on the edge does not flicker.
+
+import {placeOf} from './field-model.mjs';
 
 export const OUTLOOK = {
     closePerMin: 1,       // close at the finish: 1 s per minute to go,
@@ -24,36 +32,50 @@ export const OUTLOOK = {
     crossS: 1,            // beat / beaten from 1 s past level, held back to 0.5 s short of it
     holdS: 0.5,
     settledS: 240,        // a pace from fewer seconds than this is early (shown faint)
+    gateElapsedS: 1200,   // the outlook is settled after 20 minutes of racing ...
+    gateToGoS: 300,       // ... or with 5 minutes or less to go
 };
 
 const AHEAD = new Set(['beat', 'reach']);
 const BEHIND = new Set(['beaten', 'pressure']);
 
 /**
- * list: field rows (rows(), any gap mode) with the home row or without. remainingS: your time
- * to go (0 once finished). homeFinishS: your predicted time from the start, for the riders'
- * predicted times (optional). homePosition: your place now (optional). Returns null without a
- * time to go, else {closeS, riders: Map(id → {state, gapS, finishGapS, needSPerMin, paceSPerMin,
- * finishS, place, early}), home: {place, predictedPlace, finishS}, verdict}.
+ * list: field rows (field-model.rows()). remainingS: your time to go (0 once finished). elapsedS:
+ * your race time so far (for the early gate). homeFinishS: your predicted race time at the
+ * finish (optional; from the home row when you have finished). prev: last call's result.
+ * Returns null without a time to go, else {closeS, remainingS, settled, riders: Map(id → {state,
+ * gapS, finishGapS, needSPerMin, paceSPerMin, finishS, finished, early, place}), home: {place,
+ * of, predictedPlace, finishPlace, finishers, finishS}, verdict}. Places and the verdict's places
+ * are null until settled.
  */
-export function finishOutlook(list, {remainingS = null, homeFinishS = null, homePosition = null, prev = null} = {}) {
+export function finishOutlook(list, {remainingS = null, elapsedS = null, homeFinishS = null, prev = null} = {}) {
     if (!Number.isFinite(remainingS)) {
         return null;
     }
     const o = OUTLOOK;
     const remMin = Math.max(0, remainingS) / 60;
     const closeS = Math.min(o.closeMaxS, Math.max(o.closeMinS, remMin * o.closePerMin));
+    const done = remainingS <= 0;
+    const settled = done || remainingS <= o.gateToGoS || (Number.isFinite(elapsedS) && elapsedS >= o.gateElapsedS);
+    const home = list.find(r => r.isHome) ?? null;
+    const finishing = Number.isFinite(homeFinishS) ? homeFinishS : (home?.finished && Number.isFinite(home.finishRaceS) ? home.finishRaceS : null);
     const riders = new Map();
     for (const r of list) {
-        if (r.isHome || r.stale) {
+        if (r.isHome || !r.comparable || !Number.isFinite(r.gapS)) {
             continue;
         }
-        const gapS = Number.isFinite(r.clockS) ? r.clockS : r.roadS;
-        if (!Number.isFinite(gapS)) {
-            continue;
+        const gapS = r.gapS;
+        const known = r.finished && r.finishRaceS != null && finishing != null;
+        let finishGapS;
+        let pace = null;
+        if (known) {
+            finishGapS = finishing - r.finishRaceS;
+        } else if (r.finished) {
+            finishGapS = gapS;
+        } else {
+            pace = Number.isFinite(r.paceSPerMin) ? r.paceSPerMin : null;
+            finishGapS = gapS - (pace ?? 0) * remMin;
         }
-        const pace = Number.isFinite(r.paceSPerMin) ? r.paceSPerMin : null;
-        const finishGapS = gapS - (pace ?? 0) * remMin;
         const was = prev?.riders?.get(r.id)?.state;
         const ahead = gapS > 0;
         const fg = ahead ? finishGapS : -finishGapS;     // > 0: still on their side at the finish
@@ -73,41 +95,44 @@ export function finishOutlook(list, {remainingS = null, homeFinishS = null, home
             finishGapS,
             paceSPerMin: pace,
             needSPerMin: remMin > 0 ? Math.abs(finishGapS) / remMin : null,
-            finishS: Number.isFinite(homeFinishS) ? homeFinishS - finishGapS : null,
-            early: pace == null || !((r.paceSpanS ?? 0) >= o.settledS),
+            finished: Boolean(r.finished),
+            finishS: r.finished && r.finishRaceS != null ? r.finishRaceS : (finishing != null ? finishing - finishGapS : null),
+            early: !settled || (!known && !r.finished && (pace == null || !((r.paceSpanS ?? 0) >= o.settledS))),
             place: null,
         });
     }
-    // Places: your place now, less those you beat, plus those who beat you; the others around you
-    // in order of their gap at the finish.
+    // Places at the finish: 1 + the riders finishing ahead of you; each rider's place is 1 + the
+    // riders finishing ahead of them, and one more when you finish ahead of them.
     const all = [...riders.values()];
-    const beat = all.filter(x => x.state === 'beat').length;
-    const beaten = all.filter(x => x.state === 'beaten').length;
-    const predictedPlace = Number.isFinite(homePosition) && homePosition > 0 ? homePosition - beat + beaten : null;
+    const predictedPlace = settled ? 1 + all.filter(x => x.finishGapS > 0).length : null;
     if (predictedPlace != null) {
-        const order = [...all.map(x => ({id: x.id, g: x.finishGapS})), {id: null, g: 0}].sort((a, b) => b.g - a.g);
-        const homeRank = order.findIndex(x => x.id == null);
-        order.forEach((x, i) => {
-            if (x.id != null) {
-                riders.get(x.id).place = Math.max(1, predictedPlace + i - homeRank);
-            }
-        });
+        for (const x of all) {
+            x.place = 1 + all.filter(y => y.finishGapS > x.finishGapS).length + (x.finishGapS < 0 ? 1 : 0);
+        }
     }
-    const home = {place: Number.isFinite(homePosition) && homePosition > 0 ? homePosition : null, predictedPlace, finishS: Number.isFinite(homeFinishS) ? homeFinishS : null};
-    return {closeS, remainingS, riders, home, verdict: verdictOf(all, home, remainingS)};
+    const now = placeOf(list);
+    const homeOut = {
+        place: now.place,
+        of: now.of,
+        predictedPlace,
+        finishPlace: home?.finishPlace ?? null,
+        finishers: home?.finishers ?? null,
+        finishS: finishing,
+    };
+    return {closeS, remainingS, settled, riders, home: homeOut, verdict: verdictOf(all, homeOut, remainingS, settled)};
 }
 
 /**
  * The verdict: {kind, rider (the one it is about), others (how many more), lo, hi (the places
  * in contention), spreadS, upS, backS (the nearest gaps at the finish either way)}. kind:
- *   early      no rider has a pace yet
+ *   early      not settled yet (see OUTLOOK.gateElapsedS), or no rider has a pace yet
  *   done       you have finished
  *   contested  riders close or crossing on both sides
  *   defend     someone beats you, or finishes close behind
  *   chase      you beat someone, or one finishes close ahead
  *   clear      nobody close either way: ride your plan
  */
-function verdictOf(all, home, remainingS) {
+function verdictOf(all, home, remainingS, settled) {
     const base = {rider: null, others: 0, lo: null, hi: null, spreadS: null, upS: null, backS: null};
     const ahead = all.filter(x => x.finishGapS > 0).sort((a, b) => a.finishGapS - b.finishGapS);
     const behind = all.filter(x => x.finishGapS <= 0).sort((a, b) => b.finishGapS - a.finishGapS);
@@ -116,7 +141,7 @@ function verdictOf(all, home, remainingS) {
     if (remainingS <= 0) {
         return {...base, kind: 'done'};
     }
-    if (!all.length || all.every(x => x.paceSPerMin == null)) {
+    if (!settled || !all.length || all.every(x => x.paceSPerMin == null && !x.finished)) {
         return {...base, kind: 'early'};
     }
     const by = state => all.filter(x => x.state === state).sort((a, b) => Math.abs(a.finishGapS) - Math.abs(b.finishGapS));

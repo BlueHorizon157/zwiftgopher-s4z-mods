@@ -29,10 +29,10 @@ export const SETTINGS_DEFAULTS = {
     hereBike: 'auto',         // Plan from here's bike: auto (road unless the draft says TT) | road | tt
     hereStrategy: 'balanced', // Plan from here's strategy to start on: fastest | balanced | safe_finish
     showDebug: false,
-    gapMode: 'clock',         // field: clock (standings) | finish (predicted) | road (who is physically ahead)
+    gapMode: 'clock',         // field: clock (now, at the same distance) | finish (predicted at the finish)
     allSubgroups: false,      // field: riders of every category
     rivalsEach: 2,            // rivals strip: riders shown each side
-    rivalsRange: 'play',      // rivals track: play (±1 min, wider for riders in play) | 30 | 60 | 120 | 300 (s each way) | field
+    rivalsRange: '60',        // rivals track: 30 | 60 | 120 | 300 (s each way) | field
 };
 
 /**

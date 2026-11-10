@@ -342,7 +342,7 @@ html[data-layout="stack"] .dial-svg { display: none; }
 /* ---- dial ----
  * A 270° gauge open at the bottom (the opening holds the next change, clear of every ring).
  * Rings from the outside in: power (live arc in the band colour over the target band, the
- * next target as a tick), time left in the interval (drains to the change, amber in the
+ * target as a green tick, the next target as a dashed one), time left in the interval (drains to the change, amber in the
  * warning time), W' left (with the plan's floor; red under 25 %). Every line of text has its
  * own row inside the inner ring, laid out in the SVG's 260-unit space: --t is one unit. */
 html[data-layout="dial"] .hud {
@@ -430,7 +430,8 @@ html[data-bg="smoke"] .dial-svg .disc { fill: rgba(4, 8, 14, 0.34); }
 html[data-bg="dark"] .dial-svg .disc { fill: rgba(4, 8, 14, 0.2); }
 .dial-svg .track { fill: none; stroke: rgba(245, 247, 250, 0.2); stroke-width: 12; stroke-linecap: round; }
 .dial-svg .target-arc { fill: none; stroke: rgba(245, 247, 250, 0.3); stroke-width: 18; stroke-linecap: butt; }
-.dial-svg .target-tick { fill: none; stroke: var(--ink); stroke-width: 4; stroke-linecap: round; filter: drop-shadow(0 0 1.5px var(--halo)); }
+/* the current target is green (Dave, 2026-11-10), apart from the next one (dashed white, amber when soon) */
+.dial-svg .target-tick { fill: none; stroke: var(--on); stroke-width: 4; stroke-linecap: round; filter: drop-shadow(0 0 1.5px var(--halo)); }
 .dial-svg .under-stroke { fill: none; stroke: var(--halo); stroke-width: 14; stroke-linecap: round; }
 .dial-svg .live-arc { fill: none; stroke: var(--ink-2); stroke-width: 10; stroke-linecap: round; }
 .dial-svg .live-arc.band-under { stroke: var(--under); }

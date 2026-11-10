@@ -176,3 +176,78 @@ test('a strategy chosen before the start is a new plan; the same strategy again 
     engine.event('strategy', {plan: normalisePlan(plan, {card: 'balanced'})}, epoch + ticks[0].t);
     assert.equal(engine.state.log.length, log, 'the same strategy: nothing');
 });
+
+// A race on hand-built ticks (2026-11-10 fixes): an event longer than the plan's end by 40 m
+// and the line at the pen, so the plan's last metre comes before the finish (the course cases
+// do this on the real ride). Sauce's distance to go is spent at the finish.
+const SPEED_MS = 8.33;
+const EVENT_M = 10750;
+const raceTick = (ed, {sg = 42, remainingMetric = 'distance', t = 0} = {}) => ({
+    athleteId: 1, self: true,
+    state: {worldTime: epoch + 1_000_000 + t, eventSubgroupId: sg, eventDistance: ed, time: ed / SPEED_MS, speed: SPEED_MS * 3.6, power: 200, routeId: 3395698268},
+    remaining: EVENT_M - ed, remainingMetric, remainingEnd: EVENT_M, eventSubgroupId: sg,
+});
+const raceRun = (until = Infinity) => {
+    const engine = createEngine({plan, prefs: {smoothingSec: 0}});
+    const seen = [];
+    for (let ed = 0; ed <= until; ed += 5) {
+        const t = Math.round(ed / SPEED_MS * 1000);
+        engine.tick(raceTick(ed, {t}), epoch + 1_000_000 + t);
+        seen.push({ed, v: engine.view()});
+    }
+    return {engine, seen};
+};
+
+test('past the plan\'s last metre the last interval stays the target, and the finish is Sauce\'s distance to go', () => {
+    const {seen} = raceRun(EVENT_M + 20);
+    const last = plan.intervals.length - 1;
+    const past = seen.find(s => s.ed === 10730);
+    assert.equal(past.v.status, 'racing', 'still racing past the plan\'s end');
+    assert.equal(past.v.target.index, last, 'the last interval stays the target');
+    const finish = seen.find(s => s.v.status === 'finished');
+    assert.ok(finish, 'finished');
+    assert.ok(finish.ed >= EVENT_M && finish.ed <= EVENT_M + 5, `finished at event distance ${finish.ed}`);
+    assert.ok(finish.v.race.planM > plan.intervals.at(-1).end_m, `at plan metre ${finish.v.race.planM}`);
+    assert.ok(Math.abs(finish.v.race.elapsedS - finish.ed / SPEED_MS) <= 0.5, `clock ${finish.v.race.elapsedS}`);
+    assert.equal(finish.v.stats[last].finished, true, 'the last interval closes at the finish');
+    assert.ok(Number.isFinite(finish.v.stats[last].wbalEndJ), 'and it closes with a W\' of its own');
+});
+
+test('a finished race keeps its time and statistics after the rider leaves the event', () => {
+    const {engine, seen} = raceRun(EVENT_M + 20);
+    const fin = seen.find(s => s.v.status === 'finished');
+    const finishS = fin.v.race.elapsedS;
+    const completed = fin.v.race.completed;
+    // Zwift still counts the ride for a while, then drops the subgroup to none.
+    for (let i = 1; i <= 5; i++) {
+        const t = Math.round((EVENT_M + 20) / SPEED_MS * 1000) + i * 2000;
+        engine.tick({...raceTick(EVENT_M + 20 + i * 16, {t}), state: {...raceTick(EVENT_M + 20, {t}).state, time: (EVENT_M + 20 + i * 16) / SPEED_MS}}, epoch + 1_000_000 + t);
+        const v = engine.view();
+        assert.equal(v.status, 'finished', `still finished in the event (${i})`);
+        assert.equal(v.race.elapsedS, finishS, 'the finish time is held while Zwift counts on');
+    }
+    for (const sg of [0, null]) {
+        const t = Math.round((EVENT_M + 200) / SPEED_MS * 1000) + (sg ? 1 : 2) * 1000;
+        const d = {athleteId: 1, self: true, state: {worldTime: epoch + 2_000_000 + t, eventSubgroupId: sg, eventDistance: 0, speed: 0, power: 0, routeId: 3395698268}, remainingMetric: 'route', eventSubgroupId: sg};
+        engine.tick(d, epoch + 2_000_000 + t);
+        const v = engine.view();
+        assert.equal(v.status, 'finished', `left the event (subgroup ${sg}): the result is kept`);
+        assert.equal(v.race.elapsedS, finishS);
+        assert.equal(v.race.completed, completed);
+        assert.equal(v.race.signal, 'time');
+    }
+    assert.ok(engine.view().log.some(l => /result is kept/.test(l.msg)), 'the latch is logged');
+    // A new event clears it.
+    const t = 3_000_000;
+    engine.tick({athleteId: 1, self: true, state: {worldTime: epoch + t, eventSubgroupId: 77, eventDistance: 0, speed: 0, power: 0, routeId: 3395698268}, remainingMetric: 'distance', remaining: EVENT_M, remainingEnd: EVENT_M, eventSubgroupId: 77}, epoch + t);
+    assert.equal(engine.view().status, 'armed', 'a new event starts over');
+    assert.equal(engine.view().race.completed, 0);
+});
+
+test('the race finishes at the finish by Sauce, and the alignment says where the line came from', () => {
+    const {seen} = raceRun(EVENT_M + 20);
+    const racing = seen.find(s => s.v.status === 'racing');
+    assert.equal(racing.v.race.alignment.mode, 'line', 'no course: the file\'s line');
+    assert.equal(racing.v.race.alignment.locked, false);
+    assert.equal(racing.v.race.alignment.lineM, 0);
+});

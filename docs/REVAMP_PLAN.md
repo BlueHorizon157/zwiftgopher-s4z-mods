@@ -19,9 +19,20 @@ file, 5.2 look-ahead) once they land.
 
 ---
 
-## Status (2026-10-27)
+## Status (2026-11-10)
 
-**Released:** 0.7.0-alpha (79d192f, with the planner deploy df64520), then 0.7.1-alpha after
+**Now (unreleased, 0.9.0, uncommitted on the mod's master):** the course tracker and the
+like-for-like field. The plan metre is found by matching the rider's lat/lng onto the planner's
+course (`route.course`, zg-course/1), which locks 38 m into the event on California Dreamin' and
+then holds within 6 m of the road on every locked race tick (the timing line comes out at
+159.5 m against the measured 160.2 m). The field and rivals compare riders only at the same
+distance on the clock, with places among the comparable, frozen finish times and a finish
+outlook gated at 20 minutes (or five to go). Deploy order: the planner first (claude/course-geometry,
+measured lines on five routes), then the mod 0.9.0; plans without a course keep the old rule.
+The release note is `docs/releases/0.9.0.md`. The planner's course fixture is
+`test/fixtures/recordings/california-dreamin-2026-11-10.planner.plan.json` (anonymised).
+
+**Released:** 0.8.2 (2026-11-10: countdown in seconds, plan time marks). Earlier: 0.7.0-alpha (79d192f, with the planner deploy df64520), then 0.7.1-alpha after
 Dave's first race on it: the Phase 6 fixes 6.1 to 6.3 below (finish prediction from power,
 the timing line from the event's length, the target switching at the boundary). 139 tests;
 the page check passes in Sauce. The rest of this section is the Phase 0 to 5 record.
@@ -77,9 +88,9 @@ Deviations and open points:
 | # | What was done |
 |---|---|
 | 4.1 | `list.html` + `src/list.mjs` + `css/list.css` replace the 0.6.x list. Header: route, finish time (plan before the start, prediction while racing, actual after), plan time and intervals ridden, the delta in words, planned against actual average power, offset and bias when set. Columns # · to km · W · time · grade · W′ kJ. Rows are built once per plan; each cell is rewritten only when its text changes. The current row carries a bar and a progress fill (amber bar inside the warning time) and sits a third of the way down; manual scrolling holds it for 5 s. A ridden row shows the average against the target in the band colours, the time against the plan, and the closing W′ against the plan's (the engine now records `wbalEndJ` per interval; test: within 0.6 kJ of the plan on every interval). The interval the clock started in is timed against the plan from the line, not the pen. No plan: the code box. |
-| 4.2 | `engine/field.mjs` (pure, 14 tests): checkpoints every 50 m of `eventDistance` holding world time, per rider, interpolated between samples; a stopped rider's arrival is back-dated from their speed. Gap at the trailing rider's latest common checkpoint, on the road (world time) and on the clock (less the start offset: each rider's start is seen at the timing line, else taken from `state.time`; a group event uses the gun). Trend = change of the gap over the trailing rider's last 60 s (the clock and road trends are the same). Sector speed over the last plan interval both have finished, merged back to ≥ 400 m, or the last whole km without a plan. Unseen 2 min fades, 10 min evicts; a distance going back or a new subgroup clears the rider; reset clears all. `field.html` + `src/field.mjs` + `css/field.css`: pos (Sauce's `eventPosition`) · rider + team · gap with ▲▼ · gain/loss per minute in green/orange · avg km/h · w/kg · W′ bar; standings order by the clock gap (click *gap* for the road); keyed rows moved only when out of place; the home row is sticky and centred. |
+| 4.2 | `engine/field.mjs` (pure, 14 tests): checkpoints every 50 m of `eventDistance` holding world time, per rider, interpolated between samples; a stopped rider's arrival is back-dated from their speed. Gap on the clock only (2026-11-10 revamp of the windows): at the trailing rider's latest common checkpoint, each rider's race clock at the same distance (start at the timing line from `state.time`, a whole-second reading bounding each sample's start, the bounds intersected; a group event uses the gun). No checkpoint is made across a gap over 20 s in a rider's samples. Road gaps are no longer kept or shown. Trend = change of the gap over the trailing rider's last 60 s. Sector speed over the last plan interval both have finished, merged back to ≥ 400 m, or the last whole km without a plan. Unseen 2 min is not compared (faded, below the divider), 10 min evicts; a distance going back or a new subgroup clears the rider; reset clears all. The event's length (home tick `remainingEnd`, first seen for its category) is the line a rider finishes at: a rider past it is finished, their time is their own clock at the line, and later samples are ignored (a rider first seen past it has no time unless within 100 m of it). `field.html` + `src/field.mjs` + `css/field.css`: place (like-for-like: 1 + the comparable riders ahead on the clock, of all comparable + you; Sauce's `eventPosition` is not shown) · rider + team, or the reason a rider is not compared yet (below a divider) · gap with ▲▼ (now, or at the finish: click to toggle) · gain/loss per minute in green/orange · km done (or the time a finished rider finished in) · avg km/h · w/kg · W′ bar; order by the clock gap; keyed rows moved only when out of place; the home row is sticky and centred. Header: "you 5th of 18 compared"; the finish verdict and the place it heads for only once the outlook is settled (20 minutes in, or 5 minutes to go). |
 | 4.3 | The per-window titlebar hacks are gone with the old pages; every window uses Sauce's settings-mode titlebar (right-click), and `page-check.mjs` checks it appears with the settings button on each window. |
-| 4.4 | `rivals.html` + `src/rivals.mjs` + `css/rivals.css`, manifest window `rivals` (600 × 76, bottom third): the nearest one or two riders behind (left) and ahead (right) on the road with the gap, *gaining / holding / losing* and the rate, and their last-sector speed coloured against yours; your speed in the middle; below, every rider on a track by road gap (range 15 s to 10 min, chosen to fit), dots coloured by trend. Narrow strips drop the sector speed, then the second rider and the rate. |
+| 4.4 | `rivals.html` + `src/rivals.mjs` + `css/rivals.css`, manifest window `rivals` (600 × 76, bottom third): the nearest one or two riders behind (left) and ahead (right) on the clock with the gap and the rate (*gaining / holding / losing*); your place in the middle, and the finish verdict once settled; below, every comparable rider on a track by clock gap (±30 s, ±1, ±2 or ±5 min, or the whole field; default ±1 min), dots coloured by trend, a finished rider hollow. No catch tags: the window says the gap and how it moves. Narrow strips drop the rate, then the second rider. |
 
 Shared work: `views/runtime.mjs` now applies the look settings (background, halo, size) and the
 replay backgrounds to every window and calls `onReset`; `views/field-feed.mjs` feeds `nearby`
@@ -94,8 +105,9 @@ Deviations and open points:
 
 * The rivals strip is 600 × 76, not 560 × 56: two lines of riders and the track do not fit in
   56 px at the 11 px floor.
-* The field is ordered by the clock gap, not by Sauce's `eventPosition` (shown as *pos*): how
-  Zwift ranks a staggered TT mid-race is unknown.
+* The field is ordered by the clock gap, not by Sauce's `eventPosition`, which is road order
+  and is shown nowhere (2026-11-10: it follows `eventDistance` in 99.97 % of pairs, so in a
+  staggered TT it is the wrong order).
 * Assumptions for the real recording to confirm: other riders' `eventDistance` and
   `worldTime` arrive in `nearby` as for the home rider; what `eventDistance` does after the
   finish (the model handles it freezing); whether another rider's `state.time` is their race
@@ -443,8 +455,8 @@ Shared behaviour:
   rows = # · to (km) · W · time · grade · W'; after an interval completes its row shows the
   actual time and power as a small delta in the band colour; the current row is sticky at the
   top third; rows are keyed and diffed; 1 Hz. Same tokens and background modes.
-- **Field:** pos (Sauce's `eventPosition`/`eventParticipants`) · rider · gap at equal
-  distance · avg kph · w/kg · W' bar; checkpoints every 50 m on `eventDistance`, capped at
+- **Field:** place (like-for-like, on the clock) · rider · gap at equal
+  distance · km done · avg kph · w/kg · W' bar; checkpoints every 50 m on `eventDistance`, capped at
   the plan length, riders unseen for 2 min fade and are evicted after 10 min; rows diffed;
   1 Hz. The home rider's row is pinned.
 - **Rivals strip** (new, decision 9): a one-line glanceable window (560 × 56) for the top
@@ -454,7 +466,7 @@ Shared behaviour:
   change over the last 60 s and over the last plan sector), plus their speed over the last
   sector against yours. All of it comes from the field's checkpoints (time at equal
   distance), so "am I gaining on the rider ahead" is answered by the slope of the gap, not
-  by Sauce's road gap. Same engine data as the field window; no extra subscriptions.
+  by the clock gap (2026-11-10: road gaps, catch tags and the "play" range were removed, see 4.4). Same engine data as the field window; no extra subscriptions.
 
 ### 4.6 Settings
 

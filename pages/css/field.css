@@ -50,8 +50,8 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
 .cols,
 .row {
   display: grid;
-  grid-template-columns: 1.7em minmax(0, 1fr) 4em 3.6em 2.9em 2.6em 2.3em;
-  column-gap: 0.5em;
+  grid-template-columns: 1.6em minmax(0, 1fr) 3.5em 3.4em 4.4em 2.8em 2.4em 2.2em;
+  column-gap: 0.4em;
   align-items: center;
   padding: 0 0.9em;
 }
@@ -77,7 +77,7 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
 }
 .cols button.gap:focus-visible { outline: 2px solid var(--on); outline-offset: 1px; }
 .c { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.c.pos, .c.gap, .c.trend, .c.kmh, .c.wkg { text-align: right; }
+.c.pos, .c.gap, .c.trend, .c.dist, .c.kmh, .c.wkg { text-align: right; }
 
 .rows {
   flex: 1 1 auto;
@@ -97,18 +97,26 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
 .row .c.name { font-weight: 600; display: flex; align-items: baseline; min-width: 0; }
 .row .c.name > span { flex: 0 1 auto; min-width: 2ch; overflow: hidden; text-overflow: ellipsis; }
 .row .c.name small { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: clip; font-weight: 400; color: var(--ink-3); margin-left: 0.35em; font-size: max(11px, 0.85em); }
-/* in play: you catch the rider, or they catch you, before the finish (the last minutes' pace) */
-.row .c.name .play.none { display: none; }
-.row .c.name.tagged small { display: none; }   /* the tag before the team */
-.row .c.name .play i { font-style: normal; }
-.row .c.name .play.has-val i::after { content: ' '; white-space: pre; }
-.row .c.name .play { order: 1; flex: none; margin-left: 0.4em; padding: 0 0.4em; border-radius: 0.6em; font-size: max(11px, 0.8em); font-weight: 700; color: #08130c; }
-.row .c.name .play.catch { background: var(--gain); }
-.row .c.name .play.caught { background: var(--lose); color: #1a0703; }
-.row .c.name .play.reach { color: var(--gain); background: none; box-shadow: inset 0 0 0 1.5px var(--gain); }
-.row .c.name .play.pressure { color: var(--lose); background: none; box-shadow: inset 0 0 0 1.5px var(--lose); }
+/* the distance done (km), or for a rider who has finished, the time they finished in */
+.c.dist { line-height: 1.1; }
+.row .c.dist small { display: block; font-size: max(11px, 0.72em); font-weight: 600; color: var(--ink-3); }
+.row .c.dist small:empty { display: none; }
+.row.finished .c.dist b { font-weight: 700; color: var(--ink); }
+/* a rider you cannot compare yet says why, where the team would be */
+.row.apart .c.name small { color: var(--ink-3); font-style: italic; }
+.row.apart .c.gap, .row.apart .c.pos { color: var(--ink-3); }
+.divider {
+  flex: 0 0 auto;
+  padding: 0.25em 0.9em;
+  font-size: max(11px, 0.85em);
+  font-style: italic;
+  color: var(--ink-3);
+  border-top: 1px dashed var(--ink-line);
+  border-bottom: 1px solid var(--ink-line);
+}
 .row .c.gap .glyph { font-size: max(11px, 0.75em); margin-right: 0.2em; color: var(--ink-2); }
 .row .c.trend { font-weight: 600; }
+.row.finished .c.trend { color: var(--ink-3); font-weight: 400; }
 .row.stale { opacity: 0.42; }
 .row.clear:not(.home) { opacity: 0.55; }          /* finishes nowhere near you */
 .row.early .c.gap, .row.early .c.pos { color: var(--ink-3); }   /* a prediction from a short history */
@@ -152,15 +160,12 @@ html.replay-mode body { background: var(--replay-bg, transparent); }
 }
 .empty[hidden] { display: none; }
 
-/* narrow windows drop w/kg, then the trend */
+/* narrow windows drop w/kg, then the speed and the trend */
 @container root-html (width < 340px) {
-  .cols, .row { grid-template-columns: 1.7em minmax(0, 1fr) 4em 3.6em 2.9em 2.3em; }
+  .cols, .row { grid-template-columns: 1.6em minmax(0, 1fr) 3.5em 3.4em 4.4em 2.8em 2.2em; }
   .c.wkg { display: none; }
 }
-@container root-html (width < 440px) {
-  .row .c.name .play.has-val i { display: none; }
-}
 @container root-html (width < 270px) {
-  .cols, .row { grid-template-columns: 1.7em minmax(0, 1fr) 4em 2.9em; }
-  .c.trend, .c.wbal { display: none; }
+  .cols, .row { grid-template-columns: 1.6em minmax(0, 1fr) 3.5em 4.4em; }
+  .c.trend, .c.kmh, .c.wkg, .c.wbal { display: none; }
 }

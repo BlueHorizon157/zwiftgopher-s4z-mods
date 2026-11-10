@@ -122,3 +122,21 @@ test('boundary gives metres to the next change and progress', () => {
     assert.equal(boundary(intervals, intervals.length, 99999).progress, 1);
     assert.equal(boundary(intervals, intervals.length - 1, intervals.at(-1).startM).nextIndex, null);
 });
+
+test('the planner\'s course, its odometer scale, line source and finish are read; a course that does not hold up is nothing', async () => {
+    const {readFileSync: read} = await import('node:fs');
+    const file = JSON.parse(read(new URL('./fixtures/plans/flat.fit.optimise.json', import.meta.url), 'utf8'));
+    const course = {format: 'zg-course/1', count: 3, m: [0, 1000, 1000], lat: [51000000, 1000, 1000], lng: [-100000, 0, 0], ele: [0, 0, 0], real_from_m: 0, real_to_m: 2000};
+    const good = normalisePlan({...file, route: {...file.route, course, route_m_per_game_m: 0.998656, line_source: 'measured', finish_m: 10750}});
+    assert.equal(good.course.count, 3);
+    assert.equal(good.routeMPerGameM, 0.998656);
+    assert.equal(good.lineSource, 'measured');
+    assert.equal(good.finishM, 10750);
+    assert.equal(good.signature, normalisePlan(file).signature, 'a course does not change which plan it is');
+    const bad = normalisePlan({...file, route: {...file.route, course: {...course, m: [0, -5, 1000]}, route_m_per_game_m: 3, line_source: 'guess', finish_m: 'x'}});
+    assert.equal(bad.course, null, 'a course with a metre that goes backwards is ignored');
+    assert.equal(bad.routeMPerGameM, null);
+    assert.equal(bad.lineSource, null);
+    assert.equal(bad.finishM, null);
+    assert.equal(normalisePlan(file).course, null);
+});

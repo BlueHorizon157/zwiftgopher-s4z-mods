@@ -35,11 +35,12 @@
       </header>
       <div class="verdict" id="verdict" hidden><b id="verdict-head"></b> <span id="verdict-detail"></span></div>
       <div class="cols">
-        <span class="c pos">pos</span>
+        <span class="c pos" title="Your place among the riders you can compare with, at the same distance along the course (1st is furthest ahead on the clock). With the gap set to 'at the finish', the place each rider is heading for. A finished rider's place among those finished is in the distance column">#</span>
         <span class="c name">rider</span>
-        <button type="button" class="c gap" id="gap-mode" title="Click: the gap on the clock now (the standings), at the finish (predicted at the pace of the last minutes) or on the road (who is physically ahead)">gap</button>
+        <button type="button" class="c gap" id="gap-mode" title="Click: the gap now, on the clock, at the same distance along the course (▲ ahead of you, ▼ behind). Or at the finish: the gap predicted at the pace of the last minutes">now</button>
         <span class="c trend" title="Time you gain (+) or lose (−) on the rider per minute, over the last four minutes (the last minute until there are four)">/min</span>
-        <span class="c kmh">km/h</span>
+        <span class="c dist" title="Distance done, in km. A rider who has finished shows the time they finished in">km</span>
+        <span class="c kmh" title="Average speed">km/h</span>
         <span class="c wkg">w/kg</span>
         <span class="c wbal">W′</span>
       </div>

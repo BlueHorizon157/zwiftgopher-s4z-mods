@@ -61,3 +61,32 @@ test('a file without start_line_m: the distance fallback starts at the first eve
     assert.equal(after.startPlanM, 0);
     assert.equal(after.startWorldMs, T0 - 500);
 });
+
+test('the line passed in is the one the start uses: a line 150 m in is not backdated by the 10 s cap', () => {
+    // The rider crossed the line 0.25 s ago at 8 m/s: 2 m past a line at plan metre 150.
+    const plan = withLine(0);
+    const at = {kind: 'tt', rule: 'distance', prev: tick(0), plan};
+    const crossed = advanceClock(createClock(), {...at, tick: tick(10, {speed: 28.8, worldTime: T0 + 5000}), planM: 152, lineM: 150});
+    assert.equal(crossed.signal, 'distance');
+    assert.equal(crossed.startPlanM, 150, 'the start is at the line in plan metres');
+    assert.equal(crossed.startWorldMs, T0 + 5000 - 250, 'backdated by 2 m at 8 m/s, not by the cap');
+    // Without the line passed in the rule's line (0) would have backdated by the full cap.
+    const ruled = advanceClock(createClock(), {...at, tick: tick(10, {speed: 28.8, worldTime: T0 + 5000}), planM: 152});
+    assert.equal(ruled.startWorldMs, T0 + 5000 - 10000);
+});
+
+test('a line passed in decides whether the distance has started: a rider before it has not', () => {
+    const plan = withLine(0);
+    const before = advanceClock(createClock(), {kind: 'tt', rule: 'distance', prev: tick(0), tick: tick(4, {speed: 28.8}), plan, planM: 140, lineM: 150});
+    assert.equal(before.running, false, 'plan metre 140 is short of a line at 150');
+    const after = advanceClock(createClock(), {kind: 'tt', rule: 'distance', prev: tick(0), tick: tick(4, {speed: 28.8}), plan, planM: 152, lineM: 150});
+    assert.equal(after.running, true);
+});
+
+test('Zwift\'s own clock starts at the line in plan metres, not the metre the rider is at', () => {
+    const plan = withLine(0);
+    const clock = advanceClock(createClock(), {kind: 'tt', rule: 'auto', prev: tick(0), tick: tick(400, {time: 5, speed: 28.8, worldTime: T0 + 9000}), plan, planM: 400, lineM: 160});
+    assert.equal(clock.signal, 'time');
+    assert.equal(clock.startPlanM, 160);
+    assert.equal(clock.elapsedS, 5);
+});

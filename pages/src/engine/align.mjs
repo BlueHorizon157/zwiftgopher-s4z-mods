@@ -18,20 +18,32 @@ export function routeMatches(tick, plan) {
     return plan?.routeId != null && routeId != null && String(routeId) === String(plan.routeId);
 }
 
+// A number from a Sauce field: null, '' and missing are no reading (Number(null) is 0, which is not one).
+export function numberOrNull(v) {
+    if (v == null || v === '' || typeof v === 'boolean') {
+        return null;
+    }
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+}
+
 export function rideDistanceM(tick) {
-    const d = Number(tick?.state?.distance);
-    return Number.isFinite(d) ? d : null;
+    return numberOrNull(tick?.state?.distance);
 }
 
 export function eventDistanceM(tick) {
-    const d = Number(tick?.state?.eventDistance);
-    return Number.isFinite(d) ? d : null;
+    return numberOrNull(tick?.state?.eventDistance);
 }
 
 /** The event's length in metres when Sauce reports it by distance. */
 export function eventLengthM(tick) {
-    const end = Number(tick?.remainingEnd);
-    return tick?.remainingMetric === 'distance' && Number.isFinite(end) && end > 0 ? end : null;
+    const end = numberOrNull(tick?.remainingEnd);
+    return tick?.remainingMetric === 'distance' && end != null && end > 0 ? end : null;
+}
+
+/** Sauce's distance to go in metres, when it reports one by distance; else null. */
+export function distanceToGoM(tick) {
+    return tick?.remainingMetric === 'distance' ? numberOrNull(tick?.remaining) : null;
 }
 
 /** Plan length minus event length when that is a gate-to-line stretch (0 to LINE_MAX_M); else null. */
@@ -52,13 +64,33 @@ export function lineInPlanM(tick, plan) {
     return lineOffsetM(tick, plan) ?? plan?.startLineM ?? 0;
 }
 
-/** Plan metre for a tick, or null when nothing places the rider. */
-export function planMetre(tick, {offsetM = 0, anchorDistanceM = null, plan = null} = {}) {
+/**
+ * How the plan metre is found, for the view (course.mjs): 'course' when the rider's position is
+ * matched on the plan's own course (locked, or carried on the odometer after a loss), 'line' when the line is given by the event's length
+ * or the file's start_line_m, 'start' when nothing gives it (the line is taken as the plan's
+ * start). lineM is the line in plan metres and residualM the last fix's along-road disagreement.
+ */
+export function alignmentOf(tick, plan, course = null) {
+    if (course && (course.locked === true || Number.isFinite(course.m))) {
+        // Locked on the road, or carried on the odometer after a loss (not locked then).
+        return {mode: 'course', locked: course.locked === true, lineM: course.lineM, residualM: course.locked ? course.residualM : null};
+    }
+    const given = plan && !plan.fromHere && (lineOffsetM(tick, plan) != null || plan.startLineM != null);
+    return {mode: given ? 'line' : 'start', locked: false, lineM: lineInPlanM(tick, plan), residualM: null};
+}
+
+/**
+ * Plan metre for a tick, or null when nothing places the rider. courseM, when given, is the
+ * plan metre the course matched (in an event, not a plan from here); the old rule otherwise.
+ */
+export function planMetre(tick, {offsetM = 0, anchorDistanceM = null, plan = null, courseM = null} = {}) {
     let base = null;
     if (plan?.fromHere) {
         // A plan from here: ride distance from where it was made, in an event or out of one.
         const ride = rideDistanceM(tick);
         base = ride != null ? ride - plan.fromHere.rideM : null;
+    } else if (inEvent(tick) && Number.isFinite(courseM)) {
+        base = courseM;
     } else if (inEvent(tick)) {
         const d = eventDistanceM(tick);
         base = d == null ? null : d + lineInPlanM(tick, plan);

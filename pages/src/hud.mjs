@@ -536,8 +536,8 @@ function renderDial(v) {
     const live = v.live;
     const racing = v.status !== 'finished';
     const maxPower = plan?.peakPowerW > 0 ? Math.ceil(plan.peakPowerW * 1.25) : 600;
-    // Power: the live arc in the band colour over the target band, the target as a bold tick
-    // and the next target as a dashed one (amber when the change is seconds away).
+    // Power: the live arc in the band colour over the target band, the target as a bold green
+    // tick and the next target as a dashed one (amber when the change is seconds away).
     const ratio = racing && live.powerW != null ? clamp(live.powerW / maxPower, 0, 1) : 0;
     setArc(els.dialLive, 0, ratio, DIAL.power);
     setArc(els.dialLiveUnder, 0, ratio, DIAL.power);

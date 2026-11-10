@@ -107,3 +107,41 @@ test('the power ratio is 1 without a sample and looks back five minutes', () => 
     assert.equal(half.sampleS, 100);
     assert.ok(half.ratio > 1.05 && half.ratio < now.ratio, `half: ${JSON.stringify(half)}`);
 });
+
+test('the open interval closes at the finish, and the plan\'s pace carries on past its last metre', async () => {
+    const {closeInterval, planTimeAtMetre, createTracking: ct, advance: adv} = await import('../pages/src/engine/tracking.mjs');
+    const intervals = [
+        {index: 0, startM: 0, endM: 100, lengthM: 100, durationS: 10, startTimeS: 0, endTimeS: 10, powerW: 200, grade: 0, speedMs: 10},
+        {index: 1, startM: 100, endM: 200, lengthM: 100, durationS: 20, startTimeS: 10, endTimeS: 30, powerW: 200, grade: 0, speedMs: 5},
+    ];
+    const tr = ct();
+    adv(tr, {index: 1, raceS: 12, power: 200, planM: 120, intervals});
+    closeInterval(tr, {raceS: 35, power: 200});
+    assert.equal(tr.stats[1].finished, true);
+    assert.equal(tr.stats[1].endRaceS, 35);
+    assert.ok(Math.abs(tr.stats[1].elapsedS - 23) < 1e-9, `ridden ${tr.stats[1].elapsedS}`);
+    closeInterval(tr, {raceS: 40, power: 200});
+    assert.equal(tr.stats[1].endRaceS, 35, 'closing again changes nothing');
+    assert.equal(planTimeAtMetre(intervals, 200), 30);
+    assert.ok(Math.abs(planTimeAtMetre(intervals, 250) - 30 - 50 / 5) < 1e-9, 'the last pace carries past the end');
+    assert.equal(closeInterval(ct(), {raceS: 3}).stats.length, 0, 'nothing open: nothing closes');
+});
+
+test('a metre that jumps past intervals (a course lock) begins and closes each one jumped over, partial', () => {
+    const tracking = createTracking();
+    // Ride interval 0 to its end, then the metre jumps over intervals 1 and 2 to inside interval 3.
+    const first = intervals[0];
+    advance(tracking, {index: 0, raceS: 0, power: first.powerW, planM: first.startM + 1, intervals, atStart: true, startLineM: 0});
+    advance(tracking, {index: 0, raceS: 10, power: first.powerW, planM: first.endM - 1, intervals});
+    const jumpTo = intervals[3].startM + 5;
+    advance(tracking, {index: 3, raceS: 11, power: intervals[3].powerW, planM: jumpTo, intervals});
+    for (let j = 0; j <= 3; j++) {
+        assert.ok(tracking.stats[j], `interval ${j} has stats`);
+    }
+    assert.equal(tracking.stats[1].partial, true, 'jumped over: partial');
+    assert.equal(tracking.stats[1].finished, true);
+    assert.equal(tracking.stats[1].elapsedS, 0, 'not ridden');
+    assert.equal(tracking.stats[2].finished, true);
+    assert.equal(tracking.stats[3].finished, false, 'the interval the rider is in is open');
+    assert.equal(tracking.stats[3].partial, false, 'joined 5 m in: within the partial allowance');
+});

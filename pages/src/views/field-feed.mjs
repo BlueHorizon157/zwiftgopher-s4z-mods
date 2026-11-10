@@ -3,6 +3,7 @@
 // is and where the plan's sectors end; this converts those from plan metres to event metres.
 import * as sauce from '../sauce.mjs';
 import {createField, ingest, resetField} from '../engine/field-model.mjs';
+import {remainingOf} from './race-time.mjs';
 
 export function startFieldFeed({view, onUpdate = null}) {
     const field = createField();
@@ -18,39 +19,26 @@ export function startFieldFeed({view, onUpdate = null}) {
 
 export function contextOf(v) {
     // Every rider's eventDistance sits at zero until the timing line, so in event metres
-    // the line is 0, whatever the route (docs/REVAMP_PLAN.md 6.2).
-    return {lineM: 0, kind: v?.event?.kind ?? null, gunMs: v?.event?.startMs ?? null};
+    // the line is 0, whatever the route (docs/REVAMP_PLAN.md 6.2). The event's length is the
+    // line you finish at: a rider who passes it is finished (field-model.mjs).
+    return {lineM: 0, kind: v?.event?.kind ?? null, gunMs: v?.event?.startMs ?? null, lengthM: v?.event?.lengthM ?? null};
 }
 
-/** Sector boundaries in event metres: the plan's interval ends, when the plan is for this route. */
-export function boundariesOf(v, plan) {
-    if (!plan?.intervals?.length || v?.event?.routeMatches === false) {
-        return null;
+/**
+ * The finish outlook's inputs from the window's view and the rows: your time to go, your race
+ * time so far, and your race time at the finish (now plus the time to go; once you are through,
+ * your own finish). Null where not known.
+ */
+export function outlookInputsOf(v, list) {
+    const remainingS = remainingOf(v);
+    const elapsedS = Number.isFinite(v?.race?.elapsedS) ? v.race.elapsedS : null;
+    let homeFinishS = elapsedS != null && Number.isFinite(remainingS) ? elapsedS + remainingS : null;
+    if (homeFinishS == null) {
+        const home = list.find(r => r.isHome);
+        homeFinishS = home?.finished && home.finishRaceS != null ? home.finishRaceS : null;
     }
-    const offset = v?.controls?.offsetM ?? 0;
-    return [0, ...plan.intervals.map(iv => iv.endM - offset)];
+    return {remainingS, elapsedS, homeFinishS};
 }
 
-/** "12 s", "4.2 s", "1:12" for a gap in seconds (no sign). */
-export function fmtGap(s) {
-    const a = Math.abs(s);
-    if (!Number.isFinite(a)) {
-        return '';
-    }
-    if (a < 10) {
-        return `${a.toFixed(1)} s`;
-    }
-    if (a < 60) {
-        return `${Math.round(a)} s`;
-    }
-    const m = Math.floor(a / 60);
-    return `${m}:${String(Math.round(a - m * 60)).padStart(2, '0')}`;
-}
-
-export function shortName(name) {
-    const parts = String(name ?? '').trim().split(/\s+/);
-    if (parts.length < 2) {
-        return parts[0] ?? '';
-    }
-    return `${parts[0][0]}. ${parts.slice(1).join(' ')}`;
-}
+// The pure helpers live in field-units.mjs (testable in node); re-exported here for the windows.
+export {boundariesOf, fmtGap, shortName} from './field-units.mjs';

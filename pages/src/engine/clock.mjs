@@ -33,11 +33,13 @@ export function lineMetre(plan, tick = null) {
 
 /**
  * Advance the clock with a tick. kind: 'tt' | 'group' | 'manual' | 'here'. Returns the clock with
- * `justStarted` set on the tick that started it.
+ * `justStarted` set on the tick that started it. lineM is the timing line in plan metres at this
+ * tick (the course's implied line once locked, else the rule's); it defaults to lineMetre(plan, tick).
  */
-export function advanceClock(clock, {kind, rule = 'auto', prev, tick, plan, planM, eventStartMs = null, armedWorldMs = null}) {
+export function advanceClock(clock, {kind, rule = 'auto', prev, tick, plan, planM, eventStartMs = null, armedWorldMs = null, lineM = null}) {
     const worldMs = worldTimeOf(tick);
     const timeS = Number(tick?.state?.time);
+    const line = Number.isFinite(lineM) ? lineM : lineMetre(plan, tick);
     const out = {...clock, justStarted: false};
     if (!out.running) {
         let signal = null;
@@ -47,7 +49,7 @@ export function advanceClock(clock, {kind, rule = 'auto', prev, tick, plan, plan
             const timeKnown = Number.isFinite(timeS) && timeS > 0;
             if ((rule === 'auto' || rule === 'time') && (timeRose || (!prev && timeKnown))) {
                 signal = 'time';
-            } else if ((rule === 'auto' || rule === 'distance') && Number.isFinite(planM) && planM > lineMetre(plan)
+            } else if ((rule === 'auto' || rule === 'distance') && Number.isFinite(planM) && planM > line
                 && Number(tick?.state?.eventDistance) > 0) {
                 // Moving past the line: with the line at the pen (metre 0) a rider waiting in
                 // the pen has not started, whatever the offset.
@@ -73,10 +75,12 @@ export function advanceClock(clock, {kind, rule = 'auto', prev, tick, plan, plan
         out.startPlanM = signal === 'here' ? 0 : (Number.isFinite(planM) ? planM : null);
         out.startWorldMs = signal === 'gun' ? eventStartMs : (signal === 'manual' || signal === 'here') ? armedWorldMs : worldMs;
         if (signal === 'time') {
+            // Zwift's clock started at the line, whatever metre the rider is at now: the plan
+            // time at the start is the line's (the course re-anchors it if the line moves).
             out.startWorldMs = worldMs != null ? worldMs - timeS * 1000 : null;
+            out.startPlanM = line;
         } else if (signal === 'distance') {
             // Back to the moment the rider crossed the line, from the metres past it.
-            const line = lineMetre(plan);
             const speedMs = (Number(tick?.state?.speed) || 0) / 3.6;
             const pastS = speedMs > 0 ? Math.min(MAX_BACKDATE_S, (planM - line) / speedMs) : 0;
             out.startWorldMs = worldMs != null ? worldMs - pastS * 1000 : null;

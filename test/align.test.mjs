@@ -32,3 +32,19 @@ test('a plan for another distance is a mismatch and the file\'s line is the fall
     assert.equal(mismatchM(tick(0, 10710 - LINE_MAX_M), plan), null);
     assert.equal(mismatchM(tick(0, 10710 - LINE_MAX_M - 1), plan), -(LINE_MAX_M + 1));
 });
+
+test('the course, once locked, places the rider; the mode says whether the line was matched, given or assumed', async () => {
+    const {alignmentOf, planMetre: pm} = await import('../pages/src/engine/align.mjs');
+    const tk = (ed, extra = {}) => ({state: {eventDistance: ed, eventSubgroupId: 1}, ...extra});
+    const planNoLine = {lengthM: 10710, startLineM: null};
+    const planFile = {lengthM: 10710, startLineM: 0};
+    assert.equal(alignmentOf(tk(40), planNoLine).mode, 'start');
+    assert.equal(alignmentOf(tk(40), planFile).mode, 'line');
+    assert.equal(alignmentOf(tk(40), planFile).lineM, 0);
+    const locked = {locked: true, lineM: 160.2, residualM: -0.3};
+    assert.deepEqual(alignmentOf(tk(40), planFile, locked), {mode: 'course', locked: true, lineM: 160.2, residualM: -0.3});
+    // In the event the course metre places the rider; outside one, or without a lock, the rule does.
+    assert.equal(pm(tk(40), {plan: planFile, courseM: 201}), 201);
+    assert.equal(pm(tk(40), {plan: planFile, courseM: null}), 40);
+    assert.equal(pm({state: {distance: 500}}, {plan: planFile, courseM: 201, anchorDistanceM: 300}), 200, 'outside an event the course is not used');
+});

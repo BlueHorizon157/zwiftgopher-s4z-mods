@@ -7,6 +7,7 @@ import * as recorder from './recorder.mjs';
 import {loadPlanByCode} from './views/plan-loader.mjs';
 import {normalisePlan} from './engine/plan.mjs';
 import {SETTINGS_DEFAULTS} from './views/runtime.mjs';
+import {migrateFieldPrefs} from './engine/field-model.mjs';
 import {linkStart, linkStatus, linkRevoke, serverSupportsLink, signedUpTimeTrials, nextTimeTrial, choosePlanForEvent} from './views/shelf-sync.mjs';
 import {VERSION} from './version.mjs';
 
@@ -29,6 +30,13 @@ export async function main() {
     }
     const settings = new common.SettingsStore(KEYS[forWindow]);
     settings.setDefault({...SETTINGS_DEFAULTS});
+    // Options retired since (the road gap, the 'play' track range) move to what replaces them.
+    if (forWindow === 'field' || forWindow === 'rivals') {
+        const saved = {gapMode: settings.get('gapMode'), rivalsRange: settings.get('rivalsRange')};
+        for (const [k, v] of Object.entries(migrateFieldPrefs(saved))) {
+            settings.set(k, v);
+        }
+    }
     for (const form of document.querySelectorAll('#settings form.section:not([hidden])')) {
         const update = common.initSettingsForm(form, {store: settings});
         await update();

@@ -66,6 +66,17 @@ export function advance(tracking, {index, raceS, power, planM, intervals, atStar
                 s.endRaceS = raceS;
             }
         }
+        // The metre jumped past intervals at once (the course's lock moves it by the line): each
+        // one jumped over is begun and closed at this tick, partial, so none is left without stats.
+        if (prev != null && index > prev + 1) {
+            for (let j = prev + 1; j < index && j < intervals.length; j++) {
+                if (!tracking.stats[j]) {
+                    begin(tracking, j, {raceS, planM, interval: intervals[j], partial: true});
+                    tracking.stats[j].finished = true;
+                    tracking.stats[j].endRaceS = raceS;
+                }
+            }
+        }
         if (index >= 0 && index < intervals.length && !tracking.stats[index]?.finished) {
             const iv = intervals[index];
             // At the start the rider is already past the pen metres and the line; a join
@@ -80,6 +91,21 @@ export function advance(tracking, {index, raceS, power, planM, intervals, atStar
         advanceOne(tracking.stats[index], raceS, power);
     }
     tracking.lastRaceS = raceS;
+    return tracking;
+}
+
+/**
+ * The race is over at the finish: the interval being ridden closes there, so its time is the
+ * rider's to the finish and not to the plan's end (the course can put the finish past it).
+ */
+export function closeInterval(tracking, {raceS, power = null}) {
+    const idx = tracking.lastIndex;
+    const s = idx != null ? tracking.stats[idx] : null;
+    if (s && !s.finished) {
+        advanceOne(s, raceS, power);
+        s.finished = true;
+        s.endRaceS = raceS;
+    }
     return tracking;
 }
 
@@ -164,7 +190,15 @@ export function timeExponent(iv, riderKg = DEFAULT_RIDER_KG) {
     return 1 / (1 + 2 * aeroShare);
 }
 
-/** Plan time at a plan metre, inside the interval by its time marks (timeInto). */
+// The metres a second of the interval's own plan covers: its average pace.
+function paceOf(iv) {
+    return iv.lengthM > 0 && iv.durationS > 0 ? iv.lengthM / iv.durationS : 0;
+}
+
+/**
+ * Plan time at a plan metre, inside the interval by its time marks (timeInto). Past the plan's
+ * last metre (a course can put the finish there) the last interval's pace carries on.
+ */
 export function planTimeAtMetre(intervals, planM) {
     if (!Number.isFinite(planM) || !intervals.length) {
         return 0;
@@ -177,10 +211,15 @@ export function planTimeAtMetre(intervals, planM) {
             return iv.startTimeS + (iv.lengthM > 0 ? timeInto(iv, planM) : iv.durationS);
         }
     }
-    return intervals.at(-1).endTimeS;
+    const last = intervals.at(-1);
+    const pace = paceOf(last);
+    return last.endTimeS + (pace > 0 ? (planM - last.endM) / pace : 0);
 }
 
-/** The plan's time from planM to finishM, with each interval scaled for the rider's power ratio. */
+/**
+ * The plan's time from planM to finishM, with each interval scaled for the rider's power ratio.
+ * Metres past the plan's last one (pastPlan) are at the last interval's pace, scaled alike.
+ */
 function remainingAtRatio(intervals, planM, finishM, ratio, riderKg) {
     let plan = 0;
     let scaled = 0;
@@ -194,6 +233,14 @@ function remainingAtRatio(intervals, planM, finishM, ratio, riderKg) {
         plan += planS;
         scaled += planS * Math.pow(ratio, -timeExponent(iv, riderKg));
     }
+    const last = intervals.at(-1);
+    const pace = paceOf(last);
+    const beyondFrom = Math.max(planM, last.endM);
+    if (pace > 0 && finishM > beyondFrom) {
+        const extraS = (finishM - beyondFrom) / pace;
+        plan += extraS;
+        scaled += extraS * Math.pow(ratio, -timeExponent(last, riderKg));
+    }
     return {planS: plan, scaledS: scaled};
 }
 
@@ -204,12 +251,14 @@ function remainingAtRatio(intervals, planM, finishM, ratio, riderKg) {
  * deficitS is the clock against the plan at this metre; the rest is the plan's remaining
  * time at the rider's recent power. pacing is that power ratio.
  */
-export function predict({tracking, plan, index, planM, raceS, planTimeAtStart = 0, finishM = null}) {
+export function predict({tracking, plan, index, planM, raceS, planTimeAtStart = 0, finishM = null, pastPlan = false}) {
     const intervals = plan.intervals;
     if (!Number.isFinite(raceS) || !intervals.length) {
         return null;
     }
-    const endM = Number.isFinite(finishM) && finishM > 0 ? Math.min(finishM, plan.lengthM) : plan.lengthM;
+    // The finish is the event's distance, within the plan; past the plan's end only when the
+    // course put it there (pastPlan: the course's own metres, locked).
+    const endM = Number.isFinite(finishM) && finishM > 0 ? (pastPlan ? finishM : Math.min(finishM, plan.lengthM)) : plan.lengthM;
     const planTotalS = Math.max(0, planTimeAtMetre(intervals, endM) - planTimeAtStart);
     const here = Number.isFinite(planM) ? Math.min(Math.max(planM, intervals[0].startM), endM) : intervals[0].startM;
     const deficitS = raceS - Math.max(0, planTimeAtMetre(intervals, here) - planTimeAtStart);
