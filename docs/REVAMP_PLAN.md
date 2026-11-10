@@ -21,18 +21,18 @@ file, 5.2 look-ahead) once they land.
 
 ## Status (2026-11-10)
 
-**Now (unreleased, 0.9.0, uncommitted on the mod's master):** the course tracker and the
+**Released 0.9.0 (2026-11-10):** the course tracker and the
 like-for-like field. The plan metre is found by matching the rider's lat/lng onto the planner's
 course (`route.course`, zg-course/1), which locks 38 m into the event on California Dreamin' and
 then holds within 6 m of the road on every locked race tick (the timing line comes out at
 159.5 m against the measured 160.2 m). The field and rivals compare riders only at the same
 distance on the clock, with places among the comparable, frozen finish times and a finish
-outlook gated at 20 minutes (or five to go). Deploy order: the planner first (claude/course-geometry,
-measured lines on five routes), then the mod 0.9.0; plans without a course keep the old rule.
+outlook gated at 20 minutes (or five to go). The planner side is 59c84e4 (claude/course-geometry, measured lines on five routes, merged into
+master 58c699a); plans without a course keep the old rule.
 The release note is `docs/releases/0.9.0.md`. The planner's course fixture is
 `test/fixtures/recordings/california-dreamin-2026-11-10.planner.plan.json` (anonymised).
 
-**Released:** 0.8.2 (2026-11-10: countdown in seconds, plan time marks). Earlier: 0.7.0-alpha (79d192f, with the planner deploy df64520), then 0.7.1-alpha after
+**Released before:** 0.8.2 (2026-11-10: countdown in seconds, plan time marks). Earlier: 0.7.0-alpha (79d192f, with the planner deploy df64520), then 0.7.1-alpha after
 Dave's first race on it: the Phase 6 fixes 6.1 to 6.3 below (finish prediction from power,
 the timing line from the event's length, the target switching at the boundary). 139 tests;
 the page check passes in Sauce. The rest of this section is the Phase 0 to 5 record.
