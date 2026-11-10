@@ -2,9 +2,13 @@
 // ahead and behind, at the same distance along the course as you: how far (the gap now) and how
 // fast the gap moves (the last minutes). In the middle your place among the riders you can
 // compare with, and the verdict on the finish once the outlook is settled (finish-outlook.mjs).
-// Below, every comparable rider on a track by the same gap.
+// Below, every comparable rider on a track by the same gap. Colour is for the riders in play
+// only (Dave, 2026-11-10), on the dot and the name: green a target (ahead, and you beat them or
+// finish close at this pace), red a threat (behind, and they beat you or finish close); everyone
+// else stays plain. The call comes from the finish outlook, needs the rider's pace (90 s of
+// shared history), and is faint until the outlook settles. The rate keeps its sign and no colour.
 import {startWindow} from './views/runtime.mjs';
-import {startFieldFeed, boundariesOf, fmtGap, shortName, outlookInputsOf} from './views/field-feed.mjs';
+import {startFieldFeed, boundariesOf, fmtGap, shortName, outlookInputsOf, playCall, playWords} from './views/field-feed.mjs';
 import {rows as fieldRows, rivalsOf, trackScale, trackRangeOf, drift, migrateFieldPrefs} from './engine/field-model.mjs';
 import {setText, setClass} from './views/dom.mjs';
 import {finishOutlook} from './engine/finish-outlook.mjs';
@@ -55,7 +59,9 @@ function render(v) {
     const mode = trackRangeOf(win.prefs().rivalsRange);
     const t = trackScale(rv.all, {mode});
     renderMe(o, rv, v);
-    const named = new Set([...renderSide(els.ahead, rv.ahead), ...renderSide(els.behind, rv.behind)]);
+    // Targets and threats are for a race you are still in: once you have finished, nobody is called.
+    const calls = rv.home?.finished ? null : o;
+    const named = new Set([...renderSide(els.ahead, rv.ahead, calls), ...renderSide(els.behind, rv.behind, calls)]);
 
     // The track (settings → Rivals → Track range): ±1 min by default, or ±30 s, ±2 min, ±5 min,
     // or the whole field. Riders beyond it are counted at the ends.
@@ -78,13 +84,15 @@ function render(v) {
             d.cache.left = left;
             d.style.left = left;
         }
-        const dr = x.finished ? null : drift(x);
-        const cls = `dot${dr ? ` trend-${dr.word}` : ''}${named.has(x.id) ? ' named' : ''}${x.finished ? ' finished' : ''}`;
+        const ox = calls?.riders?.get(x.id) ?? null;
+        const call = playCall(ox, {settled: calls?.settled});
+        const cls = `dot${call ? ` play-${call.play}${call.faint ? ' faint' : ''}` : ''}${named.has(x.id) ? ' named' : ''}${x.finished ? ' finished' : ''}`;
         if (d.cache.cls !== cls) {
             d.cache.cls = cls;
             d.className = cls;
         }
-        const title = `${x.name}: ${fmtGap(x.gapS)} ${x.gapS > 0 ? 'ahead' : 'behind'} on the clock${x.finished ? `, ${finishedWords(x)}` : ''}`;
+        const callWords = call ? playWords(ox, call) : '';
+        const title = `${x.name}: ${fmtGap(x.gapS)} ${x.gapS > 0 ? 'ahead' : 'behind'} on the clock${x.finished ? `, ${finishedWords(x)}` : ''}${callWords ? `; ${callWords}` : ''}`;
         if (d.title !== title) {
             d.title = title;
         }
@@ -110,8 +118,8 @@ function rangeWord(mode, rangeS) {
     return rangeS < 60 ? `${rangeS} s` : `${+(rangeS / 60).toFixed(1)} min`;
 }
 
-/** One side's riders, nearest first. Returns their ids. */
-function renderSide(ol, list) {
+/** One side's riders, nearest first, the rate coloured only when the rider is in play. Returns their ids. */
+function renderSide(ol, list, o) {
     while (ol.children.length < list.length) {
         const li = document.createElement('li');
         li.innerHTML = '<span class="nm"></span><span class="gp"></span><span class="rt"></span>';
@@ -132,16 +140,19 @@ function renderSide(ol, list) {
         // How fast the gap moves (the last minutes); a finished rider has no more to move.
         const dr = x.finished ? null : drift(x);
         put(li, 'rt', c.rt, !dr ? (x.finished ? 'finished' : '') : dr.word === 'holding' ? 'hold' : `${dr.sPerMin > 0 ? '+' : '−'}${Math.abs(dr.sPerMin).toFixed(1)} s a minute`);
-        const rtCls = `rt${dr ? ` trend-${dr.word}` : ''}`;
-        if (li.cache.rtCls !== rtCls) {
-            li.cache.rtCls = rtCls;
-            c.rt.className = rtCls;
+        const ox = o?.riders?.get(x.id) ?? null;
+        const call = playCall(ox, {settled: o?.settled});
+        const liCls = call ? `play-${call.play}${call.faint ? ' faint' : ''}` : '';
+        if (li.cache.liCls !== liCls) {
+            li.cache.liCls = liCls;
+            li.className = liCls;
         }
         const side = x.gapS > 0 ? 'ahead' : 'behind';
         const how = x.finished
             ? `; ${finishedWords(x)}`
             : dr ? `. You ${dr.word === 'losing' ? 'lose' : dr.word === 'gaining' ? 'gain' : 'hold'} ${dr.word === 'holding' ? 'them' : `${Math.abs(dr.sPerMin).toFixed(1)} s a minute on them`} over the last ${dr.sustained ? 'four minutes' : 'minute'}` : '';
-        const title = `${x.name}: ${fmtGap(x.gapS)} ${side} on the clock, at the same distance along the course${how}`;
+        const callWords = call ? playWords(ox, call) : '';
+        const title = `${x.name}: ${fmtGap(x.gapS)} ${side} on the clock, at the same distance along the course${how}${callWords ? `. ${callWords[0].toUpperCase()}${callWords.slice(1)}` : ''}`;
         if (li.title !== title) {
             li.title = title;
         }

@@ -29,13 +29,13 @@ Add any of these from Sauce's window menu (right-click the Sauce icon → Window
 | **TT HUD: stack** | A narrow column for a screen edge (230 × 430). |
 | **TT interval list** | Every interval with where it ends, its target, time, gradient and W′, and how each one went. |
 | **TT field** | The riders of your event on the clock, with the gap at the same distance along the course (like for like), your place among them, and the time you gain or lose on each. |
-| **TT rivals** | One line for a screen edge (600 × 76): the riders nearest you on the clock, ahead and behind, with the gap and how it moves. |
+| **TT rivals** | One line for a screen edge (600 × 76): the riders nearest you on the clock, ahead and behind, with the gap and how it moves; green a target, red a threat. |
 
 The three HUDs show the same things in different shapes; add the one you like. Each
 window runs on its own, so they always agree.
 
 ![strip over snow](docs/screenshots/hud-racing-snow.png)
-![strip, a change in 8 s](docs/screenshots/hud-soon-snow.png)
+![strip, a change coming](docs/screenshots/hud-soon-snow.png)
 
 ![dial](docs/screenshots/hud-dial-racing-jungle.png) ![stack](docs/screenshots/hud-stack-soon-snow.png)
 
@@ -210,13 +210,19 @@ strip and under the field header:
 | *Contested* | both |
 
 The **rivals strip** is for a glance: the riders nearest you on the clock, behind on the left and
-ahead on the right. Each side names the nearest rider and then the nearest that matters, with
-the gap now and how it moves at the pace of the last four minutes (a sprint barely moves it):
-*+0.6/min* you gain (green) or lose (orange) on them a minute. There are no catch or pressure
-tags: the gap is the only measure. In the middle, your place among the riders you can compare
-with, with the verdict once it has settled and the place you are heading for under it; hover it
-for the reason. Outside a race it shows your speed. Below, everyone around you sits on a track
-by their gap on the clock: a dot each, your own in the middle, a finished rider a hollow dot.
+ahead on the right. Each side names the two nearest riders with the gap now and how many seconds a
+minute you gain (+) or lose (−) on them, at the pace of the last four minutes (a sprint barely
+moves it). **Colour marks only the riders in play**, on the name and the dot: **green** is a
+target (ahead of you, and at this pace you finish ahead of them or close behind), **red** a threat
+(behind you, and at this pace they finish ahead of you or close behind). Close is a second per
+minute to go, 5 to 30 s. Everyone else stays plain: a rider far behind and falling away, or far
+ahead and pulling away, is no concern. A rider is called once they have a pace (90 s of shared
+history); the colours are faint until the outlook settles (20 minutes of racing or five to go),
+and nobody is called once you have finished. Hover a name or a dot for the call in words. In the
+middle, your place among the riders you can compare with, with the verdict once it has settled
+and the place you are heading for under it; hover it for the reason. Outside a race it shows your
+speed. Below, everyone around you sits on a track by their gap on the clock: a dot each, your own
+in the middle, a finished rider a hollow dot.
 The track reaches ±1 min by default. Settings → Rivals → *Track range* fixes it at ±30 s, ±1, ±2
 or ±5 min, or fits the whole field; its ends count the riders beyond the range on each side.
 
