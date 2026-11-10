@@ -21,6 +21,9 @@ file, 5.2 look-ahead) once they land.
 
 ## Status (2026-11-10)
 
+**Released 0.9.2 (2026-11-10):** the rivals strip colours only the riders in play, green a target
+(ahead; you finish ahead of them or close behind at the four-minute pace), red a threat (behind;
+they finish ahead of you or close behind), from the finish outlook; Dave: green = chase, red = defend.
 **Released 0.9.1 (2026-11-10, same evening as 0.9.0):** the field and the stack HUD fit in real Sauce
 (checked by replaying the California Dreamin' race through Sauce 2.4.0-alpha.5), and a test that a Sauce
 without the event's route (no event length, distance to go null) does not end the race at the line

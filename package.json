@@ -2,7 +2,7 @@
   "name": "zwiftgopher-s4z-mods",
   "private": true,
   "type": "module",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "ZwiftGopher TT mod for Sauce4Zwift: tests and tooling (the mod itself needs no build)",
   "scripts": {
     "test": "node --test test/*.test.mjs"
