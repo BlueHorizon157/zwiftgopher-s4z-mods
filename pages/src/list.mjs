@@ -199,7 +199,7 @@ function updateRow(row, iv, s, v, bandW, isNow) {
         row.cache.cls = state;
         row.className = state;
     }
-    const p = isNow && v.target && !v.target.beforePlan ? `${(v.target.progress * 100).toFixed(1)}%` : '0%';
+    const p = isNow && v.target && !v.target.beforePlan ? `${((v.target.timeProgress ?? v.target.progress) * 100).toFixed(1)}%` : '0%';
     if (row.cache.p !== p) {
         row.cache.p = p;
         row.style.setProperty('--p', p);

@@ -21,6 +21,7 @@ import {createClock, advanceClock, worldTimeOf, lineMetre} from './clock.mjs';
 import {inEvent, routeMatches, planMetre, rideDistanceM, mismatchM, eventLengthM, lineInPlanM} from './align.mjs';
 import {createTracking, advance, predict, planTimeAtMetre} from './tracking.mjs';
 import {update as wbalUpdate} from './wbal.mjs';
+import {createCountdown, advanceCountdown} from './countdown.mjs';
 
 export const DEFAULT_PREFS = {
     smoothingSec: 3,
@@ -58,6 +59,8 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         tick: null,
         tickMs: null,
         lastPrediction: null,
+        countdown: createCountdown(),
+        left: null,
         hereSpent: false,
         log: [],
     };
@@ -78,6 +81,8 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         state.wbalJ = state.plan?.wPrimeJ ?? null;
         state.wbalLastMs = null;
         state.lastPrediction = null;
+        state.countdown = createCountdown();
+        state.left = null;
         state.armedWorldMs = null;
         state.anchorDistanceM = null;
         log(`Statistics cleared: ${why}`, nowMs);
@@ -204,6 +209,11 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 const p = predict({tracking: state.tracking, plan, index, planM, raceS: clock.elapsedS, planTimeAtStart: state.planTimeAtStart, finishM: finishMetre(data, plan)});
                 state.lastPrediction = p ? {...p, completed, raceS: clock.elapsedS} : null;
             }
+            // Time left in the interval (countdown.mjs): counts down in real time.
+            state.left = advanceCountdown(state.countdown, {
+                intervals: plan.intervals, index, planM, raceS: clock.elapsedS,
+                power: Number.isFinite(power) ? power : null, tracking: state.tracking, riderKg: plan.weightKg,
+            });
             const wMs = worldTimeOf(data, nowMs);
             if (Number.isFinite(power) && plan.cp > 0 && plan.wPrimeJ > 0 && state.wbalLastMs != null && wMs > state.wbalLastMs) {
                 state.wbalJ = wbalUpdate(state.wbalJ, power, plan.cp, (wMs - state.wbalLastMs) / 1000, plan.wPrimeJ, {level: plan.fitnessLevel});
@@ -220,6 +230,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             }
         } else {
             state.index = index;
+            state.left = null;
         }
     }
 
@@ -320,6 +331,8 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 state.displayIndex = BEFORE;
                 state.planTimeAtStart = planTimeAtMetre(next.intervals, state.clock.startPlanM ?? 0);
                 state.lastPrediction = null;
+                state.countdown = createCountdown();
+                state.left = null;
                 log(`Strategy changed while racing: ${next.strategyLabel ?? 'as shared'}`, nowMs);
                 if (state.tick) {
                     tick(state.tick, nowMs);
@@ -382,6 +395,11 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             band = live < target - w ? 'under' : live > target + w ? 'over' : 'on';
         }
         const stats = trackedCurrent ? state.tracking.stats[state.index] : null;
+        // Time left in the interval: the countdown while racing in one (it counts down in
+        // real time), else the metres over the speed of the moment.
+        const counting = state.status === 'racing' && state.left && current && current === trackedCurrent ? state.left : null;
+        const leftS = counting ? counting.leftS : bnd && speedMs > 0 ? bnd.toNextM / speedMs : null;
+        const elapsedS = stats?.elapsedS ?? null;
         const p = state.lastPrediction;
         const wPrime = plan?.wPrimeJ ?? null;
         return {
@@ -412,14 +430,16 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 grade: current?.grade ?? null, startM: current?.startM ?? null, endM: current?.endM ?? null,
                 durationS: current?.durationS ?? null, durationText: current?.durationText ?? null,
                 progress: bnd?.progress ?? 0, toNextM: bnd?.toNextM ?? null,
-                toNextS: bnd && speedMs > 0 ? bnd.toNextM / speedMs : null,
+                toNextS: leftS,
+                // Through the interval by time when counting down (the countdown's ring and bar), else null.
+                timeProgress: counting && elapsedS != null && elapsedS + leftS > 0 ? Math.min(1, Math.max(0, elapsedS / (elapsedS + leftS))) : null,
                 avgPowerW: stats?.avgPowerW ?? null, elapsedS: stats?.elapsedS ?? null,
                 beforePlan: dispIdx === BEFORE,
             } : null,
             next: next ? {
                 index: next.index, number: next.number, powerW: next.powerW * bias, planPowerW: next.powerW, grade: next.grade,
                 startM: next.startM, endM: next.endM, durationS: next.durationS, durationText: next.durationText,
-                inM: bnd?.toNextM ?? null, inS: bnd && speedMs > 0 ? bnd.toNextM / speedMs : null,
+                inM: bnd?.toNextM ?? null, inS: leftS,
                 changeW: current ? (next.powerW - current.powerW) * bias : null,
             } : null,
             race: {

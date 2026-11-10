@@ -2,6 +2,8 @@
 // power on the race clock, the pacing ratio, and the finish prediction. Pure functions
 // over a tracking record; nothing here reads a clock or a store.
 
+import {timeInto} from './plan.mjs';
+
 export const PARTIAL_TOLERANCE_M = 25;
 export const MIN_PACING_SAMPLE_S = 60;
 export const PACING_MIN = 0.25;
@@ -162,7 +164,7 @@ export function timeExponent(iv, riderKg = DEFAULT_RIDER_KG) {
     return 1 / (1 + 2 * aeroShare);
 }
 
-/** Plan time at a plan metre, interpolated inside the interval. */
+/** Plan time at a plan metre, inside the interval by its time marks (timeInto). */
 export function planTimeAtMetre(intervals, planM) {
     if (!Number.isFinite(planM) || !intervals.length) {
         return 0;
@@ -172,8 +174,7 @@ export function planTimeAtMetre(intervals, planM) {
     }
     for (const iv of intervals) {
         if (planM < iv.endM) {
-            const f = iv.lengthM > 0 ? (planM - iv.startM) / iv.lengthM : 1;
-            return iv.startTimeS + f * iv.durationS;
+            return iv.startTimeS + (iv.lengthM > 0 ? timeInto(iv, planM) : iv.durationS);
         }
     }
     return intervals.at(-1).endTimeS;
@@ -189,7 +190,7 @@ function remainingAtRatio(intervals, planM, finishM, ratio, riderKg) {
         if (!(to > from) || !(iv.lengthM > 0)) {
             continue;
         }
-        const planS = iv.durationS * (to - from) / iv.lengthM;
+        const planS = timeInto(iv, to) - timeInto(iv, from);
         plan += planS;
         scaled += planS * Math.pow(ratio, -timeExponent(iv, riderKg));
     }

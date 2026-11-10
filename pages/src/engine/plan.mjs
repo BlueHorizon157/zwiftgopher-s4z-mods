@@ -134,8 +134,64 @@ export function normaliseIntervals(rows) {
             wbalKj: num(iv.wbal_kj),
             wbalMarginKj: num(iv.wbal_margin_kj),
             surface: iv.surface ?? null,
+            marks: marksOf(iv.time_marks, lengthM, durationS),
         };
     });
+}
+
+/**
+ * The plan's seconds from an interval's start to metre m (plan metres) inside it: by the
+ * file's time marks when it has them (planner 2026-11-10: where in the interval the time
+ * goes, a climb at the end of a flat interval), otherwise spread evenly over its metres.
+ */
+export function timeInto(iv, m) {
+    const x = m - iv.startM;
+    if (!(iv.lengthM > 0) || !(x > 0)) {
+        return 0;
+    }
+    if (x >= iv.lengthM) {
+        return iv.durationS;
+    }
+    const marks = iv.marks;
+    if (!marks) {
+        return iv.durationS * x / iv.lengthM;
+    }
+    // The last mark at or before x (marks are in order).
+    let lo = -1;
+    let hi = marks.length - 1;
+    while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (marks[mid][0] <= x) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    const [m0, s0] = lo >= 0 ? marks[lo] : [0, 0];
+    const [m1, s1] = lo + 1 < marks.length ? marks[lo + 1] : [iv.lengthM, iv.durationS];
+    return m1 > m0 ? s0 + (x - m0) / (m1 - m0) * (s1 - s0) : s1;
+}
+
+// [metres from the interval's start, seconds from its start], kept only when every mark is
+// inside the interval and both columns rise; anything else reads as no marks.
+function marksOf(raw, lengthM, durationS) {
+    if (!Array.isArray(raw) || !raw.length || !(lengthM > 0) || !(durationS > 0)) {
+        return null;
+    }
+    const out = [];
+    let pm = 0;
+    let ps = 0;
+    for (const pair of raw) {
+        const m = Array.isArray(pair) ? num(pair[0]) : null;
+        const s = Array.isArray(pair) ? num(pair[1]) : null;
+        if (m == null || s == null || m <= pm || s <= ps || m >= lengthM || s >= durationS) {
+            return null;
+        }
+        out.push([m, s]);
+        pm = m;
+        ps = s;
+    }
+    return out;
 }
 
 // A strategy card: its figures, its own plan when the file carries plan_intervals (planner

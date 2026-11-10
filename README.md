@@ -138,7 +138,13 @@ the planner during a race waits until it is over.
 - **now** is the target for the interval you are in, with your live power beside it in the
   band colour: blue ▼ under, green ● on, orange ▲ over (the word is there too).
 - **next** is the next target with its gradient and how far and how long until it starts.
-  Ten seconds before the change it turns amber and the countdown pulses. The target
+  The seconds count down in real time: they come from the plan's time for the rest of the
+  interval (where in the interval that time goes, from a plan made after 10 November 2026:
+  a flat interval that ends on a climb spends most of it at the end), adjusted for the power
+  you have ridden in it and for how your speed has compared with the plan's over the last few
+  minutes (a draft), not from your speed this moment, so a hill inside the interval does not
+  make them jump. The dial's time ring and the progress bar
+  run on the same clock. Ten seconds before the change it turns amber and the countdown pulses. The target
   switches exactly when the countdown reaches zero: the plan's boundaries are where the
   change pays, so the HUD never moves them, and the warning is yours to use.
 - **W′ left** is the planner's own W′ balance model run on your live power, with the plan's

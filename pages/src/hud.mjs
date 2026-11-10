@@ -417,7 +417,7 @@ function render(v) {
     setText(els.vCadence, live.cadence != null ? String(Math.round(live.cadence)) : '—');
     setText(els.vHr, live.heartrate != null ? String(Math.round(live.heartrate)) : '—');
     setText(els.vSpeed, live.speedKmh != null ? live.speedKmh.toFixed(1) : '—');
-    const progress = target && !target.beforePlan ? target.progress * 100 : 0;
+    const progress = target && !target.beforePlan ? (target.timeProgress ?? target.progress) * 100 : 0;
     if (document.documentElement.dataset.layout === 'stack') {
         setHeight(els.progressFill, progress);
     } else {
@@ -557,9 +557,10 @@ function renderDial(v) {
     } else {
         setAttr(els.dialNext, 'd', '');
     }
-    // Time left in the interval: full at its start, empty at the change (by distance, which
-    // is what the change waits for); the whole ring before the start, none after the finish.
-    const left = !target || !racing ? 0 : target.beforePlan ? 1 : clamp(1 - target.progress, 0, 1);
+    // Time left in the interval: full at its start, empty at the change, on the countdown's
+    // clock (by distance when there is none); the whole ring before the start, none after
+    // the finish.
+    const left = !target || !racing ? 0 : target.beforePlan ? 1 : clamp(1 - (target.timeProgress ?? target.progress), 0, 1);
     setArc(els.dialTime, 0, left, DIAL.time);
     // W' left, with the plan's floor.
     const w = v.wbal;
