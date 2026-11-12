@@ -21,6 +21,9 @@ file, 5.2 look-ahead) once they land.
 
 ## Status (2026-11-12)
 
+**Released 0.9.4 (2026-11-12):** the HUD says when a newer version is out (an update chip in the banner, a
+Download row in the plan panel; never while racing), from `pages/src/update-check.mjs` (the latest GitHub
+release, else the highest tag; once a day for all windows), which settings uses too.
 **Released 0.9.3 (2026-11-12):** after a mass-start race on the Watopia Hilly Route (2026-11-11) whose
 targets all came 425 m late: the course is believed for a timing line up to 1500 m into the plan (was 300 m)
 and the HUD says when a plan is out of step with its race; drawn stretches (`route.course.gaps`) are not

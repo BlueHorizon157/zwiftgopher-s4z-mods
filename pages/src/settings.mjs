@@ -10,11 +10,10 @@ import {SETTINGS_DEFAULTS} from './views/runtime.mjs';
 import {migrateFieldPrefs} from './engine/field-model.mjs';
 import {linkStart, linkStatus, linkRevoke, serverSupportsLink, signedUpTimeTrials, nextTimeTrial, choosePlanForEvent} from './views/shelf-sync.mjs';
 import {VERSION} from './version.mjs';
+import {checkForUpdate, RELEASES_URL} from './update-check.mjs';
 
 const KEYS = {hud: 'zg-tt-hud', list: 'zg-tt-list', field: 'zg-tt-field', rivals: 'zg-tt-rivals'};
 const TITLES = {hud: 'TT HUD settings', list: 'TT interval list settings', field: 'TT field settings', rivals: 'TT rivals settings'};
-const UPDATE_CHECK_MS = 24 * 3600 * 1000;
-const RELEASES = 'https://github.com/BlueHorizon157/zwiftgopher-s4z-mods/releases';
 
 export async function main() {
     common.initInteractionListeners();
@@ -451,43 +450,14 @@ function formatSpan(ms) {
 async function initVersion() {
     document.getElementById('version-current').textContent = `v${VERSION}`;
     const status = document.getElementById('version-status');
-    const cached = common.storage?.get('/zg-tt/update-check') || {};
-    let latest = cached.latest ?? null;
-    if (!cached.at || Date.now() - cached.at > UPDATE_CHECK_MS) {
-        try {
-            // Every release so far is a pre-release, so releases/latest is a 404: read the newest tag.
-            const res = await fetch('https://api.github.com/repos/BlueHorizon157/zwiftgopher-s4z-mods/tags?per_page=1', {headers: {Accept: 'application/vnd.github+json'}});
-            if (res.ok) {
-                latest = String((await res.json())?.[0]?.name ?? '').replace(/^v/i, '') || null;
-                common.storage?.set('/zg-tt/update-check', {at: Date.now(), latest});
-            }
-        } catch (err) {
-            console.warn('[version] check failed', err);
-        }
-    }
-    if (latest && compareVersions(latest, VERSION) > 0) {
+    const {latest, available} = await checkForUpdate({fetchFn: fetch, storage: common.storage, current: VERSION});
+    if (available) {
         status.textContent = `Update available: v${latest}`;
         status.classList.add('alert');
-        status.onclick = () => window.open(RELEASES, '_blank');
+        status.onclick = () => window.open(RELEASES_URL, '_blank');
     } else {
         status.textContent = latest ? 'up to date' : '';
     }
-}
-
-function compareVersions(a, b) {
-    const parse = v => {
-        const [core, pre = ''] = String(v).split('-');
-        return {parts: core.split('.').map(n => parseInt(n, 10) || 0), pre};
-    };
-    const va = parse(a);
-    const vb = parse(b);
-    for (let i = 0; i < Math.max(va.parts.length, vb.parts.length); i++) {
-        const d = (va.parts[i] ?? 0) - (vb.parts[i] ?? 0);
-        if (d !== 0) {
-            return d;
-        }
-    }
-    return va.pre && !vb.pre ? -1 : (!va.pre && vb.pre ? 1 : 0);
 }
 
 function esc(s) {

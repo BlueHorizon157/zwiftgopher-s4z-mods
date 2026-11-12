@@ -408,7 +408,7 @@ html[data-layout="dial"] .progress { display: none; }
 html[data-layout="dial"] .tray { font-size: max(11px, calc(var(--f) * 10)); left: 14%; right: 14%; bottom: 3%; border-radius: 0.5em; padding: 0.4em; }
 /* the banner (starts in, ready, finished, a length mismatch): a row above the finish */
 html[data-layout="dial"] .banner { position: absolute; top: calc(var(--t) * 51); left: calc(var(--t) * 76); right: calc(var(--t) * 76); padding: 0; text-align: center; font-size: max(11px, calc(var(--f) * 10)); color: rgba(245, 247, 250, 0.88); }
-html[data-layout="dial"] .banner .chip { display: none; }
+html[data-layout="dial"] .banner .chip:not(.update) { display: none; }
 html[data-layout="dial"] .finish .chip {
   pointer-events: auto;
   padding: 0 0.55em;
@@ -491,6 +491,15 @@ html[data-layout="strip"] .hud.choosing .idle .next-tt:not([hidden]) { display: 
   vertical-align: baseline;
 }
 .banner .chip:hover { border-color: var(--ink-2); }
+/* A newer TT HUD: the one chip in the accent's colour, so it reads as news, not a setting. */
+.banner .chip.update { color: #ffd43b; border-color: rgba(255, 212, 59, 0.55); }
+.banner .chip.update:hover { border-color: #ffd43b; }
+/* The stack's narrow banner: the update on a line of its own, in place of the cut-off route name. */
+html[data-layout="stack"] .banner .chip.update { display: table; margin: 0.35em 0 0; }
+html[data-layout="stack"] .banner .chip.update ~ .name { display: none; }
+/* The dial: above the banner's words, centred, so the round banner never cuts it. */
+html[data-layout="dial"] .banner .chip.update { display: table; margin: 0 auto 0.05em; font-size: max(10px, 0.8em); line-height: 1.2; }
+html[data-layout="dial"] .banner:has(.chip.update) { transform: translateY(-1.15em); }
 html[data-layout="dial"] .idle { padding: 18% 13%; gap: 0.35em; }
 html[data-layout="dial"] .idle .title { font-size: 1.15em; }
 .idle .title { overflow-wrap: anywhere; }

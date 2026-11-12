@@ -110,9 +110,12 @@ function initControls() {
             if (ev.target.closest('[data-action="strategy"]')) {
                 changingPlan = true;
                 win.draw();
+            } else if (ev.target.closest('[data-action="update"]')) {
+                openUpdate();
             }
         });
     }
+    els.updateOpen.addEventListener('click', openUpdate);
     els.planCode.addEventListener('keydown', ev => {
         if (ev.key === 'Enter') {
             loadFromInput();
@@ -252,6 +255,10 @@ function render(v) {
         nextText = nextWords(upcoming, plan);
         showPlanIt = linked && !upcoming.planCode && Boolean(upcoming.routeId);
     }
+    // A newer TT HUD, in the panel too (the banner is hidden behind it).
+    const update = updateToShow(v);
+    setHidden(els.updateRow, !(showIdle && update));
+    setText(els.updateText, update ? `TT HUD v${update.latest} is out` : '');
     setHidden(els.nextTt, !(showIdle && nextText));
     setText(els.nextTtLabel, nextLabel);
     setText(els.nextTtText, nextText);
@@ -464,6 +471,19 @@ function renderStrategy(plan, canChange) {
         + `${escapeHtml(c.label)} <span class="tnum">${escapeHtml(c.timeText ?? '')}</span></button>`).join('');
 }
 
+/** The release page of a newer TT HUD (update-check.mjs), in the browser. */
+function openUpdate() {
+    const update = win.update();
+    if (update) {
+        window.open(update.url, '_blank');
+    }
+}
+
+/** A newer TT HUD, said only while the rider is not racing (Dave, 2026-11-12). */
+function updateToShow(v) {
+    return v.status !== 'racing' && !v.spectating ? win.update() : null;
+}
+
 function setBanner(v, now) {
     let text = '';
     let name = '';
@@ -520,8 +540,15 @@ function setBanner(v, now) {
             ? `Mass start: the result counts from the gun. You crossed the timing line ${fmtTime(gunS)} after it, and the finish time includes that. The plan and ahead or behind run from the line.`
             : 'Mass start: the result counts from the gun, which is not known here. The times shown run from the timing line.';
     }
-    // The chip before the route name, so a narrow banner cuts the name, not the chip.
-    const html = text || chip ? `${escapeHtml(text)}${chip}<span class="name">${escapeHtml(name)}</span>` : '';
+    // A newer TT HUD: a chip after the strategy's, never while racing.
+    const update = updateToShow(v);
+    const updateChip = update
+        ? `<button type="button" class="chip update" data-action="update" title="TT HUD v${escapeHtml(update.latest)} is out: click for the release page">update v${escapeHtml(update.latest)}</button>` : '';
+    // The chips before the route name, so a narrow banner cuts the name, not the chips.
+    // The dial puts it above the words (CSS), so it comes first there.
+    const html = !(text || chip || updateChip) ? ''
+        : document.documentElement.dataset.layout === 'dial' ? `${updateChip}${escapeHtml(text)}${chip}<span class="name">${escapeHtml(name)}</span>`
+        : `${escapeHtml(text)}${chip}${updateChip}<span class="name">${escapeHtml(name)}</span>`;
     if (els.banner.__html !== html) {
         els.banner.__html = html;
         els.banner.innerHTML = html;

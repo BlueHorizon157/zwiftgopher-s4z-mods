@@ -7,6 +7,8 @@ import * as common from '/pages/src/common.mjs';
 import * as sauce from '../sauce.mjs';
 import * as store from '../store.mjs';
 import {fetchEventInfo} from '../eventinfo.mjs';
+import {VERSION} from '../version.mjs';
+import {checkForUpdate, RELEASES_URL} from '../update-check.mjs';
 import {createEngine} from '../engine/engine.mjs';
 import {normalisePlan} from '../engine/plan.mjs';
 import {loadPlanByCode, fetchPlanByCode, loadReplayPlan} from './plan-loader.mjs';
@@ -532,6 +534,21 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     window.addEventListener('focus', () => pollShelf(true).catch(() => {}));
     setTimeout(() => pollShelf(true).catch(() => {}), 1500);
 
+    // A newer TT HUD on GitHub (update-check.mjs): once a day for every window together. In
+    // replay, ?update=<version> stands in for GitHub (scripts/page-check.mjs, screenshots).
+    let update = {latest: null, available: false};
+    const checkUpdate = async () => {
+        if (sauce.isReplay) {
+            const asked = new URLSearchParams(window.location.search).get('update');
+            update = asked ? {latest: asked, available: true} : update;
+        } else {
+            update = await checkForUpdate({fetchFn: fetch, storage: common.storage, current: VERSION});
+        }
+        draw();
+    };
+    setTimeout(() => checkUpdate().catch(() => {}), 4000);
+    setInterval(() => checkUpdate().catch(() => {}), 3 * 3600 * 1000);
+
     const api = {
         engine,
         settings,
@@ -622,6 +639,8 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         linkSupported: () => linkSupported,
         /** The next time trial the rider is signed up for or has a plan for: {id, name, ts, subgroupId, planCode}. */
         nextTT: () => nextTTOverride ?? nextTT,
+        /** A newer TT HUD: {latest, url}, or null. */
+        update: () => (update.available ? {latest: update.latest, url: RELEASES_URL} : null),
         /** What Plan it would plan: the event the rider is in, else the next time trial; null when neither. */
         planTarget,
         /** {startedAt, target} while a plan is being built, else null. */
