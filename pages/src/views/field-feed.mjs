@@ -31,8 +31,15 @@ export function contextOf(v) {
  */
 export function outlookInputsOf(v, list) {
     const remainingS = remainingOf(v);
-    const elapsedS = Number.isFinite(v?.race?.elapsedS) ? v.race.elapsedS : null;
-    let homeFinishS = elapsedS != null && Number.isFinite(remainingS) ? elapsedS + remainingS : null;
+    // In a mass start with a known start the field's clocks run from the gun (contextOf), so
+    // yours must here too: the result's clock. When that is not known (a late join, the gun not
+    // found) there is no race time of yours to set against a finisher's, and the outlook falls
+    // back to the gaps; the clock from the line still serves for the early gate.
+    const lineS = Number.isFinite(v?.race?.elapsedS) ? v.race.elapsedS : null;
+    const byGun = v?.event?.kind === 'group' && v?.event?.startMs != null;
+    const raceS = byGun ? (Number.isFinite(v?.race?.officialElapsedS) ? v.race.officialElapsedS : null) : lineS;
+    const elapsedS = raceS ?? lineS;
+    let homeFinishS = raceS != null && Number.isFinite(remainingS) ? raceS + remainingS : null;
     if (homeFinishS == null) {
         const home = list.find(r => r.isHome);
         homeFinishS = home?.finished && home.finishRaceS != null ? home.finishRaceS : null;

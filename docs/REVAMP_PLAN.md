@@ -19,8 +19,15 @@ file, 5.2 look-ahead) once they land.
 
 ---
 
-## Status (2026-11-10)
+## Status (2026-11-12)
 
+**Released 0.9.3 (2026-11-12):** after a mass-start race on the Watopia Hilly Route (2026-11-11) whose
+targets all came 425 m late: the course is believed for a timing line up to 1500 m into the plan (was 300 m)
+and the HUD says when a plan is out of step with its race; drawn stretches (`route.course.gaps`) are not
+matched; a mass start's clock starts at the timing line and its finish, plan time and field clocks count
+from the gun (Sauce's start in Unix time against Zwift's world clock). The plan list keeps one plan per
+course and drops plans the planner's shelf no longer has. Planner side: b4db7c5 (lap closure, Hilly
+line, one plan per course on the shelf). Release note `docs/releases/0.9.3.md`.
 **Released 0.9.2 (2026-11-10):** the rivals strip colours only the riders in play, green a target
 (ahead; you finish ahead of them or close behind at the four-minute pace), red a threat (behind;
 they finish ahead of you or close behind), from the finish outlook; Dave: green = chase, red = defend.

@@ -323,6 +323,18 @@ function initPlans() {
     renderPlans();
 }
 
+/** "1 lap", "6.1 km", "from here": what tells two plans for one route apart (one plan per course). */
+function courseText(raw) {
+    if (raw?.meta?.from_here) {
+        return 'from here';
+    }
+    const c = store.courseOf(raw);
+    if (!c) {
+        return '';
+    }
+    return c.distanceM != null ? `${(c.distanceM / 1000).toFixed(1)} km` : `${c.laps} lap${c.laps === 1 ? '' : 's'}`;
+}
+
 function renderPlans() {
     const tbody = document.querySelector('#plan-table tbody');
     const active = store.getActiveCode();
@@ -335,7 +347,7 @@ function renderPlans() {
     tbody.innerHTML = plans.map(p => `
         <tr class="${p.code === active ? 'active' : ''}">
           <td>${esc(p.code)}</td>
-          <td>${esc(p.routeName ?? 'custom route')}</td>
+          <td>${esc(p.routeName ?? 'custom route')}${courseText(p.raw) ? ` <span class="muted">· ${esc(courseText(p.raw))}</span>` : ''}</td>
           <td>${esc(p.timeText ?? '—')}</td>
           <td>${esc(expiryWords(p.expiresAt))}</td>
           <td class="actions">

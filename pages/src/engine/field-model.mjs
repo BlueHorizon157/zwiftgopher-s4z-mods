@@ -25,6 +25,8 @@
 // gap is then measured at that last checkpoint, which can be up to the gap's distance behind the
 // rider (about 300 m after a 20 s gap at race speed), and the trend and pace windows stop there.
 
+import {unixToWorldMs} from './clock.mjs';
+
 export const FIELD_DEFAULTS = {
     spacingM: 50,
     staleMs: 120_000,          // unseen this long: not compared (faded, below the divider)
@@ -115,11 +117,15 @@ function setCheckpoint(r, k, wt) {
 
 /**
  * One `nearby` list. ctx: {lineM} the timing line in event metres (TT clock start),
- * {kind} 'tt' | 'group' | null, {gunMs} a group event's start (world ms), {lengthM} the event's
- * length in event metres (the line you finish at; null or absent when not known).
+ * {kind} 'tt' | 'group' | null, {gunMs} a group event's start (Unix ms, as Sauce gives it: it is
+ * put on the scale of each sample's world time), {lengthM} the event's length in event metres
+ * (the line you finish at; null or absent when not known). A group event with a known start
+ * runs every rider's clock from the gun, as its result does; without one each rider's clock
+ * starts at the line, as in a TT.
  */
 export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs = null, lengthM = null} = {}) {
     const o = field.opts;
+    const byGun = kind === 'group' && gunMs != null && Number.isFinite(Number(gunMs));
     const list = Array.isArray(entries) ? entries : [];
     const home = homeEntryOf(list);
     field.homeId = home ? idOf(home) : field.homeId;
@@ -189,7 +195,7 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
         // start: its race time is whole seconds, so each sample past the line bounds the start to
         // a second, and the bounds of all of them narrow it. The crossing below is the fallback
         // for a rider without a timer reading.
-        if (kind !== 'group' && Number.isFinite(lineM) && m > lineM && Number.isFinite(num(s.time)) && num(s.time) >= 0) {
+        if (!byGun && Number.isFinite(lineM) && m > lineM && Number.isFinite(num(s.time)) && num(s.time) >= 0) {
             const tm = num(s.time);
             const hi = wt - tm * 1000;
             const lo = wt - (tm + 1) * 1000;
@@ -213,7 +219,7 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
                 }
             }
             // Crossing the line (at the pen, metre 0, a rider leaves it at the last stationary sample).
-            if (r.startWT == null && kind !== 'group' && Number.isFinite(lineM) && r.lastM <= lineM && m > lineM) {
+            if (r.startWT == null && !byGun && Number.isFinite(lineM) && r.lastM <= lineM && m > lineM) {
                 r.startWT = r.lastWT + dt * ((lineM - r.lastM) / dm);
                 r.startSource = 'line';
             }
@@ -226,8 +232,8 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
                 r.finished = true;
             }
         }
-        if (r.startWT == null && kind === 'group' && Number.isFinite(gunMs)) {
-            r.startWT = gunMs;
+        if (r.startWT == null && byGun) {
+            r.startWT = unixToWorldMs(gunMs, wt);
             r.startSource = 'gun';
         }
         // lastWT is the latest time at lastM (a rider leaving the pen leaves at the last

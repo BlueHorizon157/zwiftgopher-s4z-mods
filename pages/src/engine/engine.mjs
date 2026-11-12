@@ -17,8 +17,8 @@
 
 import {normalisePlan} from './plan.mjs';
 import {locate, at, boundary, BEFORE} from './cursor.mjs';
-import {createClock, advanceClock, worldTimeOf} from './clock.mjs';
-import {inEvent, routeMatches, planMetre, rideDistanceM, mismatchM, eventLengthM, eventDistanceM, distanceToGoM, lineInPlanM, alignmentOf} from './align.mjs';
+import {createClock, advanceClock, worldTimeOf, gunToLineS} from './clock.mjs';
+import {inEvent, routeMatches, planMetre, rideDistanceM, mismatchM, eventLengthM, eventDistanceM, distanceToGoM, lineInPlanM, alignmentOf, OUT_OF_STEP_M} from './align.mjs';
 import {createTracking, advance, closeInterval, predict, planTimeAtMetre} from './tracking.mjs';
 import {createCourseTracker, advanceCourse, courseMetre} from './course.mjs';
 import {update as wbalUpdate} from './wbal.mjs';
@@ -35,6 +35,9 @@ export const DEFAULT_CONTROLS = {
     bias: 1,
 };
 
+const OUT_OF_STEP_MOVE_M = 25;      // the kept out-of-step figure moves only for a line this far from it
+// The alignment for the view: on the course, the out-of-step figure is the kept one.
+const alignmentWith = (a, keptStepM) => (a.mode === 'course' ? {...a, outOfStepM: keptStepM ?? null} : a);
 // The course tracker of a plan, for a race in an event (course.mjs); none for a free ride or a
 // plan from here, or a plan without a sound course.
 const courseFor = p => p && !p.fromHere && p.course ? createCourseTracker(p.course, {routeMPerGameM: p.routeMPerGameM}) : null;
@@ -71,6 +74,13 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         countdown: createCountdown(),
         left: null,
         hereSpent: false,
+        // A mass start's seconds from the gun to the timing line (clock.mjs gunToLineS): null in a
+        // TT, a free ride, or when not known. Kept once known, through the finish and after it.
+        gunS: null,
+        // How far the plan's timing line is from the one the road gives (align.mjs alignmentOf),
+        // kept at the figure first found: the matched line wanders a few metres with the
+        // rider's line through the bends, and the HUD's words should not.
+        outOfStepM: null,
         log: [],
     };
 
@@ -97,7 +107,24 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         state.left = null;
         state.armedWorldMs = null;
         state.anchorDistanceM = null;
+        state.gunS = null;
+        state.outOfStepM = null;
         log(`Statistics cleared: ${why}`, nowMs);
+    };
+
+    // A mass start: the result counts from the gun, the clock from the line (clock.mjs). Looked
+    // for on each tick and when the event's kind and start arrive, which can be after the clock
+    // has started (a window opened mid-race) or after the finish.
+    const noteGun = nowMs => {
+        if (state.gunS != null || !state.plan || state.plan.fromHere || !state.clock.running
+            || state.event.kind !== 'group' || !inEvent(state.tick)) {
+            return;
+        }
+        const gunS = gunToLineS(state.clock, state.event.startMs);
+        if (gunS != null) {
+            state.gunS = gunS;
+            log(`Mass start: the timing line was crossed ${gunS.toFixed(1)} s after the gun; the result counts from the gun`, nowMs);
+        }
     };
 
     const setStatus = (status, nowMs) => {
@@ -190,6 +217,18 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 state.courseLoggedDiff = true;
                 log(`Course line ${Math.round(state.course.lineM)} m differs from the file's ${Math.round(fileLineM)} m`, nowMs);
             }
+            // The plan out of step with the race: the figure is kept as first found, and moves
+            // only when the road gives a line somewhere else again (a second lock).
+            if (state.course.locked && Number.isFinite(state.course.lineM)) {
+                const stepM = state.course.lineM - lineInPlanM(data, plan);
+                const moved = state.outOfStepM == null ? Math.abs(stepM) >= OUT_OF_STEP_M : Math.abs(stepM - state.outOfStepM) > OUT_OF_STEP_MOVE_M;
+                if (moved) {
+                    state.outOfStepM = Math.abs(stepM) >= OUT_OF_STEP_M ? stepM : null;
+                    if (state.outOfStepM != null) {
+                        log(`Plan out of step with the race: the road puts the timing line ${Math.round(Math.abs(stepM))} m ${stepM > 0 ? 'after' : 'before'} where the plan has it; the targets follow the road`, nowMs);
+                    }
+                }
+            }
         }
         // The course's metre: locked on the road, or carried on the odometer after a loss (course.mjs).
         const courseLocked = !plan.fromHere && eventNow && state.course?.locked === true;
@@ -212,7 +251,6 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             tick: data,
             plan,
             planM,
-            eventStartMs: state.event.startMs,
             armedWorldMs: plan.fromHere ? plan.fromHere.worldMs : state.armedWorldMs,
             lineM,
         });
@@ -225,6 +263,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             setStatus('racing', nowMs);
             log(`Clock started (${clock.signal}) at plan metre ${Math.round(clock.startPlanM ?? 0)}`, nowMs);
         }
+        noteGun(nowMs);
         // The clock started at the line before the course found it (Zwift's time, or the event
         // distance from the line): the plan time at the start is the line's, now the line is known.
         if (courseJustLocked && state.clock.running && (state.clock.signal === 'time' || state.clock.signal === 'distance')) {
@@ -292,7 +331,9 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                     ridden.wbalEndJ = state.wbalJ;
                 }
                 setStatus('finished', nowMs);
-                log(`Finished: ${clock.elapsedS.toFixed(1)} s on the clock`, nowMs);
+                log(state.gunS != null
+                    ? `Finished: ${(clock.elapsedS + state.gunS).toFixed(1)} s from the gun (${clock.elapsedS.toFixed(1)} s from the timing line)`
+                    : `Finished: ${clock.elapsedS.toFixed(1)} s on the clock`, nowMs);
             }
         } else {
             state.index = index;
@@ -426,6 +467,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 if (payload.subgroupId != null && String(payload.subgroupId) === String(state.event.subgroupId ?? payload.subgroupId)) {
                     state.event = {...state.event, kind: payload.kind ?? state.event.kind, startMs: payload.startMs ?? null, name: payload.name ?? null, infoFor: payload.subgroupId};
                     log(`Event: ${payload.name ?? payload.subgroupId} (${payload.kind ?? 'unknown kind'})`, nowMs);
+                    noteGun(nowMs);
                 }
                 break;
             }
@@ -470,6 +512,8 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         const elapsedS = stats?.elapsedS ?? null;
         const p = state.lastPrediction;
         const wPrime = plan?.wPrimeJ ?? null;
+        const raceS = state.finishS ?? (state.clock.running ? state.clock.elapsedS : null);
+        const gunS = state.gunS;
         return {
             status: state.status,
             spectating: state.spectating,
@@ -513,7 +557,14 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             race: {
                 running: state.clock.running, signal: state.clock.signal,
                 // The finished race keeps its time: the clock at the finish, not at the moment of looking.
-                elapsedS: state.finishS ?? (state.clock.running ? state.clock.elapsedS : null),
+                // This clock, the plan's time and the delta all run from the timing line.
+                elapsedS: raceS,
+                // A mass start's result counts from the gun: the seconds from the gun to the line, and
+                // the race time and the predicted finish on that clock. Null in a TT or a free ride,
+                // where the clock above is the result's.
+                gunToLineS: gunS,
+                officialElapsedS: gunS != null && raceS != null ? raceS + gunS : null,
+                officialTotalS: gunS != null && p?.totalS != null ? p.totalS + gunS : null,
                 planM: state.planM, lengthM: plan?.lengthM ?? null,
                 finishM: plan ? (p?.finishM ?? finishMetre(data, plan, state.planM, courseNow)) : null,
                 remainingM: plan && state.planM != null ? Math.max(0, (p?.finishM ?? finishMetre(data, plan, state.planM, courseNow)) - state.planM) : null,
@@ -522,7 +573,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 deficitS: p?.deficitS ?? null, timeRatio: p?.timeRatio ?? null,
                 pacingSampleS: p?.sampleS ?? 0,
                 completed: state.tracking.stats.filter(x => x?.finished).length,
-                alignment: plan ? alignmentOf(data, plan, courseNow) : null,
+                alignment: plan ? alignmentWith(alignmentOf(data, plan, courseNow), state.outOfStepM) : null,
             },
             wbal: wPrime && state.wbalJ != null ? {
                 j: state.wbalJ, kj: state.wbalJ / 1000, pct: state.wbalJ / wPrime * 100, wPrimeJ: wPrime,

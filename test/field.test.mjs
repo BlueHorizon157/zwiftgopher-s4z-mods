@@ -454,3 +454,37 @@ test('a rider who reads 0 m as they leave the event (no category) keeps their ra
     const rival = list.find(x => x.name === 'Rival');
     assert.equal(rival.comparable, true, 'the rival is still compared with the home rider');
 });
+
+test('a mass start on Zwift\'s own clock: the gun (Unix time from Sauce) is put on the riders\' scale', () => {
+    // 2026-11-11 18:40:00 UTC as Unix ms and as Zwift world time (ms from Zwift's own start).
+    const gunMs = 1_794_422_400_000;
+    const world0 = gunMs - 1_414_016_074_400;
+    const riders = [{id: 1, watching: true, speedMs: 11}, {id: 2, speedMs: 10}, {id: 3, speedMs: 12}];
+    const f = createField();
+    // Every rider reaches the timing line 19 s after the gun: the game's distance is 0 until then.
+    for (let t = 0; t <= 200; t++) {
+        const list = riders.map(rd => {
+            const e = entry(rd.id, {...rd, startS: 19, t});
+            e.state.worldTime = world0 + t * 1000;
+            return e;
+        });
+        ingest(f, list, gunMs + t * 1000, {lineM: 0, kind: 'group', gunMs});
+    }
+    for (const r of f.riders.values()) {
+        assert.equal(r.startSource, 'gun', r.name);
+        assert.equal(r.startWT, world0, `${r.name}: the gun on the world clock`);
+    }
+    // 200 s after the gun the clocks are comparable: the faster rider is ahead of home (positive), the slower behind.
+    const out = rows(f, {nowMs: gunMs + 200_000});
+    const by = id => out.find(r => r.id === String(id));
+    assert.ok(by(3).clockS > 5 && by(2).clockS < -5, `clock gaps ${by(3).clockS} and ${by(2).clockS}`);
+});
+
+test('a mass start with no start time from Sauce: each rider\'s clock starts at the line, as in a TT', () => {
+    const riders = [{id: 1, watching: true, speedMs: 11}, {id: 2, speedMs: 10}];
+    const f = simulate(createField(), riders.map(rd => ({...rd, startS: 19})), 120, {lineM: 0, kind: 'group', gunMs: null});
+    for (const r of f.riders.values()) {
+        assert.notEqual(r.startSource, 'gun', r.name);
+        assert.ok(Math.abs(r.startWT - (EPOCH + 19_000)) <= 1000, `${r.name} started at the line: ${r.startWT - EPOCH} ms`);
+    }
+});

@@ -473,7 +473,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
                 fetchFn: fetch,
                 token: link.token,
                 etag: shelf.etag ?? null,
-                library: {has: store.getPlanEntry, save: (code, raw, meta) => store.savePlan(code, raw, {activate: false, ...meta})},
+                library: {has: store.getPlanEntry, save: (code, raw, meta) => store.savePlan(code, raw, {activate: false, ...meta}), prune: store.pruneShelf},
                 loadPlan: fetchPlanByCode,
             });
             if (r.status === 'revoked') {
@@ -485,6 +485,14 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             } else if (r.status === 'ok') {
                 linkSupported = true;
                 store.setShelf({etag: r.etag, lastSyncAt: Date.now(), unsupportedAt: null});
+                if (r.removed?.length) {
+                    const offer = store.getShelf().offer;
+                    if (offer && r.removed.includes(offer.code)) {
+                        store.setShelf({offer: null});
+                    }
+                    syncPlan();
+                    note(`${r.removed.length === 1 ? `Plan ${r.removed[0]} is` : `Plans ${r.removed.join(', ')} are`} no longer in the planner's list for Sauce: removed here.`);
+                }
                 if (r.added.length) {
                     const {activate, offer} = chooseActivation({added: r.added, plans: r.plans, entries: eventPlans(),
                         activeCode: store.getActiveCode(), where: placeNow(), beforeStart: beforeStart()});

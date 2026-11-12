@@ -4,6 +4,9 @@
 // written when something changes, never per tick. Migrates what 0.6.x kept under
 // 'tt-dashboard-state' and '/tt-dashboards/shared-state' once.
 import {storage} from './sauce.mjs';
+import {dropTwins, shelfLeavers} from './plan-library.mjs';
+
+export {courseOf, sameCourse} from './plan-library.mjs';
 
 export const KEYS = {
     plans: '/zg-tt/plans',
@@ -41,9 +44,15 @@ export function getPlanEntry(code) {
  * Keep a plan under its code (the newest ten), and make it active. A plan from the shelf
  * carries its event, source and publication, so the windows can pick it for the event and
  * tell a republished plan from the one they have.
+ *
+ * One plan per course (Dave, 2026-11-12): a plan for a course the library already has a plan
+ * for replaces it, whatever its code; the replaced plan's place as the active plan passes to
+ * the new one. Plans from here are kept apart.
  */
 export function savePlan(code, raw, {activate = true, expiresAt = null, event = null, source = null, publishedAt = null, shelf = false} = {}) {
     const lib = library();
+    const twins = dropTwins(lib.plans, code, raw);
+    const tookActive = twins.includes(getActiveCode());
     lib.plans[code] = {
         raw,
         loadedAt: Date.now(),
@@ -63,7 +72,31 @@ export function savePlan(code, raw, {activate = true, expiresAt = null, event = 
     storage.set(KEYS.plans, lib);
     if (activate) {
         setActive(code);
+    } else if (tookActive) {
+        // The plan that was active is gone: its replacement is the plan, as shared.
+        storage.set(KEYS.active, {code, card: null, at: Date.now()});
     }
+}
+
+/**
+ * The plans from the shelf that the shelf no longer has (replaced by a newer plan for their
+ * course, or taken off in the planner) leave the library. codes: the shelf's listing.
+ * Returns the codes removed.
+ */
+export function pruneShelf(codes) {
+    const lib = library();
+    const gone = shelfLeavers(lib.plans, codes);
+    if (!gone.length) {
+        return [];
+    }
+    for (const code of gone) {
+        delete lib.plans[code];
+    }
+    storage.set(KEYS.plans, lib);
+    if (gone.includes(getActiveCode())) {
+        setActive(null);
+    }
+    return gone;
 }
 
 export function removePlan(code) {

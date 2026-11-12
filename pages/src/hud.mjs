@@ -4,7 +4,7 @@
 import {startWindow, statusWords} from './views/runtime.mjs';
 import {hereWords} from './views/from-here.mjs';
 import {clipboardCode} from './views/plan-loader.mjs';
-import {setText, setHtml, setHidden, setClass, setAttr, fmtTime, deltaWords, fmtGrade, finishFigure} from './views/dom.mjs';
+import {setText, setHtml, setHidden, setClass, setAttr, fmtTime, deltaWords, fmtGrade, finishFigure, planTimeS} from './views/dom.mjs';
 
 const LAYOUTS = ['strip', 'dial', 'stack'];
 const GLYPH = {under: '▼', on: '●', over: '▲'};
@@ -337,7 +337,7 @@ function render(v) {
         soon = v.status === 'racing' && ((next.inS != null && next.inS <= soonSec) || (next.inM != null && next.inM <= 100));
     } else if (plan && v.status === 'finished') {
         setText(els.nextLabel, 'plan');
-        setText(els.nextW, fmtTime(race.planTimeFromStartS ?? plan.timeS));
+        setText(els.nextW, fmtTime(planTimeS(v)));
         setText(els.nextUnit, '');
         setText(els.nextGrade, `${race.completed}/${plan.intervals} intervals`);
         els.nextGrade.classList.remove('up', 'down');
@@ -467,6 +467,7 @@ function renderStrategy(plan, canChange) {
 function setBanner(v, now) {
     let text = '';
     let name = '';
+    let tip = '';
     // The strategy being ridden, as a chip that opens the plan panel: before the start and,
     // since a strategy changes in place, while racing (Dave, 2026-11-09).
     const chip = (v.status === 'armed' || v.status === 'idle' || v.status === 'racing') && !v.spectating && strategyChoices(v.plan).length > 1
@@ -482,7 +483,9 @@ function setBanner(v, now) {
         if (v.event?.inEvent && startMs && startMs > now) {
             text = `starts in ${fmtTime((startMs - now) / 1000)}`;
         } else if (v.event?.inEvent && v.event.kind === 'group') {
-            text = 'group event: the clock runs from the start';
+            // Short, so the strategy chip stays in view on the narrow layouts; the words are in the tip.
+            text = 'ready, mass start';
+            tip = 'Mass start: the game starts its distance at a timing line a little way out of the pen, and the plan starts there. The result counts from the gun.';
         } else {
             text = v.event?.inEvent ? 'ready, waiting for the start' : 'ready';
         }
@@ -502,8 +505,20 @@ function setBanner(v, now) {
         // A plan for another distance (the 2026-10-27 race: one lap planned, 16 km raced)
         // stays flagged for the whole race; the finish is predicted to the event's end.
         text = mismatchWords(v);
+    } else if (v.status === 'racing' && Number.isFinite(v.race?.alignment?.outOfStepM)) {
+        // The plan was laid out with its timing line elsewhere (2026-11-11: 429 m of padding the
+        // planner drew before the start). The road places the targets; the rider is told.
+        text = outOfStepWords(v.race.alignment.outOfStepM);
+        tip = outOfStepTip(v.race.alignment.outOfStepM);
+    } else if (v.status === 'racing' && v.race?.alignment?.unmatched) {
+        text = 'course not matched: targets by distance';
+        tip = 'The road you are on has not been matched to the plan\'s course, so the targets change by distance from the timing line alone.';
     } else if (v.status === 'racing' && v.event?.inEvent && v.event.kind === 'group') {
-        text = 'clock from the gun';
+        const gunS = v.race?.gunToLineS;
+        text = gunS != null ? `gun to line ${fmtTime(gunS)}` : 'clock from the line';
+        tip = gunS != null
+            ? `Mass start: the result counts from the gun. You crossed the timing line ${fmtTime(gunS)} after it, and the finish time includes that. The plan and ahead or behind run from the line.`
+            : 'Mass start: the result counts from the gun, which is not known here. The times shown run from the timing line.';
     }
     // The chip before the route name, so a narrow banner cuts the name, not the chip.
     const html = text || chip ? `${escapeHtml(text)}${chip}<span class="name">${escapeHtml(name)}</span>` : '';
@@ -511,7 +526,20 @@ function setBanner(v, now) {
         els.banner.__html = html;
         els.banner.innerHTML = html;
     }
+    setAttr(els.banner, 'title', tip);
     setHidden(els.banner, !html);
+}
+
+/** "plan off by 429 m": the plan's timing line is not where the road has it (short for the narrow layouts; the tip says what follows). */
+export function outOfStepWords(stepM) {
+    return `plan off by ${Math.round(Math.abs(stepM))} m`;
+}
+
+function outOfStepTip(stepM) {
+    const m = Math.round(Math.abs(stepM));
+    return stepM > 0
+        ? `This plan starts ${m} m before this race's timing line, so the last ${m} m of the race are not in it. The targets follow the road. Make the plan again for the next race.`
+        : `This plan starts ${m} m after this race's timing line, so the first ${m} m of the race are not in it. The targets follow the road. Make the plan again for the next race.`;
 }
 
 /** "event 16.15 km, plan 22.42 km": the two lengths, the plan's second. */

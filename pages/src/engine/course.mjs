@@ -17,6 +17,8 @@
 //   lng  longitude x 1e6: first absolute, the rest deltas
 //   ele  route elevation (metres) x 10: first absolute, the rest deltas
 //   real_from_m / real_to_m: plan metres that are real road (padding is outside them)
+//   gaps (optional): [[from m, to m], ...] stretches inside them the planner drew where its
+//     route data has no road (a lap that does not close): no fix is taken there
 
 export const COURSE_FORMAT = 'zg-course/1';
 export const EARTH_R_M = 6371000;   // the planner's radius
@@ -30,8 +32,12 @@ export const LOCK_SPAN_M = 30;      // ... spread over this much of the odometer
 export const LOCK_TOL_M = 8;        // a fix agrees with a line when its road metre is within this
 export const LOCK_WINDOW_M = 300;   // the fixes kept for locking: this much odometer
 export const LINE_MIN_M = -150;     // a plausible timing line: the route data starts up to this
-export const LINE_MAX_M = 300;      //   before the line and no more than this after (multi-lap courses
-                                    //   repeat the road a lap apart: this keeps the first lap's line)
+export const LINE_MAX_M = 1500;     //   before the line and no more than this after. It was 300 until a
+                                    //   plan 429 m out of step with its race (padding the planner drew
+                                    //   before the start, 2026-11-11) was refused and raced on distance
+                                    //   alone, every target 425 m late. The planner padded up to 1400 m.
+                                    //   A multi-lap course repeats the road a lap apart: the window is
+                                    //   shorter than the shortest lap (1.9 km), and ties go to the hint.
 export const UNLOCK_M = 600;        // this much odometer with no accepted fix: lost; the metre is then carried
                                     //   on the odometer from the last line (no fix needed) until a fix relocks
 export const MAX_SPEED_MS = 40;     // no rider's odometer step can exceed this per second between ticks (plus slack):
@@ -69,7 +75,31 @@ export function decodeCourse(raw) {
     if (realToM <= realFromM || m[n - 1] < m[0]) {
         return null;
     }
-    return {count: n, m, lat, lng, ele, realFromM, realToM};
+    // Drawn stretches inside the real road: a sound pair is kept, anything else ignored.
+    const gaps = [];
+    for (const g of Array.isArray(raw.gaps) ? raw.gaps : []) {
+        const from = Array.isArray(g) ? Number(g[0]) : NaN;
+        const to = Array.isArray(g) ? Number(g[1]) : NaN;
+        if (Number.isFinite(from) && Number.isFinite(to) && to > from) {
+            gaps.push([from, to]);
+        }
+    }
+    return {count: n, m, lat, lng, ele, realFromM, realToM, gaps};
+}
+
+/** Is a plan metre inside one of a course's drawn gaps? */
+export function inGap(course, m) {
+    for (const [from, to] of course.gaps ?? []) {
+        if (m > from && m < to) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** Is a plan metre real road on a course: inside real_from_m..real_to_m and in none of its gaps? */
+export function isRealRoad(course, m) {
+    return m >= course.realFromM && m <= course.realToM && !inGap(course, m);
 }
 
 /** The odometer scale from a plan file (planner: ROUTE_DATA_M_PER_GAME_M or the route's measured value), or null. */
@@ -284,12 +314,14 @@ export function advanceCourse(tr, {lat, lng, eventM, lineHintM = null, dtS = 1})
     }
     const k = tr.k;
     const odo = k * dED;
-    const fixes = candidatesAt(tr.course, lat, lng).filter(c => c.offset <= MAX_OFFSET_M
-        && c.m >= tr.course.realFromM && c.m <= tr.course.realToM);
+    const fixes = candidatesAt(tr.course, lat, lng).filter(c => c.offset <= MAX_OFFSET_M && isRealRoad(tr.course, c.m));
 
     if (tr.locked) {
-        tr.sinceFixM += odo;
         const pred = tr.m + odo;
+        // In a drawn gap no fix is expected: the odometer carries the metre and the lock holds.
+        if (!inGap(tr.course, pred)) {
+            tr.sinceFixM += odo;
+        }
         let next = pred;
         let best = null;
         for (const c of fixes) {

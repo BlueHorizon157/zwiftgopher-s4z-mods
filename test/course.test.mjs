@@ -4,8 +4,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    decodeCourse, candidatesAt, createCourseTracker, advanceCourse, courseMetre, scaleOf,
-    LINE_MAX_M, LOCK_FIXES, maxStepM, MAX_SPEED_MS, STEP_SLACK_M,
+    decodeCourse, candidatesAt, createCourseTracker, advanceCourse, courseMetre, scaleOf, inGap, isRealRoad,
+    LINE_MAX_M, LOCK_FIXES, maxStepM, MAX_SPEED_MS, STEP_SLACK_M, UNLOCK_M,
 } from '../pages/src/engine/course.mjs';
 
 const R = 6371000;
@@ -393,4 +393,74 @@ test('a fix 20 m off the road never locks the course (the road is 10 m or less f
     }
     assert.equal(tr.locked, false);
     assert.equal(tr.locks, 0);
+});
+
+test('a plan well out of step with its race still locks: a line 429 m in is taken, one past the window is not', () => {
+    // The 2026-11-11 race: the planner had drawn 393 m before the start and the line was 36 m on.
+    const path = straight(4000);
+    const c = decodeCourse(encode(path));
+    const near = createCourseTracker(c, {routeMPerGameM: 1});
+    for (const t of ride(path, {lineM: 429, toEd: 300, stepEd: 4})) {
+        advanceCourse(near, {lat: t.lat, lng: t.lng, eventM: t.ed, lineHintM: 0});
+    }
+    assert.ok(near.locked, 'locked');
+    assert.ok(Math.abs(near.lineM - 429) <= 3, `line ${near.lineM}`);
+    assert.ok(Math.abs(courseMetre(near) - (429 + 300)) <= 3, `metre ${courseMetre(near)}`);
+    // A line the planner never drew that far from the start is some other part of the road.
+    const far = createCourseTracker(c, {routeMPerGameM: 1});
+    for (const t of ride(path, {lineM: LINE_MAX_M + 100, toEd: 300, stepEd: 4})) {
+        advanceCourse(far, {lat: t.lat, lng: t.lng, eventM: t.ed, lineHintM: 0});
+    }
+    assert.equal(far.locked, false);
+    assert.equal(courseMetre(far), null);
+});
+
+test('drawn gaps decode as sound pairs; a file without them has none', () => {
+    const path = straight(1000);
+    assert.deepEqual(decodeCourse(encode(path)).gaps, []);
+    const c = decodeCourse({...encode(path), gaps: [[400, 600], [700, 650], 'x', [NaN, 5], [800]]});
+    assert.deepEqual(c.gaps, [[400, 600]]);
+    assert.equal(inGap(c, 500), true);
+    assert.equal(inGap(c, 400), false, 'the ends are road');
+    assert.equal(inGap(c, 600), false);
+    assert.equal(isRealRoad(c, 500), false);
+    assert.equal(isRealRoad(c, 300), true);
+    assert.equal(isRealRoad(c, 1001), false, 'past the end');
+    assert.equal(decodeCourse({...encode(path), gaps: 'none'}).gaps.length, 0);
+});
+
+test('a drawn gap is not road: no lock on it, and a locked rider is carried through it without losing the lock', () => {
+    // 3 km east; metres 1000 to 1700 were drawn by the planner (a lap that does not close), and the
+    // road the rider is really on there runs 200 m to the side.
+    const path = straight(3000);
+    const raw = encode(path);
+    const gap = [1000, 1700];
+    assert.ok(gap[1] - gap[0] > UNLOCK_M, 'longer than the odometer a lock survives without a fix');
+    const offRoad = (tr, fromEd, toEd, lineM) => {
+        let unlocked = false;
+        for (let ed = fromEd; ed <= toEd; ed += 4) {
+            const [lat, lng] = toLatLng(lineM + ed, 200);
+            advanceCourse(tr, {lat, lng, eventM: ed, lineHintM: 0});
+            unlocked ||= tr.justUnlocked === true;
+        }
+        return unlocked;
+    };
+    const tr = createCourseTracker(decodeCourse({...raw, gaps: [gap]}), {routeMPerGameM: 1});
+    feed(tr, ride(path, {lineM: 10, toEd: 990, stepEd: 4}));
+    assert.ok(tr.locked);
+    assert.equal(offRoad(tr, 990, 1690, 10), false, 'the lock holds through the gap');
+    assert.ok(tr.locked);
+    assert.ok(Math.abs(courseMetre(tr) - (10 + 1690)) <= 3, `carried on the odometer: ${courseMetre(tr)}`);
+    const after = feed(tr, ride(path, {lineM: 10, fromEd: 1690, toEd: 2200, stepEd: 4}));
+    assert.ok(tr.locked);
+    assert.ok(Math.abs(tr.lineM - 10) <= 3, `line ${tr.lineM}`);
+    assert.ok(Math.abs(after.at(-1) - (10 + 2200)) <= 3, `metre ${after.at(-1)}`);
+    // The same ride on a course that does not say the stretch was drawn: the lock is lost.
+    const plain = createCourseTracker(decodeCourse(raw), {routeMPerGameM: 1});
+    feed(plain, ride(path, {lineM: 10, toEd: 990, stepEd: 4}));
+    assert.equal(offRoad(plain, 990, 1690, 10), true, 'without the gap the same ride unlocks');
+    // A rider whose fixes fall on the drawn stretch (another road passes under it) never locks there.
+    const cold = createCourseTracker(decodeCourse({...raw, gaps: [gap]}), {routeMPerGameM: 1});
+    feed(cold, ride(path, {lineM: 1100, toEd: 400, stepEd: 4}));
+    assert.equal(cold.locked, false, 'no lock on a drawn stretch');
 });

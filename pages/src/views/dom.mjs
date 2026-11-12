@@ -73,10 +73,23 @@ export function fmtGrade(pct) {
 }
 
 /**
+ * The plan's time as shown beside the finish figure, on the same clock: in a mass start, once the
+ * seconds from the gun to the timing line are known, the plan's time (which runs from the line)
+ * plus those seconds, so that the rider's time less the plan's is the delta shown.
+ */
+export function planTimeS(v) {
+    const race = v?.race ?? {};
+    const s = race.planTimeFromStartS ?? v?.plan?.timeS ?? null;
+    return s != null && race.gunToLineS != null ? s + race.gunToLineS : s;
+}
+
+/**
  * The finish cell for any window: {label, seconds}. While racing it is the predicted time to
  * go (finishShows 'remaining', the default) or the predicted finish time ('finish'); before
  * the start the plan's time, which is both; after the finish the rider's time. The delta from
- * the plan (ahead, behind, on plan) goes beside it either way.
+ * the plan (ahead, behind, on plan) goes beside it either way. In a mass start the finish time
+ * and the rider's time are the result's, from the gun (race.official*); the plan's time and
+ * the delta are from the timing line, where the plan starts.
  */
 export function finishFigure(v, finishShows = 'remaining') {
     const race = v.race ?? {};
@@ -85,11 +98,11 @@ export function finishFigure(v, finishShows = 'remaining') {
         return {label: finishShows === 'finish' ? 'finish' : 'to go', seconds: null};
     }
     if (v.status === 'finished') {
-        return {label: 'finished', seconds: race.elapsedS ?? null};
+        return {label: 'finished', seconds: race.officialElapsedS ?? race.elapsedS ?? null};
     }
     if (race.running && race.totalS != null) {
         return finishShows === 'finish'
-            ? {label: 'finish', seconds: race.totalS}
+            ? {label: 'finish', seconds: race.officialTotalS ?? race.totalS}
             : {label: 'to go', seconds: race.remainingS ?? Math.max(0, race.totalS - (race.elapsedS ?? 0))};
     }
     return {label: 'plan', seconds: race.planTimeFromStartS ?? plan.timeS ?? null};

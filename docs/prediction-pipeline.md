@@ -26,6 +26,15 @@ and how the game's `eventDistance` (zero at the line) maps onto that data.
   moves the metre back. Only before the first lock does the old rule place the rider. A zero reading
   once racing is a dropped reading (missing), and an odometer step no rider could ride in the tick
   (45 m or more over two seconds) is held back one tick; if it persists it is taken as a real jump.
+  A course may mark stretches the planner drew where its route data has no road (`gaps`: the end of
+  a lap that does not join up in the data). No fix is taken there, and a locked rider is carried
+  through on the odometer with the lock kept, however long the stretch.
+- **A plan out of step with its race.** The road is believed for a timing line up to 1500 m into
+  the plan (300 m until 2026-11-12, see the Hilly Route race below). When the line the road gives is
+  100 m or more from where the plan has it, the targets still follow the road and the HUD says
+  "plan off by 429 m" (the figure first found, kept all race; the tip says which end of the race
+  is not in the plan). A plan with a course that is 500 m into its event with no match says "course
+  not matched: targets by distance".
 - **The old rule (the fallback until the lock, and for plans without a course).** The line is the
   plan length minus the event length when that is a stretch of 0 to 500 m, else the file's
   `start_line_m` (0 on most files), and the plan metre is `eventDistance` plus that line.
@@ -36,6 +45,15 @@ and how the game's `eventDistance` (zero at the line) maps onto that data.
   then, and the finished time is the clock's at that tick. The plan's pace carries on past the end.
 - **The clock.** Zwift's clock, or the event distance, starts it at the line. Once the course locks,
   the plan time at the start is re-anchored to the matched line.
+- **A mass start.** The game's distance and timer start at a timing line there too, so the plan's
+  clock starts at the line exactly as in a TT. The result counts from the gun, so the engine keeps
+  the seconds from the gun to the line (`race.gunToLineS`: the event's start from Sauce, Unix
+  time, against the crossing on Zwift's world clock, which counts from 2014-10-22; `clock.mjs`
+  `gunToLineS`) and gives the race time and the predicted finish on the result's clock as well
+  (`race.officialElapsedS`, `race.officialTotalS`). The finish cell, the plan's time beside it and
+  the field's clocks use those; the time to go and ahead or behind are the same on either clock.
+  A window opened mid-race takes the crossing from Zwift's timer (to the second); with no start
+  time from Sauce nothing is added and every time runs from the line.
 
 Measured on Dave's California Dreamin' ride (route 966890401, 2026-11-10, plan NYC92U, the
 recording in `test/fixtures/recordings/`): the line is at route-data metre 160.2 (+/- 2) and the
@@ -49,9 +67,30 @@ the Sauce finish (`eventDistance` 21157.7, plan metre 21290 against the true 212
 at 2095.6 s (Zwift: 2095 s). Without the course the same ride is late by 15 s median (34 s worst
 at the bend): the old rule put the line at the pen.
 
+Measured on Dave's Watopia Hilly Route race (route 2737483381, a 6.1 km custom distance, mass
+start, no draft, 2026-11-11, ZwiftPower event 5780317, plan KM96SD; the recording and both plans
+are in `test/fixtures/recordings/`, `test/recording-mass-start.test.mjs`):
+
+- The gun went at 18:40:00 UTC. The game's distance and timer stayed at zero for 102 m out of the
+  pen and started together 18.8 s after the gun. Line to finish was 686.1 s; ZwiftPower's time is
+  704.888 s, from the gun. The engine's time from the gun is 704.92 s.
+- The plan as raced was 429 m out of step: the planner had drawn 393 m of flat road before the
+  start (the lap in its route data does not join up, and it put the missing metres at the wrong
+  end), and the timing line is 36 m into the data. On that plan the rider is at
+  0.99856 x `eventDistance` + 429.1.
+- Mod 0.9.2 refused a line that far in (its window was 300 m), placed the rider by distance alone
+  and changed every target 425 m late: 31 to 123 s, with the countdowns 21 s out on average. That
+  is what "intervals off, countdowns erratic" was; the mass start added only the 19 s between the
+  two clocks.
+- Now: on the plan as raced the course locks with the line at 429 m, every target changes within
+  1.5 s of the rider reaching it on the road, and the HUD says the plan is off by 429 m. On the
+  same race planned by the fixed planner (metre 0 at the timing line, the lap's end drawn where
+  the game has it and marked as a gap) the line locks at 0.3 m (within 7 m all race), never out of
+  step, and the countdowns are 3.8 s out on average.
+
 Constants (`course.mjs`): 50 m grid, 15 m search, 10 m accept, 40 m gate, 15 % blend, 4 fixes over
-30 m to lock, 8 m agreement, 300 m of fixes kept, a plausible line between -150 and 300 m, 600 m
-to unlock. The blend strength makes no difference to the switch timing on this ride (0.05 to 0.5
+30 m to lock, 8 m agreement, 300 m of fixes kept, a plausible line between -150 and 1500 m (the
+planner padded up to 1400 m before a start; the shortest lap is 1.9 km), 600 m to unlock. The blend strength makes no difference to the switch timing on this ride (0.05 to 0.5
 gave the same). A fix counts on a segment only where it projects inside that segment: a fix just
 past a vertex projects onto the vertex with its along-road distance as the offset, which would
 pass for a fix on the road for the first metres past every vertex (on a straight in the unit tests

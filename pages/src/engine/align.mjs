@@ -8,6 +8,8 @@
 
 export const MISMATCH_FRACTION = 0.01;
 export const LINE_MAX_M = 500;     // a plan may be longer than the event by this much: the gate-to-line stretch
+export const OUT_OF_STEP_M = 100;  // the road puts the timing line this far from where the plan has it: the rider is told
+export const UNMATCHED_AFTER_M = 500;  // this far into the race with a course and no match: the rider is told
 
 export function inEvent(tick) {
     return Boolean(tick?.state?.eventSubgroupId ?? tick?.eventSubgroupId);
@@ -73,10 +75,22 @@ export function lineInPlanM(tick, plan) {
 export function alignmentOf(tick, plan, course = null) {
     if (course && (course.locked === true || Number.isFinite(course.m))) {
         // Locked on the road, or carried on the odometer after a loss (not locked then).
-        return {mode: 'course', locked: course.locked === true, lineM: course.lineM, residualM: course.locked ? course.residualM : null};
+        // outOfStepM: the road puts the timing line somewhere else than the plan has it (the
+        // event's length or the file's start_line_m: lineInPlanM). The targets follow the road,
+        // but the plan's first metres (or the race's, when negative) are not the race's, and as
+        // many at the far end are not planned.
+        const stepM = Number.isFinite(course.lineM) ? course.lineM - lineInPlanM(tick, plan) : null;
+        return {
+            mode: 'course', locked: course.locked === true, lineM: course.lineM, residualM: course.locked ? course.residualM : null,
+            outOfStepM: stepM != null && Math.abs(stepM) >= OUT_OF_STEP_M ? stepM : null, unmatched: false,
+        };
     }
     const given = plan && !plan.fromHere && (lineOffsetM(tick, plan) != null || plan.startLineM != null);
-    return {mode: given ? 'line' : 'start', locked: false, lineM: lineInPlanM(tick, plan), residualM: null};
+    // A plan with a course, well into the event, and the road never matched: the targets are
+    // placed by distance alone, which is only right when the plan was laid out from the line.
+    const ed = eventDistanceM(tick);
+    const unmatched = Boolean(plan?.course && !plan.fromHere && inEvent(tick) && ed != null && ed > UNMATCHED_AFTER_M);
+    return {mode: given ? 'line' : 'start', locked: false, lineM: lineInPlanM(tick, plan), residualM: null, outOfStepM: null, unmatched};
 }
 
 /**

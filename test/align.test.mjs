@@ -42,7 +42,20 @@ test('the course, once locked, places the rider; the mode says whether the line 
     assert.equal(alignmentOf(tk(40), planFile).mode, 'line');
     assert.equal(alignmentOf(tk(40), planFile).lineM, 0);
     const locked = {locked: true, lineM: 160.2, residualM: -0.3};
-    assert.deepEqual(alignmentOf(tk(40), planFile, locked), {mode: 'course', locked: true, lineM: 160.2, residualM: -0.3});
+    // The road has the line 160 m from where the file has it: matched, and the rider is told.
+    assert.deepEqual(alignmentOf(tk(40), planFile, locked), {mode: 'course', locked: true, lineM: 160.2, residualM: -0.3, outOfStepM: 160.2, unmatched: false});
+    // A line the planner measured to a few metres is in step; so is a plan made longer than the
+    // event by its run to the line (the line is then plan length less event length).
+    assert.equal(alignmentOf(tk(40), planFile, {locked: true, lineM: 6.5, residualM: 0}).outOfStepM, null);
+    assert.equal(alignmentOf(tk(40, {remainingMetric: 'distance', remainingEnd: 10550}), planFile, locked).outOfStepM, null);
+    assert.equal(alignmentOf(tk(40), planFile, {locked: true, lineM: -120, residualM: 0}).outOfStepM, -120);
+    // A plan with a course that has not matched well into the event says so; without a course,
+    // before then, or outside an event it does not.
+    const withCourse = {...planFile, course: {count: 2}};
+    assert.equal(alignmentOf(tk(900), withCourse).unmatched, true);
+    assert.equal(alignmentOf(tk(300), withCourse).unmatched, false);
+    assert.equal(alignmentOf(tk(900), planFile).unmatched, false);
+    assert.equal(alignmentOf({state: {eventDistance: 900}}, withCourse).unmatched, false);
     // In the event the course metre places the rider; outside one, or without a lock, the rule does.
     assert.equal(pm(tk(40), {plan: planFile, courseM: 201}), 201);
     assert.equal(pm(tk(40), {plan: planFile, courseM: null}), 40);

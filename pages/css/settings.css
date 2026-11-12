@@ -134,6 +134,9 @@ table.plans tr.active td:first-child::after {
   font-weight: 400;
   opacity: 0.7;
 }
+table.plans td .muted {
+  opacity: 0.7;
+}
 table.plans td.actions {
   white-space: nowrap;
   text-align: right;

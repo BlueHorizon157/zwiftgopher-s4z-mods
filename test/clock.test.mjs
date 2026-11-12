@@ -6,7 +6,9 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {normalisePlan} from '../pages/src/engine/plan.mjs';
-import {createClock, advanceClock, lineMetre} from '../pages/src/engine/clock.mjs';
+import {
+    createClock, advanceClock, lineMetre, gunToLineS, worldToUnixMs, unixToWorldMs, ZWIFT_EPOCH_MS, MAX_GUN_TO_LINE_S,
+} from '../pages/src/engine/clock.mjs';
 
 const file = JSON.parse(readFileSync(new URL('./fixtures/plans/flat.fit.optimise.json', import.meta.url), 'utf8'));
 const withLine = m => normalisePlan({...file, route: {...file.route, start_line_m: m}});
@@ -89,4 +91,92 @@ test('Zwift\'s own clock starts at the line in plan metres, not the metre the ri
     assert.equal(clock.signal, 'time');
     assert.equal(clock.startPlanM, 160);
     assert.equal(clock.elapsedS, 5);
+});
+
+// A mass start (race 5780317, 2026-11-11): the gun at 18:40:00 UTC, the game's distance and timer
+// at 0 for the 102 m to the timing line, crossed 18.8 s later. Zwift's world time is its own scale.
+const GUN_UNIX_MS = 1_794_422_400_000;
+const GUN_WORLD_MS = GUN_UNIX_MS - ZWIFT_EPOCH_MS;
+
+test('a mass start: the clock starts at the timing line as a TT\'s does, not at the gun', () => {
+    const plan = withLine(0);
+    const at = (ed, s, more = {}) => tick(ed, {worldTime: GUN_WORLD_MS + s * 1000, ...more});
+    let clock = createClock();
+    // The gun has gone and the rider is riding out of the pen: the game's distance is still 0.
+    clock = advanceClock(clock, {kind: 'group', rule: 'auto', prev: null, tick: at(0, 1, {speed: 20}), plan, planM: 0});
+    assert.equal(clock.running, false, 'the gun does not start it');
+    clock = advanceClock(clock, {kind: 'group', rule: 'auto', prev: at(0, 1), tick: at(0, 18, {speed: 38}), plan, planM: 0});
+    assert.equal(clock.running, false);
+    // Over the line: 5 m past it at 36 km/h, so it was crossed half a second ago.
+    clock = advanceClock(clock, {kind: 'group', rule: 'auto', prev: at(0, 18), tick: at(5, 19.3, {speed: 36}), plan, planM: 5});
+    assert.equal(clock.running, true);
+    assert.equal(clock.justStarted, true);
+    assert.equal(clock.signal, 'distance');
+    assert.equal(clock.lineWorldMs, GUN_WORLD_MS + 18_800);
+    assert.equal(gunToLineS(clock, GUN_UNIX_MS), 18.8);
+    // The game's own timer starts it the same way.
+    const timed = advanceClock(createClock(), {kind: 'group', rule: 'auto', prev: at(0, 18), tick: at(15, 20.3, {time: 1, speed: 36}), plan, planM: 15});
+    assert.equal(timed.signal, 'time');
+    assert.equal(timed.lineWorldMs, GUN_WORLD_MS + 18_800);
+});
+
+test('Zwift\'s world time and Unix time: each is put on the other\'s scale, and a value already there is kept', () => {
+    assert.equal(worldToUnixMs(GUN_WORLD_MS), GUN_UNIX_MS);
+    assert.equal(worldToUnixMs(GUN_UNIX_MS), GUN_UNIX_MS, 'a synthetic recording keeps Unix time in worldTime');
+    assert.equal(unixToWorldMs(GUN_UNIX_MS, GUN_WORLD_MS + 5000), GUN_WORLD_MS);
+    assert.equal(unixToWorldMs(GUN_UNIX_MS, GUN_UNIX_MS + 5000), GUN_UNIX_MS);
+    assert.equal(unixToWorldMs(GUN_WORLD_MS, GUN_WORLD_MS + 5000), GUN_WORLD_MS);
+    for (const bad of [null, undefined, NaN, 'x']) {
+        assert.equal(worldToUnixMs(bad), null);
+        assert.equal(unixToWorldMs(bad, GUN_WORLD_MS), null);
+        assert.equal(unixToWorldMs(GUN_UNIX_MS, bad), null);
+    }
+});
+
+test('the seconds from the gun to the line: only for a running clock, a known gun and a plausible start', () => {
+    const running = {...createClock(), running: true, startWorldMs: GUN_WORLD_MS + 19_000, lineWorldMs: GUN_WORLD_MS + 18_800};
+    assert.equal(gunToLineS(running, GUN_UNIX_MS), 18.8);
+    assert.equal(gunToLineS({...running, lineWorldMs: null}, GUN_UNIX_MS), null, 'no crossing known: the clock\'s own start is not taken for it');
+    assert.equal(gunToLineS(running, null), null, 'no start time from Sauce');
+    assert.equal(gunToLineS({...running, running: false}, GUN_UNIX_MS), null);
+    assert.equal(gunToLineS(createClock(), GUN_UNIX_MS), null);
+    assert.equal(gunToLineS(running, GUN_UNIX_MS + 60_000), null, 'a line before the gun is not a start');
+    assert.equal(gunToLineS(running, GUN_UNIX_MS - (MAX_GUN_TO_LINE_S + 1) * 1000), null, 'a late join is not a start');
+    // A synthetic recording: both on the Unix scale.
+    assert.equal(gunToLineS({...running, startWorldMs: T0 + 12_000, lineWorldMs: T0 + 12_000}, T0), 12);
+});
+
+test('a TT, a free ride and a plan from here are as they were: the line starts a TT, the arm the others', () => {
+    const plan = withLine(0);
+    const tt = advanceClock(createClock(), {kind: 'tt', rule: 'auto', prev: tick(0), tick: tick(8, {speed: 28.8, worldTime: T0 + 2000}), plan, planM: 8});
+    assert.equal(tt.signal, 'distance');
+    assert.equal(tt.startWorldMs, T0 + 1000);
+    assert.equal(tt.lineWorldMs, T0 + 1000);
+    const manual = advanceClock(createClock(), {kind: 'manual', prev: null, tick: tick(0, {worldTime: T0 + 5000}), plan, planM: 0, armedWorldMs: T0 + 3000});
+    assert.equal(manual.signal, 'manual');
+    assert.equal(manual.startWorldMs, T0 + 3000);
+    assert.equal(manual.lineWorldMs, null);
+    const here = advanceClock(createClock(), {kind: 'here', prev: null, tick: tick(4000, {worldTime: T0 + 5000, speed: 36}), plan, planM: 0, armedWorldMs: T0 + 4000});
+    assert.equal(here.signal, 'here');
+    assert.equal(here.lineWorldMs, null);
+});
+
+test('a window opened mid-race: Zwift\'s timer says when the line was crossed, the metres ridden do not', () => {
+    const plan = withLine(0);
+    // 250 s into the race (the line was crossed 18.8 s after the gun), 2.6 km on at 36 km/h.
+    const now = GUN_WORLD_MS + 18_800 + 250_400;
+    const joined = advanceClock(createClock(), {kind: 'group', rule: 'auto', prev: null, tick: tick(2600, {time: 250, speed: 36, worldTime: now}), plan, planM: 2600});
+    assert.equal(joined.signal, 'time');
+    assert.equal(joined.elapsedS, 250);
+    assert.equal(joined.lineWorldMs, now - 250_500, 'from the timer (whole seconds done: half a second more), not ten seconds ago');
+    const gunS = gunToLineS(joined, GUN_UNIX_MS);
+    assert.ok(Math.abs(gunS - 18.8) <= 0.5, `gun to line ${gunS}`);
+    // No timer either: the clock starts late (as it always did), and that is no start to add a gun to.
+    const blind = advanceClock(createClock(), {kind: 'group', rule: 'distance', prev: null, tick: tick(2600, {speed: 36, worldTime: now}), plan, planM: 2600});
+    assert.equal(blind.signal, 'distance');
+    assert.equal(blind.lineWorldMs, null);
+    assert.equal(gunToLineS(blind, GUN_UNIX_MS), null);
+    // A crossing seen that the timer contradicts (a stale distance) gives way to the timer.
+    const odd = advanceClock(createClock(), {kind: 'group', rule: 'auto', prev: null, tick: tick(20, {time: 60, speed: 36, worldTime: now}), plan, planM: 20});
+    assert.equal(odd.lineWorldMs, now - 60_500);
 });

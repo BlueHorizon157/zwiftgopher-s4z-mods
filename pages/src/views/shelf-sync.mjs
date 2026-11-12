@@ -91,24 +91,28 @@ export async function linkRevoke(fetchFn, token, deviceId = null) {
  * One sync: the listing (304 when nothing changed), the plans the library lacks or that were
  * republished, each fetched by its code and acknowledged.
  *
- * library: {has(code) -> entry|null, save(code, raw, meta)}; loadPlan(code) -> {raw, meta}.
- * Returns {status: 'unchanged'|'ok'|'revoked'|'unsupported'|'error'|'unpaired', etag, plans, added, link, error}.
+ * library: {has(code) -> entry|null, save(code, raw, meta), prune?(codes) -> removed codes};
+ * loadPlan(code) -> {raw, meta}. The shelf keeps one plan per course; a plan from it that it no
+ * longer lists (replaced, or taken off in the planner) leaves the library (prune).
+ * Returns {status: 'unchanged'|'ok'|'revoked'|'unsupported'|'error'|'unpaired', etag, plans, added, removed, link, error}.
  */
 export async function syncOnce({fetchFn, token, etag = null, library, loadPlan}) {
     const r = await request(fetchFn, `${base()}/shelf.php?action=list`, {token, headers: etag ? {'If-None-Match': etag} : {}});
     if (r.status === 304) {
-        return {status: 'unchanged', etag, plans: null, added: [], link: null};
+        return {status: 'unchanged', etag, plans: null, added: [], removed: [], link: null};
     }
     if (r.status === 401) {
-        return {status: 'revoked', etag: null, plans: null, added: [], link: null, error: errorOf(r, 'The link has ended.')};
+        return {status: 'revoked', etag: null, plans: null, added: [], removed: [], link: null, error: errorOf(r, 'The link has ended.')};
     }
     if (r.status === 404 || (r.ok && r.json === null)) {
-        return {status: 'unsupported', etag: null, plans: null, added: [], link: null};
+        return {status: 'unsupported', etag: null, plans: null, added: [], removed: [], link: null};
     }
     if (!r.ok || !Array.isArray(r.json?.plans)) {
-        return {status: 'error', etag, plans: null, added: [], link: null, error: errorOf(r, `The planner answered HTTP ${r.status}.`)};
+        return {status: 'error', etag, plans: null, added: [], removed: [], link: null, error: errorOf(r, `The planner answered HTTP ${r.status}.`)};
     }
     const plans = r.json.plans;
+    // First the plans the shelf no longer has, so a replacement under a new code takes the place.
+    const removed = library.prune ? library.prune(plans.map(p => p.code)) : [];
     const added = [];
     for (const p of plans) {
         if (!needsFetch(p, library.has(p.code))) {
@@ -130,7 +134,7 @@ export async function syncOnce({fetchFn, token, etag = null, library, loadPlan})
             console.warn('[shelf] plan', p.code, err);
         }
     }
-    return {status: 'ok', etag: r.etag, plans, added, link: r.json.link ?? null};
+    return {status: 'ok', etag: r.etag, plans, added, removed, link: r.json.link ?? null};
 }
 
 /** A plan the library lacks, or one republished since (fetched_at NULL again, a newer published_at). */

@@ -23,6 +23,11 @@ function library(entries = {}) {
     return {
         has: code => map.get(code) ?? null,
         save: (code, raw, meta) => map.set(code, {raw, ...meta}),
+        prune: codes => {
+            const gone = [...map.entries()].filter(([code, e]) => e.shelf && !codes.includes(code)).map(([code]) => code);
+            gone.forEach(code => map.delete(code));
+            return gone;
+        },
         map,
     };
 }
@@ -274,4 +279,22 @@ test('Plan from here sends the rest of the ride and the power so far; the file c
     const free = fakeFetch([{match: 'shelf.php', method: 'POST', status: 400, json: {success: false, error: 'Under 500 m to go: no plan needed, empty the tank.'}}]);
     await assert.rejects(() => shelfPlanFromHere(free, 'zgt_x', {kind: 'route', routeId: '1', remainingM: 300, power: []}), /Under 500 m/);
     assert.match(free.calls[0].body, /action=plan_here&kind=route&route_id=1&laps=1&distance_m=0&remaining_m=300&rules=%5B%5D&inputs_source=last&bike=road&power=&race_from_s=0/);
+});
+
+test('a plan the shelf no longer lists (replaced or taken off) leaves the library; a 304 or an error removes nothing', async () => {
+    const lib = library({
+        AAAAAA: {raw: {}, shelf: true, publishedAt: '2026-11-08T10:00:00+00:00'},
+        GONE11: {raw: {}, shelf: true},
+        BYCODE: {raw: {}, shelf: false},
+    });
+    const fetchFn = fakeFetch([{match: 'shelf.php?action=list', status: 200, json: listing([plan('AAAAAA', {fetched_at: '2026-11-08 10:05:00'})])}]);
+    const r = await syncOnce({fetchFn, token: 'zgt_x', library: lib, loadPlan: async () => { throw new Error('nothing to load'); }});
+    assert.equal(r.status, 'ok');
+    assert.deepEqual(r.removed, ['GONE11']);
+    assert.deepEqual([...lib.map.keys()].sort(), ['AAAAAA', 'BYCODE'], 'a plan loaded by its code is not the shelf\'s to remove');
+    for (const script of [[{match: 'shelf.php?action=list', status: 304}], [{match: 'shelf.php?action=list', status: 500, json: {error: 'down'}}]]) {
+        const r2 = await syncOnce({fetchFn: fakeFetch(script), token: 'zgt_x', library: lib, loadPlan: async () => ({raw: {}, meta: {}})});
+        assert.deepEqual(r2.removed, []);
+        assert.equal(lib.map.size, 2);
+    }
 });
