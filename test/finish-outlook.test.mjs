@@ -64,6 +64,37 @@ test('states from the gap at the finish, close shrinking with the time to go', (
     assert.ok(finishOutlook([home(), r('x', 4, 1, 120)], {remainingS: 600, ...SETTLED}).riders.get('x').early);
 });
 
+test('the gap moves until the one of you further back on the road reaches the line (Dave, 2026-11-14)', () => {
+    // 20 s up on the clock, you gain 5 s a minute, 1 minute to go.
+    const at = (homeSinceS, gapS = 20, pace = 5) => ({...r('x', gapS, pace), homeSinceS});
+    const near = finishOutlook([home(), at(0)], {remainingS: 60, ...SETTLED}).riders.get('x');
+    // Ahead of you on the road (or level): the gap is measured where you are; one minute left to close it.
+    assert.equal(near.finishGapS, 15);
+    assert.equal(near.state, 'clear', 'out of reach');
+    // Behind you on the road with a long way left: you rode the 4 minutes from their place to yours,
+    // so the gap goes on closing for 5 minutes in all, and you beat them.
+    const far = finishOutlook([home(), at(240)], {remainingS: 60, ...SETTLED}).riders.get('x');
+    assert.equal(far.finishGapS, -5);
+    assert.equal(far.state, 'beat');
+    assert.equal(far.needSPerMin, 5, 'what it takes from you is on your own minute');
+    // A threat the same way: 20 s down, they gain 5 s a minute and still have 5 minutes to ride.
+    const threat = finishOutlook([home(), at(240, -20, -5)], {remainingS: 60, ...SETTLED}).riders.get('x');
+    assert.equal(threat.finishGapS, 5);
+    assert.equal(threat.state, 'beaten');
+    assert.equal(finishOutlook([home(), at(0, -20, -5)], {remainingS: 60, ...SETTLED}).riders.get('x').state, 'clear', 'not when you are the one further back');
+    // Close is on the minutes still to be compared: 10 s up with 1 minute to go is clear for a
+    // rider beside you on the road (close is 5 s) but close for one with 10 minutes to ride.
+    assert.equal(finishOutlook([home(), at(0, 10, 0)], {remainingS: 60, ...SETTLED}).riders.get('x').state, 'clear');
+    assert.equal(finishOutlook([home(), at(540, 10, 0)], {remainingS: 60, ...SETTLED}).riders.get('x').state, 'reach');
+});
+
+test('once you have finished, a rider still on the road behind you is carried over their stretch, not frozen', () => {
+    const x = {...r('x', 10, 4), homeSinceS: 180};
+    const o = finishOutlook([home({finished: true, finishRaceS: 1900}), x], {remainingS: 0, homeFinishS: 1900});
+    assert.equal(o.riders.get('x').finishGapS, -2, '10 s up, 3 minutes left at 4 s a minute');
+    assert.equal(o.home.predictedPlace, 1);
+});
+
 test('states hold past their line so a rider on the edge does not flicker', () => {
     const prev = finishOutlook([home(), r('a', 5, 1.2)], {remainingS: 600, ...SETTLED});   // -7: beat
     assert.equal(prev.riders.get('a').state, 'beat');

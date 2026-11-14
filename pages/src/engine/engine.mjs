@@ -18,7 +18,7 @@
 import {normalisePlan} from './plan.mjs';
 import {locate, at, boundary, BEFORE} from './cursor.mjs';
 import {createClock, advanceClock, worldTimeOf, gunToLineS} from './clock.mjs';
-import {inEvent, routeMatches, planMetre, rideDistanceM, mismatchM, eventLengthM, eventDistanceM, distanceToGoM, lineInPlanM, alignmentOf, OUT_OF_STEP_M} from './align.mjs';
+import {inEvent, routeMatches, planMetre, rideDistanceM, mismatchM, eventLengthM, eventLengthFor, eventDistanceM, distanceToGoM, lineInPlanM, alignmentOf, OUT_OF_STEP_M} from './align.mjs';
 import {createTracking, advance, closeInterval, predict, planTimeAtMetre} from './tracking.mjs';
 import {createCourseTracker, advanceCourse, courseMetre} from './course.mjs';
 import {update as wbalUpdate} from './wbal.mjs';
@@ -582,7 +582,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             event: data ? {
                 inEvent: inEvent(data), subgroupId: state.event.subgroupId, kind: state.event.kind, name: state.event.name,
                 startMs: state.event.startMs,
-                routeMatches: routeMatches(data, plan), lengthM: eventLengthM(data), mismatchM: mismatchM(data, plan),
+                routeMatches: routeMatches(data, plan), lengthM: eventLengthM(data), lengthFor: eventLengthFor(data), mismatchM: mismatchM(data, plan),
                 position: data.eventPosition ?? null, participants: data.eventParticipants ?? null,
                 lineM: plan ? (courseNow ? courseNow.lineM : lineInPlanM(data, plan)) : null,
             } : null,

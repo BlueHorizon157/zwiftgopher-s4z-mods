@@ -363,7 +363,7 @@ test('a rider who passed the line far before you first see them: finished, with 
     assert.equal(finishRaceOf(r), null, 'no time seen, none made up');
 });
 
-test('the event length is the first one seen for its category; a length from after the home rider left is not taken', () => {
+test('the event length is its category\'s; a length from after the home rider left is not taken', () => {
     const f = createField();
     ingest(f, [entry(1, {watching: true, t: 0, speedMs: 10}), entry(2, {t: 0, speedMs: 10})], EPOCH, {lineM: 0, kind: 'tt', lengthM: 21155});
     assert.equal(f.lengthM, 21155);
@@ -373,6 +373,45 @@ test('the event length is the first one seen for its category; a length from aft
     // A new event (another category) has its own length.
     ingest(f, [entry(5, {watching: true, t: 2, speedMs: 10, subgroup: 77})], EPOCH + 2000, {lineM: 0, kind: 'tt', lengthM: 9000});
     assert.equal(f.lengthM, 9000, 'the new event\'s length');
+});
+
+test('joining a race from a warm-up: the warm-up route\'s length is not the race\'s finish (CTT 2026-11-14)', () => {
+    // A free ride on a 1.5 km route: the window's tick reports the route's length, no category.
+    const route = {lineM: 0, kind: null, gunMs: null, lengthM: 1500, lengthFor: null};
+    const f = createField();
+    ingest(f, [entry(1, {watching: true, t: 0, subgroup: 0, distanceM: 0})], EPOCH, route);
+    assert.equal(f.lengthM, null, 'a free ride has no finish line');
+    // The rider joins the pen of a 2 km race. The first nearby lists in the race's category come
+    // while the window's tick still carries the warm-up route (the feeds are a second apart).
+    ingest(f, [entry(1, {watching: true, t: 1, distanceM: 0}), entry(2, {t: 1, distanceM: 0})], EPOCH + 1000, route);
+    assert.equal(f.lengthM, null, 'not the warm-up route\'s');
+    // A tick that is in the pen but still reports the route (remainingType 'route'): no length either.
+    ingest(f, [entry(1, {watching: true, t: 2, distanceM: 0}), entry(2, {t: 2, distanceM: 0})], EPOCH + 2000, {...route, lengthFor: null, lengthM: 1500});
+    assert.equal(f.lengthM, null);
+    // The race's own length arrives with its category.
+    const race = {lineM: 0, kind: 'tt', gunMs: null, lengthM: 2000, lengthFor: '9'};
+    simulate(f, [
+        {id: 1, startS: 10, speedMs: 10, watching: true, name: 'Home'},
+        {id: 2, startS: 10, speedMs: 10.5, name: 'Rival'},
+    ], 300, race, 3);
+    assert.equal(f.lengthM, 2000);
+    const home = f.riders.get('1');
+    const rival = f.riders.get('2');
+    assert.ok(Math.abs(finishRaceOf(home) - 200) < 0.6, `home finishes at 2 km, ${finishRaceOf(home)}`);
+    assert.ok(Math.abs(finishRaceOf(rival) - 2000 / 10.5) < 0.6, `rival at 2 km, ${finishRaceOf(rival)}`);
+    // A stale route length later in the race (the tick out of step for a moment) does not move the line.
+    ingest(f, [entry(1, {startS: 10, speedMs: 10, watching: true, t: 301}), entry(2, {startS: 10, speedMs: 10.5, t: 301})], EPOCH + 301_000, route);
+    assert.equal(f.lengthM, 2000, 'kept for the category');
+});
+
+test('a new category without its own length yet has no line: the last race\'s is not carried over', () => {
+    const f = createField();
+    ingest(f, [entry(1, {watching: true, t: 0, subgroup: 9})], EPOCH, {lineM: 0, kind: 'tt', lengthM: 21155, lengthFor: '9'});
+    assert.equal(f.lengthM, 21155);
+    ingest(f, [entry(1, {watching: true, t: 1, subgroup: 77})], EPOCH + 1000, {lineM: 0, kind: 'tt', lengthM: 21155, lengthFor: '9'});
+    assert.equal(f.lengthM, null, 'the new race\'s length is not known yet');
+    ingest(f, [entry(1, {watching: true, t: 2, subgroup: 77})], EPOCH + 2000, {lineM: 0, kind: 'tt', lengthM: 9000, lengthFor: 77});
+    assert.equal(f.lengthM, 9000);
 });
 
 test('home leaving: the rows keep the category with no road figure; reset clears the length', () => {

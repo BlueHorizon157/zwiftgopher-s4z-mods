@@ -12,6 +12,7 @@ import {gunzipSync} from 'node:zlib';
 import {parseJsonl} from '../pages/src/replay.mjs';
 import {createField, ingest, rows, placeOf, rivalsOf, finishRaceOf} from '../pages/src/engine/field-model.mjs';
 import {finishOutlook} from '../pages/src/engine/finish-outlook.mjs';
+import {eventLengthM, eventLengthFor} from '../pages/src/engine/align.mjs';
 
 const rec = parseJsonl(gunzipSync(readFileSync(new URL('./fixtures/recordings/california-dreamin-2026-11-10.jsonl.gz', import.meta.url))).toString('utf8'));
 const EPOCH = rec[0].d.startedAt;
@@ -221,6 +222,66 @@ test('the finish: each rider who crosses the line has a frozen race time equal t
         checked++;
     }
     assert.ok(checked >= 15, `${checked} crossings checked`);
+});
+
+test('joining from a warm-up: the first lists in the race\'s category come with the warm-up route\'s length, and the finish is still the race\'s', () => {
+    // The windows' path (field-feed.mjs contextOf): each nearby list takes the length from the
+    // window's latest home tick. On 2026-11-14 (CTT, Scotland Smash) the rider loaded the plan on
+    // a warm-up route and joined the pen; the first lists in the race's category came while the
+    // tick still reported the warm-up route (15.37 km, remainingType 'route'), and 0.9.4 kept
+    // that as the race's finish: every rider "finished" 2.7 km early in the field and rivals.
+    // Here the tick is the warm-up's for the first 30 s of the recording.
+    const warmUp = {state: {eventSubgroupId: 0}, remainingMetric: 'distance', remainingType: 'route', remainingEnd: 15371};
+    const field = createField();
+    let tick = warmUp;
+    for (const row of rec) {
+        if (row.ch === 'athlete/watching' && row.t > 30_000) {
+            tick = row.d;
+        } else if (row.ch === 'nearby') {
+            ingest(field, row.d, EPOCH + row.t, {lineM: 0, kind: 'tt', gunMs: null, lengthM: eventLengthM(tick), lengthFor: eventLengthFor(tick)});
+        }
+    }
+    assert.equal(field.lengthM, EVENT_M, 'the race\'s length');
+    const truth = truthUpTo(rec.at(-1).t, EVENT_M);
+    let checked = 0;
+    for (const [id, t] of truth) {
+        if (t.crossing) {
+            const mine = finishRaceOf(field.riders.get(id));
+            assert.ok(Math.abs(mine - t.crossing.time) < 1, `${t.name}: ${mine?.toFixed(2)} s, recording ${t.crossing.time.toFixed(2)} s`);
+            checked++;
+        }
+    }
+    assert.ok(checked >= 15, `${checked} crossings checked`);
+    assert.ok(Math.abs(finishRaceOf(field.riders.get(HOME)) - 2095) < 1.5, 'home finishes at the line');
+});
+
+test('the stretch still to be compared: your race time from the point the gap is measured at to where you are', () => {
+    // For a rider behind you on the road, the gap is measured at their distance: the finish outlook
+    // carries it over your time from there to here as well as your time to go (finish-outlook.mjs).
+    const T = 1500_000;
+    const state = newReplay();
+    replayTo(state, T);
+    const truth = truthUpTo(T, EVENT_M);
+    const me = truth.get(HOME);
+    const nowS = me.samples.at(-1).time;
+    let behind = 0;
+    for (const row of rows(state.field, {nowMs: EPOCH + T})) {
+        if (row.isHome || !row.comparable || row.finished) {
+            continue;
+        }
+        const t = truth.get(row.id);
+        // The latest point both have a time at (a rider out of the list for a while is compared further back).
+        const shared = sharedDistance(me, t, EVENT_M);
+        const at = shared == null ? null : timeAtTruth(me, shared);
+        if (at == null) {
+            continue;
+        }
+        assert.ok(Math.abs(row.homeSinceS - (nowS - at)) < 1.6, `${row.name}: ${row.homeSinceS.toFixed(1)} s, recording ${(nowS - at).toFixed(1)} s`);
+        if (nowS - at > 60) {
+            behind++;
+        }
+    }
+    assert.ok(behind >= 3, `${behind} riders a minute or more behind you on the road`);
 });
 
 test('a finished rider is frozen at the line: later riding changes neither their clock nor their gaps', () => {

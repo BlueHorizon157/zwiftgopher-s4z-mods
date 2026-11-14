@@ -20,8 +20,9 @@ export function startFieldFeed({view, onUpdate = null}) {
 export function contextOf(v) {
     // Every rider's eventDistance sits at zero until the timing line, so in event metres
     // the line is 0, whatever the route (docs/REVAMP_PLAN.md 6.2). The event's length is the
-    // line you finish at: a rider who passes it is finished (field-model.mjs).
-    return {lineM: 0, kind: v?.event?.kind ?? null, gunMs: v?.event?.startMs ?? null, lengthM: v?.event?.lengthM ?? null};
+    // line you finish at: a rider who passes it is finished (field-model.mjs). lengthFor is the
+    // category it was read for (null when the tick has none, as on a warm-up route).
+    return {lineM: 0, kind: v?.event?.kind ?? null, gunMs: v?.event?.startMs ?? null, lengthM: v?.event?.lengthM ?? null, lengthFor: v?.event?.lengthFor ?? null};
 }
 
 /**

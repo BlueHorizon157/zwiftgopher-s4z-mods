@@ -19,8 +19,14 @@ file, 5.2 look-ahead) once they land.
 
 ---
 
-## Status (2026-11-12)
+## Status (2026-11-14)
 
+**Released 0.9.5 (2026-11-14):** after a CTT round on Scotland Smash (2026-11-14) where the field and the
+rivals strip finished every rider 2.7 km early: the field's finish line comes only with a length the home
+tick reports for the race's own category (`eventLengthFor`; a warm-up route's length came with the first
+list in the pen) and follows it; the finish outlook carries each gap over the stretch still to be compared
+(your time from the comparison point, `homeSinceS`, plus your time to go), not your time to go alone.
+Release note `docs/releases/0.9.5.md`.
 **Released 0.9.4 (2026-11-12):** the HUD says when a newer version is out (an update chip in the banner, a
 Download row in the plan panel; never while racing), from `pages/src/update-check.mjs` (the latest GitHub
 release, else the highest tag; once a day for all windows), which settings uses too.

@@ -4,7 +4,13 @@
 //
 // No rider is modelled on the route: your own finish comes from your plan (the engine's
 // prediction knows the climbs), and each rider's is yours less their clock gap carried to the
-// line at their pace against you. A rider who has finished is at their real finish time: the
+// line at their pace against you. The gap is measured where the one of you further back on the
+// road is, so it goes on moving until that rider reaches the line: over your time to go when it
+// is you, and over the rider's whole stretch to the line (your time over it) when they are
+// behind you on the road. 20 s up with 1 minute to go at 5 s a minute is out of reach when they
+// are ahead of you on the road, and caught when they still have 5 minutes to ride (Dave,
+// 2026-11-14). What it would take from you is on your own minutes: the rest of their stretch
+// is road you have already ridden. A rider who has finished is at their real finish time: the
 // line they crossed on their own clock (field-model.mjs finishRaceOf).
 //
 // The places are the riders' order at the finish (1 + the riders finishing ahead of you), so
@@ -19,7 +25,7 @@
 //   reach     ahead, close at the finish: a little more from you, or a fade from them
 //   pressure  behind, close at the finish
 //   clear     not close at the finish either way: nothing to think about
-// Close is a second per minute to go, 5 s to 30 s. A state holds on past its line for a margin
+// Close is a second per minute still to be compared, 5 s to 30 s. A state holds on past its line for a margin
 // (prev, the last result) so a rider on the edge does not flicker.
 
 import {placeOf} from './field-model.mjs';
@@ -54,7 +60,8 @@ export function finishOutlook(list, {remainingS = null, elapsedS = null, homeFin
     }
     const o = OUTLOOK;
     const remMin = Math.max(0, remainingS) / 60;
-    const closeS = Math.min(o.closeMaxS, Math.max(o.closeMinS, remMin * o.closePerMin));
+    const closeOf = min => Math.min(o.closeMaxS, Math.max(o.closeMinS, min * o.closePerMin));
+    const closeS = closeOf(remMin);
     const done = remainingS <= 0;
     const settled = done || remainingS <= o.gateToGoS || (Number.isFinite(elapsedS) && elapsedS >= o.gateElapsedS);
     const home = list.find(r => r.isHome) ?? null;
@@ -66,6 +73,8 @@ export function finishOutlook(list, {remainingS = null, elapsedS = null, homeFin
         }
         const gapS = r.gapS;
         const known = r.finished && r.finishRaceS != null && finishing != null;
+        // The minutes over which the gap still moves: from where it is measured to the line.
+        const leftMin = remMin + Math.max(0, Number(r.homeSinceS) || 0) / 60;
         let finishGapS;
         let pace = null;
         if (known) {
@@ -74,15 +83,16 @@ export function finishOutlook(list, {remainingS = null, elapsedS = null, homeFin
             finishGapS = gapS;
         } else {
             pace = Number.isFinite(r.paceSPerMin) ? r.paceSPerMin : null;
-            finishGapS = gapS - (pace ?? 0) * remMin;
+            finishGapS = gapS - (pace ?? 0) * leftMin;
         }
         const was = prev?.riders?.get(r.id)?.state;
         const ahead = gapS > 0;
         const fg = ahead ? finishGapS : -finishGapS;     // > 0: still on their side at the finish
+        const riderCloseS = known || r.finished ? closeS : closeOf(leftMin);
         let state;
         if (fg < -o.crossS || (was === (ahead ? 'beat' : 'beaten') && fg < o.holdS)) {
             state = ahead ? 'beat' : 'beaten';
-        } else if (Math.abs(finishGapS) <= closeS * ((ahead ? AHEAD : BEHIND).has(was) ? o.closeLeave : 1)) {
+        } else if (Math.abs(finishGapS) <= riderCloseS * ((ahead ? AHEAD : BEHIND).has(was) ? o.closeLeave : 1)) {
             state = ahead ? 'reach' : 'pressure';
         } else {
             state = 'clear';

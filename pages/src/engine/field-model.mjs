@@ -119,11 +119,13 @@ function setCheckpoint(r, k, wt) {
  * One `nearby` list. ctx: {lineM} the timing line in event metres (TT clock start),
  * {kind} 'tt' | 'group' | null, {gunMs} a group event's start (Unix ms, as Sauce gives it: it is
  * put on the scale of each sample's world time), {lengthM} the event's length in event metres
- * (the line you finish at; null or absent when not known). A group event with a known start
- * runs every rider's clock from the gun, as its result does; without one each rider's clock
- * starts at the line, as in a TT.
+ * (the line you finish at; null or absent when not known), {lengthFor} the category that length
+ * was read for (the subgroup of the home tick that reported it as the event's length; null when
+ * the tick reported none, absent from callers that only pass lengths of the current category).
+ * A group event with a known start runs every rider's clock from the gun, as its result does;
+ * without one each rider's clock starts at the line, as in a TT.
  */
-export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs = null, lengthM = null} = {}) {
+export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs = null, lengthM = null, lengthFor} = {}) {
     const o = field.opts;
     const byGun = kind === 'group' && gunMs != null && Number.isFinite(Number(gunMs));
     const list = Array.isArray(entries) ? entries : [];
@@ -134,12 +136,7 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
     if (category != null) {
         field.subgroupId = home.state.eventSubgroupId;
     }
-    // The event's length is the first one seen for its category: once the home rider has left
-    // the event, the game reports another length (the ride on), which must not move the line.
-    if (Number.isFinite(lengthM) && lengthM > 0 && (field.lengthM == null || (category != null && category !== field.lengthFor))) {
-        field.lengthM = lengthM;
-        field.lengthFor = category ?? field.lengthFor;
-    }
+    setLength(field, category, lengthM, lengthFor);
     const L = field.lengthM;
     for (const e of list) {
         const id = idOf(e);
@@ -271,6 +268,35 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
     }
     field.lastMs = nowMs;
     return field;
+}
+
+/**
+ * The finish line: the event's length, for the home rider's category only. A length counts for
+ * the category of the tick that reported it as the event's (lengthFor), and the line follows that
+ * tick while the home rider is in the category. A free ride reports its route's length too, and
+ * the nearby list and the home tick can be a second out of step: joining a pen from a warm-up
+ * (2026-11-14, CTT on Scotland Smash), the first list in the race's category came with the
+ * warm-up route's 15.37 km, and every rider "finished" 2.7 km early. A new category with no
+ * length of its own yet has no line. Once the home rider has left the event (no category), the
+ * game reports the ride on: the line stays where it was. Callers that pass no lengthFor (tests,
+ * replays) vouch that the length is the current category's.
+ */
+function setLength(field, category, lengthM, lengthFor) {
+    const valid = Number.isFinite(lengthM) && lengthM > 0;
+    if (category == null) {
+        if (valid && lengthFor === undefined && field.lengthM == null) {
+            field.lengthM = lengthM;
+        }
+        return;
+    }
+    const of = lengthFor === undefined ? category : (usable(lengthFor) ? String(lengthFor) : null);
+    if (valid && of === category) {
+        field.lengthM = lengthM;
+        field.lengthFor = category;
+    } else if (field.lengthFor !== category) {
+        field.lengthM = null;
+        field.lengthFor = null;
+    }
 }
 
 /**
@@ -461,7 +487,13 @@ export function compare(field, home, r, {boundaries = null} = {}) {
         };
         sector = {startM, endM: sec.endM, homeKmh: speed(home), riderKmh: speed(r)};
     }
-    return {clockS, gainSPerMin, trend, trendSpanS, paceSPerMin, paceSpanS, sector, atM: k * o.spacingM};
+    // Your race time from the point the gap is measured at to where you are now (or to the line,
+    // once you have finished): next to nothing when you are the one further back on the road, and
+    // the stretch the rider still has to ride against your time there when they are behind you.
+    // The gap goes on moving over that stretch as well as over your time to go (finish-outlook.mjs).
+    const homeNowWT = home.finished && Number.isFinite(home.finishWT) ? home.finishWT : home.lastWT;
+    const homeSinceS = Number.isFinite(homeNowWT) ? Math.max(0, (homeNowWT - home.cp[k]) / 1000) : 0;
+    return {clockS, gainSPerMin, trend, trendSpanS, paceSPerMin, paceSpanS, sector, atM: k * o.spacingM, homeSinceS};
 }
 
 /**
@@ -519,6 +551,8 @@ export function rows(field, {nowMs = null, allSubgroups = false, boundaries = nu
             paceSpanS: r.finished ? 0 : (cmp?.paceSpanS ?? 0),
             trend: r.finished ? null : (cmp?.trend ?? null),
             trendSpanS: r.finished ? 0 : (cmp?.trendSpanS ?? 0),
+            // Your race time from the point the gap is measured at to where you are now.
+            homeSinceS: cmp?.homeSinceS ?? 0,
             sector: cmp?.sector ?? null,
             avgKmh: r.avgKmh,
             speedKmh: r.speedKmh,

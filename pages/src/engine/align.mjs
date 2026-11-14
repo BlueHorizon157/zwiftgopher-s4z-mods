@@ -43,6 +43,25 @@ export function eventLengthM(tick) {
     return tick?.remainingMetric === 'distance' && end != null && end > 0 ? end : null;
 }
 
+/**
+ * The category the tick's length belongs to: the tick's own subgroup when Sauce reports the
+ * length as the event's (remainingType 'event'); else null. A free ride reports its route's
+ * length the same way (remainingType 'route'), and a tick can still carry it just after the
+ * rider joins a pen (field-model.mjs setLength).
+ */
+export function eventLengthFor(tick) {
+    if (eventLengthM(tick) == null) {
+        return null;
+    }
+    const type = tick?.remainingType;
+    if (type != null && type !== 'event') {
+        return null;
+    }
+    const sg = tick?.state?.eventSubgroupId ?? tick?.eventSubgroupId;
+    const n = numberOrNull(sg);
+    return n != null && n !== 0 ? String(sg) : null;
+}
+
 /** Sauce's distance to go in metres, when it reports one by distance; else null. */
 export function distanceToGoM(tick) {
     return tick?.remainingMetric === 'distance' ? numberOrNull(tick?.remaining) : null;

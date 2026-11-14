@@ -3,7 +3,7 @@
 // plan for another distance.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {planMetre, lineOffsetM, lineInPlanM, mismatchM, LINE_MAX_M} from '../pages/src/engine/align.mjs';
+import {planMetre, lineOffsetM, lineInPlanM, mismatchM, eventLengthFor, LINE_MAX_M} from '../pages/src/engine/align.mjs';
 
 const plan = {lengthM: 10710, startLineM: 0};
 const tick = (eventDistance, remainingEnd) => ({state: {eventDistance, eventSubgroupId: 1}, remainingMetric: 'distance', remainingEnd});
@@ -60,4 +60,14 @@ test('the course, once locked, places the rider; the mode says whether the line 
     assert.equal(pm(tk(40), {plan: planFile, courseM: 201}), 201);
     assert.equal(pm(tk(40), {plan: planFile, courseM: null}), 40);
     assert.equal(pm({state: {distance: 500}}, {plan: planFile, courseM: 201, anchorDistanceM: 300}), 200, 'outside an event the course is not used');
+});
+
+test('an event length belongs to the tick\'s category only when Sauce reports it as the event\'s', () => {
+    const t = (remainingType, eventSubgroupId, remainingEnd = 18069.2) => ({state: {eventSubgroupId}, remainingMetric: 'distance', remainingType, remainingEnd});
+    assert.equal(eventLengthFor(t('event', 7440397)), '7440397');
+    assert.equal(eventLengthFor(t('route', 7440397)), null, 'a route length in the pen (the warm-up still reported)');
+    assert.equal(eventLengthFor(t('route', 0)), null, 'a free ride');
+    assert.equal(eventLengthFor(t('event', 0)), null, 'no category');
+    assert.equal(eventLengthFor(t(undefined, 7440397)), '7440397', 'a Sauce without the type: the subgroup decides');
+    assert.equal(eventLengthFor({state: {eventSubgroupId: 1}, remainingMetric: 'time', remainingType: 'event', remainingEnd: 3600}), null, 'a race by time has no length');
 });
