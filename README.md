@@ -175,6 +175,14 @@ from the event's length or from the plan file, and that can be out by up to abou
 some routes: the intervals then switch late by that much. Plan the race again to get the
 matching.
 
+## The live state in Sauce
+
+While a window is open, the mod keeps its live state in Sauce's athlete data as `zgtt`: the
+target now (with your bias), the next change and when, the interval, where you are in the plan,
+and the plan's code and strategy. Other Sauce windows and anything that reads Sauce's API
+(`/api/athlete/v2/self`) can show it. One window shares at a time; the fields are listed at
+the top of `pages/src/views/share.mjs`.
+
 ## The list, the field and the rivals strip
 
 The **interval list** shows each interval's end (in km), target, time, gradient and the W′

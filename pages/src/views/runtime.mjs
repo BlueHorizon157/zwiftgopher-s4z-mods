@@ -14,6 +14,7 @@ import {normalisePlan} from '../engine/plan.mjs';
 import {loadPlanByCode, fetchPlanByCode, loadReplayPlan} from './plan-loader.mjs';
 import {syncOnce, chooseActivation, activePlanStep, planForPlace, fitsEvent, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, shelfPlan, shelfPlanFromHere, PENDING_POLL_MS} from './shelf-sync.mjs';
 import {hereTarget, powerHistory, chooseBike, hereOffered, bikeWords, hereCard} from './from-here.mjs';
+import {createSharer} from './share.mjs';
 
 export const SETTINGS_DEFAULTS = {
     layout: 'auto',           // auto = the manifest window's ?layout
@@ -154,8 +155,12 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         }).catch(err => console.warn('[replay] plan', err));
         note(`Replaying ${sauce.replayName} at ${sauce.replaySpeed}x`);
     }
+    // The live state in Sauce's athlete data (share.mjs): one window at a time; never a replay.
+    const sharer = sauce.isReplay ? null : createSharer({rpc: common.rpc, storage: sauce.storage});
+    window.addEventListener('beforeunload', () => sharer?.stop());
     sauce.subscribe('athlete/watching', data => {
         engine.tick(data, Date.now());
+        sharer?.tick(() => engine.view(), data);
         if (cardWaiting && beforeStart()) {
             syncPlan();
         }
