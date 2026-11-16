@@ -19,8 +19,14 @@ file, 5.2 look-ahead) once they land.
 
 ---
 
-## Status (2026-11-14)
+## Status (2026-11-16)
 
+**Released 0.9.6 (2026-11-16):** Sauce's Watching window reloaded and Nearby and Groups redrew whenever the
+mod wrote its shared state: every key starting with '/' is global in Sauce's storage, and each Sauce
+window's settings store takes a write to any global key as a change to its own settings (`watching.mjs`
+reloads on any key it doesn't know). The mod's keys now live in localStorage under '~zg-tt/', which Sauce's
+storage handler ignores (`pages/src/shared-storage.mjs`; old values copied across on first read, nothing
+written to Sauce). Release note `docs/releases/0.9.6.md`.
 **Released 0.9.5 (2026-11-14):** after a CTT round on Scotland Smash (2026-11-14) where the field and the
 rivals strip finished every rider 2.7 km early: the field's finish line comes only with a length the home
 tick reports for the race's own category (`eventLengthFor`; a warm-up route's length came with the first
