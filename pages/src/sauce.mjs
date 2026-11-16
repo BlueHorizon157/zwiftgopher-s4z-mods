@@ -67,7 +67,7 @@ export const rpc = new Proxy({}, {
     },
 });
 
-export const storage = common.storage;
+export {storage} from './mod-storage.mjs';  // shared-storage.mjs: the mod's keys out of Sauce's windows' way
 export {common};
 
 export function replayState() {

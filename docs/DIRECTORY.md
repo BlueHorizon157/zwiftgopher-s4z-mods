@@ -22,7 +22,8 @@ unpacked folder (`zwiftgopher-tt`) to the directory version has to:
 - remove the folder from `Documents/SauceMods`, or both copies run.
 
 The plan library, the active plan and strategy, and the recorder are kept, because they live
-in Sauce's global storage (`/zg-tt/*`). Each window's look settings are per window, so they
+in the browser storage every Sauce window shares (`~zg-tt/*`; 0.9.5 and earlier used Sauce's
+global `/zg-tt/*` keys, copied across on first use). Each window's look settings are per window, so they
 start from the defaults.
 
 ## The entry

@@ -547,7 +547,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             const asked = new URLSearchParams(window.location.search).get('update');
             update = asked ? {latest: asked, available: true} : update;
         } else {
-            update = await checkForUpdate({fetchFn: fetch, storage: common.storage, current: VERSION});
+            update = await checkForUpdate({fetchFn: fetch, storage: sauce.storage, current: VERSION});
         }
         draw();
     };

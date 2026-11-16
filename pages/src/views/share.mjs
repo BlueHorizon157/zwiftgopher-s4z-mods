@@ -4,9 +4,10 @@
 // the athlete/self and athlete/watching streams, other Sauce windows.
 //
 // Every engine window has its own engine, and one opened mid-race may not agree with the
-// rest, so one window shares at a time: the first to start, holding a heartbeat in Sauce's
-// global storage ('/zg-tt/share', not one of store.mjs's keys, so it wakes no window). When
-// it closes, the heartbeat goes stale and the next window takes over.
+// rest, so one window shares at a time: the first to start, holding a heartbeat under
+// '/zg-tt/share' in the mod's storage (shared-storage.mjs: kept where Sauce's windows don't
+// hear it, and not one of store.mjs's keys, so no window redraws for it). When it closes, the
+// heartbeat goes stale and the next window takes over.
 //
 // zgtt (version 1):
 //   v          1
@@ -61,7 +62,7 @@ export function sharedState(view, worldMs = null) {
 
 /**
  * One window's sharer: tick(viewFn, data) each tick. viewFn is only called when this window
- * shares. rpc is Sauce's (updateAthleteData), storage its global storage (get/set).
+ * shares. rpc is Sauce's (updateAthleteData), storage the mod's (shared-storage.mjs; get/set).
  */
 export function createSharer({rpc, storage, id = Math.random().toString(36).slice(2), now = () => Date.now()}) {
     let lastBeat = 0;

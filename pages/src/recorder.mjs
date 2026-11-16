@@ -4,9 +4,9 @@
 // ('athlete/watching' from the dashboard, 'nearby' from the field window, RPC results from
 // sauce.rpc), trimmed, in IndexedDB, which every window of the mod shares. The settings
 // page turns it on and saves the recording as JSONL for test fixtures and ?replay=.
-// Control is the global storage key /zg-tt/recorder = {enabled, startedAt}; turning it on
+// Control is the shared key /zg-tt/recorder (shared-storage.mjs) = {enabled, startedAt}; turning it on
 // starts a fresh recording.
-import * as common from '/pages/src/common.mjs';
+import {storage} from './mod-storage.mjs';
 import {VERSION} from './version.mjs';
 
 export const CONTROL_KEY = '/zg-tt/recorder';
@@ -28,12 +28,12 @@ const OWNER_REFRESH_MS = 2000;
 const ownerId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 const ownerSeen = {};
 
-let control = common.storage?.get(CONTROL_KEY) || {enabled: false, startedAt: null};
+let control = storage?.get(CONTROL_KEY) || {enabled: false, startedAt: null};
 let dbPromise = null;
 let lastNearbyMs = 0;
 let writes = 0;
 
-common.storage?.addEventListener('globalupdate', ev => {
+storage?.addEventListener('globalupdate', ev => {
     if (ev?.data?.key === CONTROL_KEY) {
         control = ev.data.value || {enabled: false, startedAt: null};
     }
@@ -53,7 +53,7 @@ export async function setEnabled(enabled) {
         await clear();
     }
     control = enabled ? {enabled: true, startedAt: Date.now()} : {...control, enabled: false};
-    common.storage.set(CONTROL_KEY, control);
+    storage.set(CONTROL_KEY, control);
 }
 
 export async function record(channel, data) {
@@ -85,14 +85,14 @@ export async function record(channel, data) {
 }
 
 function ownsChannel(channel, now) {
-    const owners = common.storage?.get(OWNER_KEY) || {};
+    const owners = storage?.get(OWNER_KEY) || {};
     const o = owners[channel];
     if (o && o.id !== ownerId && now - o.at < OWNER_STALE_MS) {
         return false;
     }
     if (!o || o.id !== ownerId || now - (ownerSeen[channel] ?? 0) >= OWNER_REFRESH_MS) {
         ownerSeen[channel] = now;
-        common.storage?.set(OWNER_KEY, {...owners, [channel]: {id: ownerId, at: now}});
+        storage?.set(OWNER_KEY, {...owners, [channel]: {id: ownerId, at: now}});
     }
     return true;
 }

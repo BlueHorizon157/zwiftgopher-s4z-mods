@@ -1,4 +1,4 @@
-// The plan library's rules that need no Sauce (store.mjs keeps the library in Sauce's storage):
+// The plan library's rules that need no Sauce (store.mjs keeps the library in the mod's shared storage):
 // one plan per course, and which plans from the shelf have left it. Pure, so test/plan-library
 // .test.mjs runs them in Node.
 //

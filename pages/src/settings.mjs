@@ -2,6 +2,7 @@
 // window's settings store (the page is opened as that window's child, so it shares its
 // storage id); the plan library and the recorder are shared by every window.
 import * as common from '/pages/src/common.mjs';
+import {storage} from './mod-storage.mjs';
 import * as store from './store.mjs';
 import * as recorder from './recorder.mjs';
 import {loadPlanByCode} from './views/plan-loader.mjs';
@@ -450,7 +451,7 @@ function formatSpan(ms) {
 async function initVersion() {
     document.getElementById('version-current').textContent = `v${VERSION}`;
     const status = document.getElementById('version-status');
-    const {latest, available} = await checkForUpdate({fetchFn: fetch, storage: common.storage, current: VERSION});
+    const {latest, available} = await checkForUpdate({fetchFn: fetch, storage, current: VERSION});
     if (available) {
         status.textContent = `Update available: v${latest}`;
         status.classList.add('alert');

@@ -1,7 +1,7 @@
 // Shared state between the mod's windows (docs/REVAMP_PLAN.md §4.3): the plan library,
 // the active plan, the rider's controls, the rider link and the shelf sync state
-// (TT/RIDE_DAY_PLAN.md 2.1, 2.4), in Sauce's global storage keys (they start with '/'),
-// written when something changes, never per tick. Migrates what 0.6.x kept under
+// (TT/RIDE_DAY_PLAN.md 2.1, 2.4), under the mod's '/zg-tt/' keys (shared-storage.mjs keeps
+// them where Sauce's windows don't hear them), written when something changes, never per tick. Migrates what 0.6.x kept under
 // 'tt-dashboard-state' and '/tt-dashboards/shared-state' once.
 import {storage} from './sauce.mjs';
 import {dropTwins, shelfLeavers} from './plan-library.mjs';
