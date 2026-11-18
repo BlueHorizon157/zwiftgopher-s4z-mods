@@ -1,11 +1,12 @@
 // The finish prediction (docs/REVAMP_PLAN.md 6.1): a clock offset is carried, not
 // extrapolated; the rest of the race is timed from the rider's power through each
-// interval's physics; a shorter event ends the prediction at its own distance.
+// interval's physics and the speed against the plan they have shown (2026-11-18); a shorter
+// event ends the prediction at its own distance.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {normalisePlan} from '../pages/src/engine/plan.mjs';
-import {createTracking, advance, predict, timeExponent, powerRatio, POWER_PRIOR_S} from '../pages/src/engine/tracking.mjs';
+import {createTracking, advance, predict, timeExponent, powerRatio, speedAgainstPlan, POWER_PRIOR_S, POWER_WINDOW_S, START_SKIP_S} from '../pages/src/engine/tracking.mjs';
 
 const plan = normalisePlan(JSON.parse(readFileSync(new URL('./fixtures/plans/flat.fit.optimise.json', import.meta.url), 'utf8')));
 const intervals = plan.intervals;
@@ -13,7 +14,8 @@ const intervals = plan.intervals;
 // Rides the plan at its own speeds, one tick a second, from the clock start at metre 0.
 // clockOffsetS: seconds the race clock had already run at metre 0 (a clock from the gate
 // when the timer starts later). powerScale: actual / plan power, held on every interval.
-function ride({clockOffsetS = 0, powerScale = 1, untilM = plan.lengthM, onTick = null, finishM = null} = {}) {
+// speedScale: the rider's speed against the plan's at the power ridden (a draft, a planner off).
+function ride({clockOffsetS = 0, powerScale = 1, speedScale = 1, untilM = plan.lengthM, onTick = null, finishM = null} = {}) {
     const tracking = createTracking();
     let planM = 0;
     let raceS = clockOffsetS;
@@ -23,7 +25,7 @@ function ride({clockOffsetS = 0, powerScale = 1, untilM = plan.lengthM, onTick =
         const iv = intervals.find(x => planM >= x.startM && planM < x.endM) ?? intervals.at(-1);
         const index = intervals.indexOf(iv);
         // A few % more power on the flat gives a third of that in speed.
-        const speed = iv.speedMs * Math.pow(powerScale, timeExponent(iv, plan.weightKg));
+        const speed = iv.speedMs * Math.pow(powerScale, timeExponent(iv, plan.weightKg)) * speedScale;
         advance(tracking, {index, raceS, power: iv.powerW * powerScale, planM, intervals, atStart: t === 0, startLineM: 0});
         const p = predict({tracking, plan, index, planM, raceS, planTimeAtStart: 0, finishM});
         out.push({t, planM, index, p});
@@ -60,17 +62,37 @@ test('riding the plan exactly predicts the plan all the way', () => {
 
 test('2.5 % over target on the flat reads a little ahead, more as the sample grows', () => {
     const ticks = ride({powerScale: 1.025});
-    const early = ticks[30].p;
+    const start = ticks[START_SKIP_S].p;
+    const early = ticks[60].p;
     const later = ticks[600].p;
-    assert.ok(early.deltaS <= 0 && early.deltaS > -12, `at 30 s: ${early.deltaS.toFixed(1)}`);
+    // The first seconds after the line count for nothing (the launch): only the time already gained.
+    assert.equal(start.pacing, 1);
+    assert.ok(start.deltaS <= 0 && start.deltaS > -2, `at ${START_SKIP_S} s: ${start.deltaS.toFixed(1)}`);
+    assert.ok(early.deltaS <= 0 && early.deltaS > -12, `at 60 s: ${early.deltaS.toFixed(1)}`);
     assert.ok(later.deltaS < early.deltaS, `at 600 s: ${later.deltaS.toFixed(1)} vs ${early.deltaS.toFixed(1)}`);
-    // Shrunk towards 1 until a few minutes of sample: at 30 s the ratio has a fifth of its weight.
-    assert.ok(early.pacing > 1 && early.pacing < 1.025 * 30 / (30 + POWER_PRIOR_S) + 1.001, `early ratio ${early.pacing}`);
-    // Five minutes of sample: the ratio carries five sixths of its weight.
-    assert.ok(later.pacing > 1.018 && later.pacing < 1.025, `later ratio ${later.pacing}`);
+    // Shrunk towards 1 until minutes of sample: 30 s of it carries under a tenth of its weight.
+    assert.ok(early.pacing > 1 && early.pacing < 1 + 0.025 * 30 / (30 + POWER_PRIOR_S) + 0.001, `early ratio ${early.pacing}`);
+    // 570 s of sample: about two thirds.
+    const w = 570 / (570 + POWER_PRIOR_S);
+    assert.ok(Math.abs(later.pacing - (1 + 0.025 * w)) < 0.002, `later ratio ${later.pacing}`);
+    // At the plan's speed for the power: no speed term.
+    assert.ok(Math.abs(later.speed - 1) < 0.01, `speed ${later.speed}`);
     // The whole race at 2.5 % over on flat ground: around 0.8 % faster.
     const gain = -ticks.at(-1).p.deltaS;
     assert.ok(gain > 0.004 * plan.timeS && gain < 0.012 * plan.timeS, `finished ${gain.toFixed(1)} s ahead of ${plan.timeS}`);
+});
+
+test('4 % faster than the plan at its power (a draft, a plan a little off) reads ahead within minutes', () => {
+    const ticks = ride({speedScale: 1.04});
+    const finalS = ticks.at(-1).p.deltaS;
+    assert.ok(finalS < -0.03 * plan.timeS, `finished ${finalS.toFixed(1)} s`);
+    // The power is the plan's, so only the speed says it: most of the way there after five
+    // minutes, which the power alone (2026-11-18 and before) never was.
+    const at300 = ticks[300].p;
+    assert.ok(at300.speed > 1.025 && at300.speed < 1.04, `speed ${at300.speed}`);
+    assert.ok(Math.abs(at300.deltaS - finalS) < 0.3 * Math.abs(finalS), `at 300 s ${at300.deltaS.toFixed(1)} vs ${finalS.toFixed(1)}`);
+    const half = ticks[Math.floor(ticks.length / 2)];
+    assert.ok(Math.abs(half.p.deltaS - finalS) < 0.12 * Math.abs(finalS), `half way (${half.t} s) ${half.p.deltaS.toFixed(1)}`);
 });
 
 test('a shorter event ends the prediction at the event distance', () => {
@@ -91,21 +113,39 @@ test('the time exponent is a third on the flat and climbs with the gradient', ()
     assert.equal(timeExponent({}, 75), 1 / 3);
 });
 
-test('the power ratio is 1 without a sample and looks back five minutes', () => {
+test('the power ratio is 1 without a sample, skips the start and looks back ten minutes', () => {
+    assert.equal(POWER_WINDOW_S, 600);
     const tracking = createTracking();
     assert.deepEqual(powerRatio(tracking, intervals, 0), {ratio: 1, sampleS: 0});
     tracking.stats[0] = {index: 0, startRaceS: 0, endRaceS: 100, elapsedS: 100, avgPowerW: intervals[0].powerW * 1.2, finished: true};
     tracking.stats[1] = {index: 1, startRaceS: 100, endRaceS: null, elapsedS: 50, avgPowerW: intervals[1].powerW, finished: false};
+    // The first START_SKIP_S are left out: 70 s of the first interval and 50 of the second.
     const now = powerRatio(tracking, intervals, 150);
-    assert.ok(now.ratio > 1.05 && now.ratio < 1.2, `ratio ${now.ratio}`);
-    assert.equal(now.sampleS, 150);
-    // Both closed long ago: nothing in the last five minutes, so no opinion.
+    assert.equal(now.sampleS, 150 - START_SKIP_S);
+    const raw = (70 * 1.2 + 50) / 120;
+    assert.ok(Math.abs(now.ratio - (1 + (raw - 1) * 120 / (120 + POWER_PRIOR_S))) < 1e-9, `ratio ${now.ratio}`);
+    // Both closed long ago: nothing in the last ten minutes, so no opinion.
     tracking.stats[1] = {...tracking.stats[1], endRaceS: 150, finished: true};
-    assert.deepEqual(powerRatio(tracking, intervals, 500), {ratio: 1, sampleS: 0});
-    // Half inside the window: only that half counts.
-    const half = powerRatio(tracking, intervals, 350);
+    assert.deepEqual(powerRatio(tracking, intervals, 800), {ratio: 1, sampleS: 0});
+    // Half the first inside the window: only that half counts.
+    const half = powerRatio(tracking, intervals, 650);
     assert.equal(half.sampleS, 100);
-    assert.ok(half.ratio > 1.05 && half.ratio < now.ratio, `half: ${JSON.stringify(half)}`);
+    assert.ok(half.ratio > 1 && half.ratio < now.ratio, `half: ${JSON.stringify(half)}`);
+    // The old reading (five minutes, 60 s of prior, no skip) is still there to ask for.
+    assert.equal(powerRatio(tracking, intervals, 150, {windowS: 300, priorS: 60, skipS: 0}).sampleS, 150);
+});
+
+test('the speed against the plan: 1 with nothing ridden, the plan\'s time over the rider\'s', () => {
+    const tracking = createTracking();
+    assert.equal(speedAgainstPlan(tracking, intervals, 0, 0, plan.weightKg), 1);
+    const iv = intervals[1];
+    // The second interval at its power in 90 % of its time, after the start.
+    tracking.stats[1] = {index: 1, startRaceS: 100, endRaceS: 100 + iv.durationS * 0.9, startPlanM: iv.startM, elapsedS: iv.durationS * 0.9, avgPowerW: iv.powerW, finished: true};
+    const s = speedAgainstPlan(tracking, intervals, 100 + iv.durationS * 0.9, iv.endM, plan.weightKg, {priorS: 0});
+    assert.ok(Math.abs(s - 1 / 0.9) < 1e-6, `speed ${s}`);
+    // With the prior it leans on the plan.
+    const shrunk = speedAgainstPlan(tracking, intervals, 100 + iv.durationS * 0.9, iv.endM, plan.weightKg);
+    assert.ok(shrunk > 1 && shrunk < s);
 });
 
 test('the open interval closes at the finish, and the plan\'s pace carries on past its last metre', async () => {

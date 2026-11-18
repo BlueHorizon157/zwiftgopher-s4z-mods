@@ -136,23 +136,39 @@ export function pacingRatio(tracking, intervals) {
 // that into "2:15 behind" the moment the second interval closed. So: the clock deficit is
 // carried as the constant it is, and the rest of the race is timed from the rider's power
 // against the plan, through the physics of each interval.
-export const POWER_WINDOW_S = 300;      // the power ratio looks back this far
-export const POWER_PRIOR_S = 60;        // and counts for half after this much sample
+//
+// 2026-11-18 (The Fan Flats TT: "38 s behind" after a first interval ridden on time): the power
+// ratio alone took 45 s at 241 W against 272 W for the next half hour, at 60 s of prior. The
+// rider had crossed the line at 34.6 km/h, so the plan's power to get up to speed was not needed:
+// on time, on less power. Now the rest of the race is also answered by the rider's speed against
+// the plan at the power they rode (speedAgainstPlan, the countdown's measure, over the whole race),
+// the first START_SKIP_S after the line count for neither, and the power ratio leans on the plan
+// longer. Back-test on four recorded races with their plans (Fan Flats, California Dreamin',
+// Scotland Smash, the Hilly mass start) and four made from them (the plan 4 % fast or slow, the
+// targets 8-10 % up for the second half or the last third, as a rider who fades): mean error
+// against the delta at the finish 11.3 → 7.2 s on the real races (first five minutes 19.5 →
+// 10.3 s, worst moment 47 → 27 s), plan 4 % off 40 → 8 s, fades 14-15 → 16-17 s.
+export const POWER_WINDOW_S = 600;      // the power ratio looks back this far
+export const POWER_PRIOR_S = 300;       // and counts for half after this much sample
 export const POWER_RATIO_MIN = 0.5;
 export const POWER_RATIO_MAX = 1.5;
+export const START_SKIP_S = 30;         // the race's first seconds (the launch, the speed carried over the line) count for neither
+export const SPEED_PRIOR_S = 60;        // the speed against the plan counts for half after this much racing
+export const SPEED_MIN = 0.6;
+export const SPEED_MAX = 1.6;
 const BIKE_KG = 9;
 const DEFAULT_RIDER_KG = 75;
 const CRR = 0.005;
 const G = 9.81;
 
 /**
- * Recent actual / target power, time-weighted over the last POWER_WINDOW_S of racing,
- * shrunk towards 1 by POWER_PRIOR_S: {ratio, sampleS}. The current interval counts.
+ * Recent actual / target power, time-weighted over the last POWER_WINDOW_S of racing after the
+ * first START_SKIP_S, shrunk towards 1 by POWER_PRIOR_S: {ratio, sampleS}. The current interval counts.
  */
-export function powerRatio(tracking, intervals, raceS) {
+export function powerRatio(tracking, intervals, raceS, {windowS = POWER_WINDOW_S, priorS = POWER_PRIOR_S, skipS = START_SKIP_S} = {}) {
     let weighted = 0;
     let sampleS = 0;
-    const windowStart = raceS - POWER_WINDOW_S;
+    const windowStart = Math.max(raceS - windowS, skipS);
     for (const s of tracking.stats) {
         const iv = intervals[s?.index];
         if (!s || !(iv?.powerW > 0) || !(s.elapsedS > 0) || !Number.isFinite(s.avgPowerW)) {
@@ -170,8 +186,45 @@ export function powerRatio(tracking, intervals, raceS) {
         return {ratio: 1, sampleS: 0};
     }
     const raw = Math.min(POWER_RATIO_MAX, Math.max(POWER_RATIO_MIN, weighted / sampleS));
-    const weight = sampleS / (sampleS + POWER_PRIOR_S);
+    const weight = sampleS / (sampleS + priorS);
     return {ratio: 1 + (raw - 1) * weight, sampleS};
+}
+
+/**
+ * The rider's speed against the plan's at the power they rode: the plan's time for the metres
+ * ridden, each interval's answered by its power ratio through its physics, over the time they
+ * took, in the last windowS of racing after the first skipS (the interval in progress counts up
+ * to planM), shrunk towards 1 by priorS. Above 1 is faster than the plan (a draft, a planner a
+ * little off), below slower; 1 with nothing ridden. The finish prediction looks over the whole
+ * race; the countdown (countdown.mjs) over its last five minutes.
+ */
+export function speedAgainstPlan(tracking, intervals, raceS, planM, riderKg, {windowS = Infinity, priorS = SPEED_PRIOR_S, skipS = START_SKIP_S, ratioMin = POWER_RATIO_MIN, ratioMax = POWER_RATIO_MAX, min = SPEED_MIN, max = SPEED_MAX} = {}) {
+    const windowStart = Math.max(raceS - windowS, skipS);
+    let expected = 0;
+    let actual = 0;
+    for (const s of tracking.stats) {
+        const iv = intervals[s?.index];
+        if (!s || !(iv?.lengthM > 0) || !(iv.durationS > 0) || !(s.elapsedS > 0)) {
+            continue;
+        }
+        const endS = s.finished && s.endRaceS != null ? s.endRaceS : raceS;
+        const spanS = endS - s.startRaceS;
+        const overlap = Math.min(endS, raceS) - Math.max(s.startRaceS, windowStart);
+        if (!(spanS > 0) || overlap <= 0) {
+            continue;
+        }
+        const fromM = Math.max(iv.startM, Number.isFinite(s.startPlanM) ? s.startPlanM : iv.startM);
+        const toM = s.finished ? iv.endM : Math.min(iv.endM, Number.isFinite(planM) ? planM : fromM);
+        if (!(toM > fromM)) {
+            continue;
+        }
+        const planS = timeInto(iv, toM) - timeInto(iv, fromM);
+        const ratio = Number.isFinite(s.avgPowerW) && iv.powerW > 0 ? Math.min(ratioMax, Math.max(ratioMin, s.avgPowerW / iv.powerW)) : 1;
+        const share = overlap / spanS;
+        expected += share * planS * Math.pow(ratio, -timeExponent(iv, riderKg));
+        actual += share * s.elapsedS;
+    }
+    return Math.min(max, Math.max(min, (expected + priorS) / (actual + priorS)));
 }
 
 /**
@@ -249,7 +302,8 @@ function remainingAtRatio(intervals, planM, finishM, ratio, riderKg) {
  * where the clock started, so a plan from the pen compares with a clock from the line;
  * finishM is where the race ends (the event's distance when it is shorter than the plan).
  * deficitS is the clock against the plan at this metre; the rest is the plan's remaining
- * time at the rider's recent power. pacing is that power ratio.
+ * time at the rider's recent power, at the speed against the plan they have shown. pacing is
+ * that power ratio, speed that speed.
  */
 export function predict({tracking, plan, index, planM, raceS, planTimeAtStart = 0, finishM = null, pastPlan = false}) {
     const intervals = plan.intervals;
@@ -264,11 +318,13 @@ export function predict({tracking, plan, index, planM, raceS, planTimeAtStart = 
     const deficitS = raceS - Math.max(0, planTimeAtMetre(intervals, here) - planTimeAtStart);
     const {ratio, sampleS} = powerRatio(tracking, intervals, raceS);
     const {planS: remainingPlanS, scaledS} = remainingAtRatio(intervals, here, endM, ratio, plan.weightKg);
+    const speed = speedAgainstPlan(tracking, intervals, raceS, planM, plan.weightKg);
     const finished = index >= intervals.length || here >= endM;
-    const remainingS = finished ? 0 : scaledS;
+    const remainingS = finished ? 0 : scaledS / speed;
     const totalS = finished ? raceS : raceS + remainingS;
     return {
         pacing: ratio,
+        speed,
         timeRatio: pacingRatio(tracking, intervals),
         deficitS,
         finishM: endM,

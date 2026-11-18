@@ -22,7 +22,7 @@
 // Pure: the engine feeds it the race clock.
 
 import {timeInto} from './plan.mjs';
-import {timeExponent} from './tracking.mjs';
+import {timeExponent, speedAgainstPlan} from './tracking.mjs';
 
 export const POWER_PRIOR_S = 30;    // the interval's power counts for half after this much of it
 export const POWER_GRACE_S = 3;     // not its first seconds: the rider is still changing power
@@ -45,32 +45,10 @@ export function createCountdown() {
  * faster than the plan (a draft), below slower; 1 with nothing ridden.
  */
 export function speedFactor(tracking, intervals, raceS, planM, riderKg) {
-    const windowStart = raceS - SPEED_WINDOW_S;
-    let expected = 0;
-    let actual = 0;
-    for (const s of tracking.stats) {
-        const iv = intervals[s?.index];
-        if (!s || !(iv?.lengthM > 0) || !(iv.durationS > 0) || !(s.elapsedS > 0)) {
-            continue;
-        }
-        const endS = s.finished && s.endRaceS != null ? s.endRaceS : raceS;
-        const spanS = endS - s.startRaceS;
-        const overlap = Math.min(endS, raceS) - Math.max(s.startRaceS, windowStart);
-        if (!(spanS > 0) || overlap <= 0) {
-            continue;
-        }
-        const fromM = Math.max(iv.startM, Number.isFinite(s.startPlanM) ? s.startPlanM : iv.startM);
-        const toM = s.finished ? iv.endM : Math.min(iv.endM, Number.isFinite(planM) ? planM : fromM);
-        if (!(toM > fromM)) {
-            continue;
-        }
-        const planS = planSeconds(iv, fromM, toM);
-        const ratio = Number.isFinite(s.avgPowerW) && iv.powerW > 0 ? clamp(s.avgPowerW / iv.powerW, RATIO_MIN, RATIO_MAX) : 1;
-        const share = overlap / spanS;
-        expected += share * planS * Math.pow(ratio, -timeExponent(iv, riderKg));
-        actual += share * s.elapsedS;
-    }
-    return clamp((expected + SPEED_PRIOR_S) / (actual + SPEED_PRIOR_S), SPEED_MIN, SPEED_MAX);
+    return speedAgainstPlan(tracking, intervals, raceS, planM, riderKg, {
+        windowS: SPEED_WINDOW_S, priorS: SPEED_PRIOR_S, skipS: 0,
+        ratioMin: RATIO_MIN, ratioMax: RATIO_MAX, min: SPEED_MIN, max: SPEED_MAX,
+    });
 }
 
 /**
