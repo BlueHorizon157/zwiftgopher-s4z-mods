@@ -421,14 +421,14 @@ test('home leaving: the rows keep the category with no road figure; reset clears
     assert.equal(f.lengthM, null);
 });
 
-test('the settings that moved on: a road gap is now the gap on the clock, the play range is one minute', () => {
+test('the settings that moved on: a road gap is now the gap on the clock, the play range is the default (30 s)', () => {
     assert.deepEqual(migrateFieldPrefs({gapMode: 'road'}), {gapMode: 'clock'});
-    assert.deepEqual(migrateFieldPrefs({rivalsRange: 'play'}), {rivalsRange: '60'});
+    assert.deepEqual(migrateFieldPrefs({rivalsRange: 'play'}), {rivalsRange: '30'});
     assert.deepEqual(migrateFieldPrefs({gapMode: 'finish', rivalsRange: '120'}), {}, 'current values stay');
     assert.deepEqual(migrateFieldPrefs({}), {}, 'nothing saved, nothing to change');
-    assert.equal(trackRangeOf('play'), '60');
+    assert.equal(trackRangeOf('play'), '30');
     assert.equal(trackRangeOf('300'), '300');
-    assert.equal(trackRangeOf(undefined), '60');
+    assert.equal(trackRangeOf(undefined), '30');
     assert.equal(gapModeOf('road'), 'clock');
     assert.equal(gapModeOf('finish'), 'finish');
 });

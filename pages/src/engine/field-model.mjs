@@ -621,7 +621,7 @@ export function drift(r) {
 // ---- the rivals track's range and the field's gap mode (settings) ----
 
 export const TRACK_RANGES = ['30', '60', '120', '300', 'field'];
-export const DEFAULT_TRACK_RANGE = '60';
+export const DEFAULT_TRACK_RANGE = '30';   // Dave, 2026-11-18: ±30 s either side of your marker
 export const GAP_MODES = ['clock', 'finish'];
 const FIELD_STEPS_S = [15, 30, 60, 120, 300, 600];
 
@@ -638,7 +638,7 @@ export function gapModeOf(v) {
 
 /**
  * The saved values a window's settings must change to (retired options moved on): a road gap
- * becomes now, the 'play' track range becomes one minute. Returns {key: value} for the changes.
+ * becomes now, the 'play' track range becomes the default. Returns {key: value} for the changes.
  */
 export function migrateFieldPrefs(p = {}) {
     const changes = {};

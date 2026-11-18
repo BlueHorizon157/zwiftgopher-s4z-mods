@@ -219,8 +219,8 @@ strip and under the field header:
 
 The **rivals strip** is for a glance: the riders nearest you on the clock, behind on the left and
 ahead on the right. Each side names the two nearest riders with the gap now and how many seconds a
-minute you gain (+) or lose (−) on them, at the pace of the last four minutes (a sprint barely
-moves it). **Colour marks only the riders in play**, on the name and the dot: **green** is a
+minute you gain (+, green) or lose (−, red) on them, at the pace of the last four minutes (a sprint
+barely moves it). **The names and dots are coloured only for the riders in play**: **green** is a
 target (ahead of you, and at this pace you finish ahead of them or close behind), **red** a threat
 (behind you, and at this pace they finish ahead of you or close behind). Close is a second per
 minute to go, 5 to 30 s. Everyone else stays plain: a rider far behind and falling away, or far
@@ -230,8 +230,8 @@ and nobody is called once you have finished. Hover a name or a dot for the call 
 middle, your place among the riders you can compare with, with the verdict once it has settled
 and the place you are heading for under it; hover it for the reason. Outside a race it shows your
 speed. Below, everyone around you sits on a track by their gap on the clock: a dot each, your own
-in the middle, a finished rider a hollow dot.
-The track reaches ±1 min by default. Settings → Rivals → *Track range* fixes it at ±30 s, ±1, ±2
+in the middle, a finished rider a hollow dot, the riders in play on top.
+The track reaches ±30 s each way by default. Settings → Rivals → *Track range* widens it to ±1, ±2
 or ±5 min, or fits the whole field; its ends count the riders beyond the range on each side.
 
 The field and the rivals strip need an event: outside one, riders have no shared distance to

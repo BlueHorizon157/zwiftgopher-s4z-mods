@@ -6,7 +6,9 @@
 // only (Dave, 2026-11-10), on the dot and the name: green a target (ahead, and you beat them or
 // finish close at this pace), red a threat (behind, and they beat you or finish close); everyone
 // else stays plain. The call comes from the finish outlook, needs the rider's pace (90 s of
-// shared history), and is faint until the outlook settles. The rate keeps its sign and no colour.
+// shared history), and is faint until the outlook settles; called dots sit on top of the rest.
+// The rate is coloured by its sign, as the field's trend (Dave, 2026-11-18: good or bad at a
+// glance): green when you gain on the rider, red when you lose.
 import {startWindow} from './views/runtime.mjs';
 import {startFieldFeed, boundariesOf, fmtGap, shortName, outlookInputsOf, playCall, playWords} from './views/field-feed.mjs';
 import {rows as fieldRows, rivalsOf, trackScale, trackRangeOf, drift, migrateFieldPrefs} from './engine/field-model.mjs';
@@ -28,7 +30,7 @@ export function main() {
         render,
         onReady: api => {
             win = api;
-            // Settings saved by an earlier version: the 'play' range is now one minute.
+            // Settings saved by an earlier version: the retired 'play' range is now the default (30 s).
             for (const [k, v] of Object.entries(migrateFieldPrefs(api.prefs()))) {
                 api.settings?.set(k, v);
             }
@@ -63,7 +65,7 @@ function render(v) {
     const calls = rv.home?.finished ? null : o;
     const named = new Set([...renderSide(els.ahead, rv.ahead, calls), ...renderSide(els.behind, rv.behind, calls)]);
 
-    // The track (settings → Rivals → Track range): ±1 min by default, or ±30 s, ±2 min, ±5 min,
+    // The track (settings → Rivals → Track range): ±30 s by default, or ±1 min, ±2 min, ±5 min,
     // or the whole field. Riders beyond it are counted at the ends.
     const word = rangeWord(mode, t.rangeS);
     setText(els.rangeLeft, [t.hiddenBehind ? `+${t.hiddenBehind}` : '', `${word} behind`].filter(Boolean).join(' · '));
@@ -140,6 +142,11 @@ function renderSide(ol, list, o) {
         // How fast the gap moves (the last minutes); a finished rider has no more to move.
         const dr = x.finished ? null : drift(x);
         put(li, 'rt', c.rt, !dr ? (x.finished ? 'finished' : '') : dr.word === 'holding' ? 'hold' : `${dr.sPerMin > 0 ? '+' : '−'}${Math.abs(dr.sPerMin).toFixed(1)} s a minute`);
+        const rtCls = `rt${dr && dr.word !== 'holding' ? ` trend-${dr.word}` : ''}`;
+        if (li.cache.rtCls !== rtCls) {
+            li.cache.rtCls = rtCls;
+            c.rt.className = rtCls;
+        }
         const ox = o?.riders?.get(x.id) ?? null;
         const call = playCall(ox, {settled: o?.settled});
         const liCls = call ? `play-${call.play}${call.faint ? ' faint' : ''}` : '';

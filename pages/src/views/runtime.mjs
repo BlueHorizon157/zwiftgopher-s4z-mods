@@ -35,7 +35,7 @@ export const SETTINGS_DEFAULTS = {
     gapMode: 'clock',         // field: clock (now, at the same distance) | finish (predicted at the finish)
     allSubgroups: false,      // field: riders of every category
     rivalsEach: 2,            // rivals strip: riders shown each side
-    rivalsRange: '60',        // rivals track: 30 | 60 | 120 | 300 (s each way) | field
+    rivalsRange: '30',        // rivals track: 30 | 60 | 120 | 300 (s each way) | field
 };
 
 /**

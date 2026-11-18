@@ -1,6 +1,6 @@
 // The rivals strip's track and sides, on the clock (engine/field-model.mjs trackScale and
-// rivalsOf): the range (30 s, 1, 2 or 5 minutes, or the whole field; one minute by default, and
-// the retired 'play' reads as one minute), the riders it shows, and the nearest each side.
+// rivalsOf): the range (30 s, 1, 2 or 5 minutes, or the whole field; 30 s by default, and
+// the retired 'play' reads as the default, 30 s), the riders it shows, and the nearest each side.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {trackScale, rivalsOf, trackRangeOf, drift, DEFAULT_TRACK_RANGE, TRACK_RANGES} from '../pages/src/engine/field-model.mjs';
@@ -12,18 +12,21 @@ const r = (id, gapS, paceSPerMin = 0, extra = {}) => ({
 });
 const home = {id: 'home', name: 'You', isHome: true, comparable: true, stale: false, gapS: 0, clockS: 0, finished: false};
 
-test('the default track is one minute each way, and the retired play range reads as one minute', () => {
-    assert.equal(DEFAULT_TRACK_RANGE, '60');
+test('the default track is 30 s each way (Dave, 2026-11-18), and the retired play range reads as the default', () => {
+    assert.equal(DEFAULT_TRACK_RANGE, '30');
     assert.deepEqual(TRACK_RANGES, ['30', '60', '120', '300', 'field']);
-    assert.equal(trackRangeOf('play'), '60');
-    assert.equal(trackRangeOf('nonsense'), '60');
+    assert.equal(trackRangeOf('play'), '30');
+    assert.equal(trackRangeOf('nonsense'), '30');
     assert.equal(trackRangeOf('300'), '300');
+    assert.equal(trackRangeOf('60'), '60', 'a window saved at one minute keeps it');
     const all = [r('near', 20), r('far-ahead', 240), r('far-behind', -400), r('close-behind', -35)];
     const t = trackScale(all, {});
-    assert.equal(t.rangeS, 60);
-    assert.deepEqual(t.shown.map(x => x.id), ['near', 'close-behind']);
+    assert.equal(t.rangeS, 30);
+    assert.deepEqual(t.shown.map(x => x.id), ['near']);
     assert.equal(t.hiddenAhead, 1);
-    assert.equal(t.hiddenBehind, 1);
+    assert.equal(t.hiddenBehind, 2);
+    const minute = trackScale(all, {mode: '60'});
+    assert.deepEqual(minute.shown.map(x => x.id), ['near', 'close-behind']);
 });
 
 test('fixed ranges: 30 s, 2 min, 5 min, and the whole field', () => {
