@@ -15,6 +15,23 @@ export function inEvent(tick) {
     return Boolean(tick?.state?.eventSubgroupId ?? tick?.eventSubgroupId);
 }
 
+/** The tick's event subgroup as a string, or null outside an event (Zwift reports none as 0 or nothing). */
+export function subgroupOf(tick) {
+    const sg = tick?.state?.eventSubgroupId ?? tick?.eventSubgroupId;
+    return sg ? String(sg) : null;
+}
+
+/**
+ * At the start of an event: in its pen (or rolling out of a mass start's pen to the line), where
+ * Zwift's race timer and event distance both sit at zero. Every event begins here, whatever the
+ * rider did before: on 2026-11-18 (The Fan Flats TT) the pen's first tick had time, event distance
+ * and ride distance all 0, after three seconds of ticks that already carried the event's subgroup
+ * but still the warm-up's road, distance and timer.
+ */
+export function atEventStart(tick) {
+    return inEvent(tick) && numberOrNull(tick?.state?.time) === 0 && numberOrNull(tick?.state?.eventDistance) === 0;
+}
+
 export function routeMatches(tick, plan) {
     const routeId = tick?.state?.routeId;
     return plan?.routeId != null && routeId != null && String(routeId) === String(plan.routeId);

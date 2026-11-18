@@ -9,7 +9,14 @@
 //
 // States: idle (no plan or rider) → armed (plan and rider, stats clear) → racing (clock
 // running) → finished. Spectating is a flag over any state: ticks of another rider are
-// ignored. Only an explicit event or a new event subgroup clears statistics.
+// ignored. Only an explicit event, a new event subgroup, or the rider back in the event's pen
+// clears statistics.
+//
+// Joining an event from a free ride, Sauce gives the subgroup a few ticks before Zwift moves the
+// rider to the pen: those ticks still carry the warm-up's road, distance and timer (2026-11-18:
+// 12.8 km and 26 minutes in, which 0.9.6 took for a race 12.8 km along). So after the subgroup
+// arrives nothing is placed or started until the rider is seen at the start (align.mjs
+// atEventStart). And a race whose rider is back at the start for PEN_HOLD_MS is armed again.
 //
 // A plan from here (plan.fromHere: views/from-here.mjs) belongs to the moment it was asked
 // for: it races at once from its anchor while the rider is still in that event, or on that
@@ -18,7 +25,7 @@
 import {normalisePlan} from './plan.mjs';
 import {locate, at, boundary, BEFORE} from './cursor.mjs';
 import {createClock, advanceClock, worldTimeOf, gunToLineS} from './clock.mjs';
-import {inEvent, routeMatches, planMetre, rideDistanceM, mismatchM, eventLengthM, eventLengthFor, eventDistanceM, distanceToGoM, lineInPlanM, alignmentOf, OUT_OF_STEP_M} from './align.mjs';
+import {inEvent, subgroupOf, atEventStart, routeMatches, planMetre, rideDistanceM, mismatchM, eventLengthM, eventLengthFor, eventDistanceM, distanceToGoM, lineInPlanM, alignmentOf, OUT_OF_STEP_M} from './align.mjs';
 import {createTracking, advance, closeInterval, predict, planTimeAtMetre} from './tracking.mjs';
 import {createCourseTracker, advanceCourse, courseMetre} from './course.mjs';
 import {update as wbalUpdate} from './wbal.mjs';
@@ -36,6 +43,10 @@ export const DEFAULT_CONTROLS = {
 };
 
 const OUT_OF_STEP_MOVE_M = 25;      // the kept out-of-step figure moves only for a line this far from it
+// A racing rider at the start of the event this long (Zwift's world time) is back in the pen: a
+// rejoin, or a clock started by mistake. Longer than one stray tick; the pen's own ticks can be
+// 17 s apart while Zwift loads the course.
+export const PEN_HOLD_MS = 2000;
 // The alignment for the view: on the course, the out-of-step figure is the kept one.
 const alignmentWith = (a, keptStepM) => (a.mode === 'course' ? {...a, outOfStepM: keptStepM ?? null} : a);
 // The course tracker of a plan, for a race in an event (course.mjs); none for a free ride or a
@@ -81,6 +92,14 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         // kept at the figure first found: the matched line wanders a few metres with the
         // rider's line through the bends, and the HUD's words should not.
         outOfStepM: null,
+        // Joined an event and not yet seen at its start: the ticks may still be the free ride's.
+        joining: false,
+        // The world time the rider was first seen at the start of the event, in a row of such ticks.
+        atStartSinceMs: null,
+        // The clock was cleared and has not started since: in an event its first start may take
+        // Zwift's race timer as it stands (a reset or a plan loaded mid-race), not only a timer
+        // seen leaving zero.
+        clockFresh: true,
         log: [],
     };
 
@@ -109,6 +128,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         state.anchorDistanceM = null;
         state.gunS = null;
         state.outOfStepM = null;
+        state.clockFresh = true;
         log(`Statistics cleared: ${why}`, nowMs);
     };
 
@@ -155,6 +175,20 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         state.tick = data;
         state.tickMs = nowMs;
 
+        // Joining an event (the header): from a change of subgroup seen between two of the rider's
+        // ticks until the rider is at the start. Kept with or without a plan, so a plan loaded
+        // meanwhile waits too. A tick replayed for a new plan is its own previous one: no change.
+        const wasJoining = state.joining;
+        const startNow = atEventStart(data);
+        const sgNow = subgroupOf(data);
+        if (!sgNow || startNow) {
+            state.joining = false;
+        } else if (state.prevTick && subgroupOf(state.prevTick) !== sgNow) {
+            state.joining = true;
+        }
+        const worldMs = worldTimeOf(data, nowMs);
+        state.atStartSinceMs = startNow ? (state.atStartSinceMs ?? worldMs) : null;
+
         const plan = state.plan;
         if (!plan) {
             setStatus('idle', nowMs);
@@ -197,12 +231,27 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                     setStatus('armed', nowMs);
                 }
             }
+
+            if (state.joining && !wasJoining) {
+                log(`Joined event ${sgNow}: waiting until Zwift puts you in the pen`, nowMs);
+            } else if (wasJoining && !state.joining && startNow) {
+                log('In the pen: the clock starts at the timing line', nowMs);
+            }
+            // Back at the start while racing (Dave, 2026-11-18: detect the pen): the race so far
+            // was not this start's, so it is cleared and armed for the line.
+            if (state.status === 'racing' && eventNow && state.atStartSinceMs != null && worldMs - state.atStartSinceMs >= PEN_HOLD_MS) {
+                clearRace('back at the start of the event (in the pen)', nowMs);
+                setStatus('armed', nowMs);
+            }
         }
+        // Joined, not yet at the start: the tick is still the free ride's, so nothing is placed,
+        // matched or started (a plan from here looks after itself: hereInPlace).
+        const waiting = state.joining && !plan.fromHere;
 
         // The course (course.mjs): in an event, the rider's position is matched on the plan's own
         // course; until it locks, the old rule places the rider.
         // Once finished the course is not fed: the metre stays where the finish put it.
-        const fed = !plan.fromHere && eventNow && state.course != null && state.status !== 'finished';
+        const fed = !plan.fromHere && eventNow && !waiting && state.course != null && state.status !== 'finished';
         if (fed) {
             const s = data.state ?? {};
             advanceCourse(state.course, {lat: Number(s.latlng?.[0]), lng: Number(s.latlng?.[1]), eventM: eventDistanceM(data), lineHintM: lineInPlanM(data, plan), dtS});
@@ -235,10 +284,10 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         const courseTracked = !plan.fromHere && eventNow && courseMetre(state.course) != null;
         const courseJustLocked = fed && state.course.justLocked;
         const lineM = courseTracked && state.course.lineM != null ? state.course.lineM : lineInPlanM(data, plan);
-        const planM = planMetre(data, {offsetM: state.controls.offsetM, anchorDistanceM: state.anchorDistanceM, plan, courseM: courseTracked ? courseMetre(state.course) : null});
+        const planM = waiting ? null : planMetre(data, {offsetM: state.controls.offsetM, anchorDistanceM: state.anchorDistanceM, plan, courseM: courseTracked ? courseMetre(state.course) : null});
         state.planM = planM;
         smoothPower(data, nowMs);
-        if (state.status === 'idle') {
+        if (state.status === 'idle' || waiting) {
             return;
         }
 
@@ -247,7 +296,10 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         const clock = advanceClock(state.clock, {
             kind,
             rule: state.prefs.startRule,
-            prev: state.prevTick,
+            // A cleared clock in an event starts on Zwift's race timer as it stands (a reset, or a
+            // plan loaded mid-race), as a window opened mid-race does: never a free ride's timer,
+            // as nothing starts while joining.
+            prev: state.clockFresh ? null : state.prevTick,
             tick: data,
             plan,
             planM,
@@ -256,6 +308,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         });
         state.clock = clock;
         if (clock.justStarted) {
+            state.clockFresh = false;
             state.planTimeAtStart = planTimeAtMetre(plan.intervals, clock.startPlanM ?? 0);
             // A plan from here starts with the W' the ride so far left (the planner's replay).
             state.wbalJ = plan.fromHere?.startWbalJ ?? plan.wPrimeJ;
@@ -448,6 +501,9 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             }
             case 'reset':
                 clearRace('reset by the rider', nowMs);
+                // The rider says the race is now: a join still waiting for the pen gives way (the
+                // pen, if it comes, arms the race again: PEN_HOLD_MS).
+                state.joining = false;
                 setStatus(state.plan && state.tick && !state.hereSpent ? 'armed' : 'idle', nowMs);
                 if (state.tick && !inEvent(state.tick)) {
                     state.anchorDistanceM = rideDistanceM(state.tick);
