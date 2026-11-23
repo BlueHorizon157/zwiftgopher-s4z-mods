@@ -249,7 +249,17 @@ the library, code entry and the active plan's strategy. Look: background (clear,
 size, and for the HUD its layout, band words and cadence/HR/speed. Pacing: power smoothing,
 on-target band, the amber warning time, how the clock starts. Field: gap now or at the
 finish, every category. Rivals: the track range. Advanced: what Plan it
-plans with, Plan from here's bike and the strategy it starts on, debug log, the telemetry recorder.
+plans with, Plan from here's bike and the strategy it starts on, debug log, the telemetry recorder,
+and *Keep race recordings*.
+
+### Reporting a problem
+
+Turn on Settings → Advanced → *Keep race recordings* once and leave it on. Every event you ride
+is then kept, from ten minutes before you join it to two minutes after the finish, with what
+the mod showed and said, compressed to a few MB, and deleted after 14 days. There is nothing to
+start before a race or save after it: when something goes wrong, open Settings, find the race
+in the list and press *Save* for a `.jsonl.gz` file to send with your report. It is off by
+default; a race Sauce was closed during is saved when Sauce next runs.
 
 ## Development
 
@@ -267,7 +277,8 @@ Any window takes `?replay=<recording>&plan=<plan>&speed=20` to replay a telemetr
 from `pages/fixtures/` instead of live data (`&seek=<s>` fast-forwards, `&bg=snow|jungle|night`
 paints a stand-in background). The synthetic recordings come from
 `scripts/make-synthetic-telemetry.mjs`, with six made-up rivals for the field windows.
-Settings → Advanced → *Record telemetry* records a real ride for that purpose.
+Settings → Advanced → *Record telemetry* records a real ride for that purpose (`?replay=idb`
+plays it back), and a kept race plays with `?replay=race-<subgroup id>`.
 `node scripts/page-check.mjs --out=docs/screenshots` regenerates the screenshots above (it
 writes every moment; the README uses a few). `docs/REVAMP_PLAN.md` is the plan and the audit; `scripts/release.sh`
 builds the release zip from a tag.

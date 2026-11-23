@@ -1,7 +1,8 @@
 // The mod's one door to Sauce4Zwift: subscribe, rpc and storage from /pages/src/common.mjs,
 // with two additions (docs/REVAMP_PLAN.md Phase 0):
 //   ?replay=<name>[&speed=N]  plays pages/fixtures/<name>.jsonl (or the recorder's own
-//                             buffer with ?replay=idb) instead of live data, and runs the
+//                             buffer with ?replay=idb, a kept race with ?replay=race-<key>)
+//                             instead of live data, and runs the
 //                             window's clock (Date.now) on the recording's time;
 //   subscribe(..., {record: true})  feeds the telemetry recorder from that subscription.
 import * as common from '/pages/src/common.mjs';
@@ -75,7 +76,10 @@ export function replayState() {
 }
 
 async function startReplay() {
-    const text = replayName === 'idb' ? await recorder.exportJsonl() : await loadFixture(replayName);
+    // idb: the recorder's buffer; race-<key>: a kept race (Settings → Keep race recordings).
+    const text = replayName === 'idb' ? await recorder.exportJsonl()
+        : replayName.startsWith('race-') ? await recorder.raceJsonl(replayName.slice(5))
+            : await loadFixture(replayName);
     const rows = parseJsonl(text);
     replayRpc = rpcCacheOf(rows);
     const realNow = Date.now.bind(Date);

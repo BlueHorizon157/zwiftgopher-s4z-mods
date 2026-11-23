@@ -5,6 +5,7 @@ import * as common from '/pages/src/common.mjs';
 import {storage} from './mod-storage.mjs';
 import * as store from './store.mjs';
 import * as recorder from './recorder.mjs';
+import {MARKS_KEY, raceFileName} from './race-keeper.mjs';
 import {loadPlanByCode} from './views/plan-loader.mjs';
 import {normalisePlan} from './engine/plan.mjs';
 import {SETTINGS_DEFAULTS} from './views/runtime.mjs';
@@ -410,11 +411,11 @@ function initRecorder() {
         try {
             const s = await recorder.stats();
             checkbox.checked = s.enabled;
-            const mb = (s.bytes / (1024 * 1024)).toFixed(1);
-            const span = s.lastT != null && s.firstT != null ? formatSpan(s.lastT - s.firstT) : '0:00';
+            const span = s.lastAt != null && s.firstAt != null ? formatSpan(s.lastAt - s.firstAt) : '0:00';
             status.textContent = s.enabled
-                ? `Recording: ${s.rows} rows, ${mb} MB, ${span} so far.`
-                : s.rows ? `Off. ${s.rows} rows, ${mb} MB, ${span} kept for saving.` : 'Off.';
+                ? `Recording: ${s.rows} rows, ${span} so far.`
+                : s.keeping ? 'Off (race recordings keep their own).'
+                    : s.rows ? `Off. ${s.rows} rows, ${span} kept for saving.` : 'Off.';
             saveBtn.disabled = !s.rows;
             clearBtn.disabled = !s.rows;
         } catch (err) {
@@ -431,11 +432,79 @@ function initRecorder() {
         recorder.saveAs(`zg-tt-telemetry-${stamp}.jsonl`, text);
     });
     clearBtn.addEventListener('click', async () => {
-        await recorder.clear();
+        await recorder.clear({keepRaces: recorder.isKeeping()});
         refresh();
     });
     refresh();
     setInterval(refresh, 5000);
+    initKeptRaces();
+}
+
+// Keep race recordings (race-keeper.mjs): the switch, what is being kept now, the kept races.
+function initKeptRaces() {
+    const checkbox = document.getElementById('keep-races');
+    const status = document.getElementById('keep-races-status');
+    const table = document.getElementById('race-table');
+    const body = table.querySelector('tbody');
+    let shown = '';
+    const refresh = async () => {
+        checkbox.checked = recorder.isKeeping();
+        let races = [];
+        try {
+            races = await recorder.listRaces();
+        } catch (err) {
+            status.textContent = `Race recordings unavailable: ${err.message}`;
+            return;
+        }
+        const marks = Object.values(storage?.get(MARKS_KEY) ?? {}).filter(m => m && m.doneAt == null && m.startAt != null);
+        const now = marks.length ? ` Recording now: ${esc(marks[0].name ?? 'an event')}, saved two minutes after the finish.` : '';
+        const mb = races.reduce((sum, r) => sum + (r.bytes ?? 0), 0) / (1024 * 1024);
+        status.innerHTML = checkbox.checked
+            ? `On. ${races.length ? `${races.length} race${races.length === 1 ? '' : 's'} kept, ${mb.toFixed(1)} MB.` : 'No race kept yet.'}${now}`
+            : races.length ? `Off. ${races.length} race${races.length === 1 ? '' : 's'} still kept, until each is 14 days old.` : 'Off.';
+        const key = JSON.stringify(races.map(r => [r.key, r.bytes]));
+        if (key === shown) {
+            return;
+        }
+        shown = key;
+        table.hidden = !races.length;
+        body.innerHTML = races.map(r => `<tr data-key="${esc(r.key)}">
+            <td>${esc(raceWhen(r))}<br><span class="muted">${esc(r.name ?? `event ${r.key}`)}</span></td>
+            <td>${esc(r.code ?? '—')}</td>
+            <td>${r.timeS != null ? esc(formatSpan(r.timeS * 1000)) : '<span class="muted">not finished</span>'}</td>
+            <td>${((r.bytes ?? 0) / (1024 * 1024)).toFixed(1)} MB</td>
+            <td class="actions"><button type="button" class="btn small" data-act="save">Save</button><button type="button" class="btn small" data-act="delete">Delete</button></td>
+        </tr>`).join('');
+    };
+    checkbox.addEventListener('change', () => {
+        recorder.setKeeping(checkbox.checked);
+        refresh();
+    });
+    body.addEventListener('click', async ev => {
+        const btn = ev.target.closest('button[data-act]');
+        const key = btn?.closest('tr')?.dataset.key;
+        if (!key) {
+            return;
+        }
+        if (btn.dataset.act === 'save') {
+            const race = (await recorder.listRaces()).find(r => r.key === key);
+            const blob = await recorder.raceBlob(key);
+            if (race && blob) {
+                recorder.saveAs(raceFileName(race), blob);
+            }
+        } else if (btn.dataset.act === 'delete') {
+            await recorder.deleteRace(key);
+            shown = '';
+            refresh();
+        }
+    });
+    refresh();
+    setInterval(refresh, 5000);
+}
+
+function raceWhen(r) {
+    const d = new Date(r.startAt ?? r.savedAt);
+    return d.toLocaleString(undefined, {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 }
 
 function formatSpan(ms) {

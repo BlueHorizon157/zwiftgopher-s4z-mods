@@ -10,6 +10,8 @@ import {fetchEventInfo} from '../eventinfo.mjs';
 import {VERSION} from '../version.mjs';
 import {checkForUpdate, RELEASES_URL} from '../update-check.mjs';
 import {createEngine} from '../engine/engine.mjs';
+import {createRaceWatch} from './race-watch.mjs';
+import * as recorder from '../recorder.mjs';
 import {normalisePlan} from '../engine/plan.mjs';
 import {loadPlanByCode, fetchPlanByCode, loadReplayPlan} from './plan-loader.mjs';
 import {syncOnce, chooseActivation, activePlanStep, planForPlace, fitsEvent, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, shelfPlan, shelfPlanFromHere, PENDING_POLL_MS} from './shelf-sync.mjs';
@@ -158,8 +160,17 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     // The live state in Sauce's athlete data (share.mjs): one window at a time; never a replay.
     const sharer = sauce.isReplay ? null : createSharer({rpc: common.rpc, storage: sauce.storage});
     window.addEventListener('beforeunload', () => sharer?.stop());
+    // Race recordings (Settings → Advanced): the races this window sees, the engine's view and
+    // log for the recorder, and the races that are over saved; never in a replay.
+    const raceWatch = sauce.isReplay || !sauce.storage ? null : createRaceWatch({storage: sauce.storage, engine, recorder});
+    if (raceWatch) {
+        const sweep = () => raceWatch.sweep().catch(err => console.warn('[race-watch]', err));
+        setTimeout(sweep, 15000);
+        setInterval(sweep, 30000);
+    }
     sauce.subscribe('athlete/watching', data => {
         engine.tick(data, Date.now());
+        raceWatch?.tick(data, Date.now());
         sharer?.tick(() => engine.view(), data);
         if (cardWaiting && beforeStart()) {
             syncPlan();

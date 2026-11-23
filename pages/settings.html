@@ -234,6 +234,16 @@
           <button type="button" class="btn" id="record-clear">Clear</button>
         </div>
         <p class="desc">Turning recording on starts a fresh recording; Save writes a .jsonl file to your downloads. Add <code>?replay=idb</code> to a window's address to replay it.</p>
+        <label title="Keep each event you ride for 14 days, so a race where the mod went wrong can be sent in afterwards. Nothing to remember before or after the race">
+          <key>Keep race recordings:</key>
+          <input type="checkbox" id="keep-races">
+        </label>
+        <p class="desc" id="keep-races-status">Off.</p>
+        <table class="plans races" id="race-table" hidden>
+          <thead><tr><th>Race</th><th>Plan</th><th>Time</th><th>Size</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="desc">Only for reporting a problem with the mod. Each event you ride is kept from ten minutes before you join it to two minutes after the finish, with what the mod showed, compressed to a few MB, and deleted after 14 days. Save writes one to your downloads as a .jsonl.gz file to send with your report. Add <code>?replay=race-</code> and the race's number to a window's address to replay it.</p>
         <p class="desc version">TT HUD <span id="version-current">v—</span> <span id="version-status"></span></p>
       </form>
     </div>
