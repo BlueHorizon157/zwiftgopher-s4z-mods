@@ -95,6 +95,25 @@ export function advance(tracking, {index, raceS, power, planM, intervals, atStar
 }
 
 /**
+ * The course found the timing line after the clock started on the old rule's metres: every
+ * interval begun before then began on those metres, shiftM short of the course's. Their metres
+ * are what the speed against the plan reads (speedAgainstPlan): left unshifted, a line found
+ * 69 m on credits the rider with metres not ridden, and the finish prediction said 33 s ahead
+ * a minute into a race finished 9 s behind (Crit Cross, 2026-11-23).
+ */
+export function shiftStarts(tracking, shiftM) {
+    if (!Number.isFinite(shiftM) || shiftM === 0) {
+        return tracking;
+    }
+    for (const s of tracking.stats) {
+        if (s && Number.isFinite(s.startPlanM)) {
+            s.startPlanM += shiftM;
+        }
+    }
+    return tracking;
+}
+
+/**
  * The race is over at the finish: the interval being ridden closes there, so its time is the
  * rider's to the finish and not to the plan's end (the course can put the finish past it).
  */

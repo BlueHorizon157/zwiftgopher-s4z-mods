@@ -259,7 +259,9 @@ is then kept, from ten minutes before you join it to two minutes after the finis
 the mod showed and said, compressed to a few MB, and deleted after 14 days. There is nothing to
 start before a race or save after it: when something goes wrong, open Settings, find the race
 in the list and press *Save* for a `.jsonl.gz` file to send with your report. It is off by
-default; a race Sauce was closed during is saved when Sauce next runs.
+default; a race Sauce was closed during is saved when Sauce next runs. Sauce keeps each window
+profile's settings apart, so turn it on in every profile you race in (and look for a race in Settings
+from a window of the profile you rode it in). *Record telemetry* does not need to be on.
 
 ## Development
 

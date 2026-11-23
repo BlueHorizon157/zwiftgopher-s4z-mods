@@ -26,7 +26,7 @@ import {normalisePlan} from './plan.mjs';
 import {locate, at, boundary, BEFORE} from './cursor.mjs';
 import {createClock, advanceClock, worldTimeOf, gunToLineS} from './clock.mjs';
 import {inEvent, subgroupOf, atEventStart, routeMatches, planMetre, rideDistanceM, mismatchM, eventLengthM, eventLengthFor, eventDistanceM, distanceToGoM, lineInPlanM, alignmentOf, OUT_OF_STEP_M} from './align.mjs';
-import {createTracking, advance, closeInterval, predict, planTimeAtMetre} from './tracking.mjs';
+import {createTracking, advance, closeInterval, shiftStarts, predict, planTimeAtMetre} from './tracking.mjs';
 import {createCourseTracker, advanceCourse, courseMetre} from './course.mjs';
 import {update as wbalUpdate} from './wbal.mjs';
 import {createCountdown, advanceCountdown} from './countdown.mjs';
@@ -70,6 +70,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         course: courseFor(initial),
         courseLoggedDiff: false,
         finishS: null,
+        lastRacePoint: null,
         index: BEFORE,
         displayIndex: BEFORE,
         planM: null,
@@ -116,6 +117,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         state.course = courseFor(state.plan);
         state.courseLoggedDiff = false;
         state.finishS = null;
+        state.lastRacePoint = null;
         state.index = BEFORE;
         state.displayIndex = BEFORE;
         state.planTimeAtStart = 0;
@@ -320,6 +322,10 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         // The clock started at the line before the course found it (Zwift's time, or the event
         // distance from the line): the plan time at the start is the line's, now the line is known.
         if (courseJustLocked && state.clock.running && (state.clock.signal === 'time' || state.clock.signal === 'distance')) {
+            // The first lock: the intervals begun so far were placed on the old rule's metres.
+            if (state.course.locks === 1 && Number.isFinite(state.clock.startPlanM)) {
+                shiftStarts(state.tracking, lineM - state.clock.startPlanM);
+            }
             state.clock = {...state.clock, startPlanM: lineM};
             state.planTimeAtStart = planTimeAtMetre(plan.intervals, lineM);
         }
@@ -330,7 +336,10 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         // With the event's length known, the race ends at the finish, not the plan's end: past
         // the plan's last boundary the last interval stays the target and is ridden on.
         const sauceLength = eventLengthM(data) != null;
-        const index = sauceLength && rawIndex >= plan.intervals.length ? plan.intervals.length - 1 : rawIndex;
+        // A measured course ends at the finish (courseFinishM): with the course locked the race
+        // ends there, whatever Sauce's event length says.
+        const courseEndM = courseLocked ? courseFinishM(plan, data) : null;
+        const index = (sauceLength || courseEndM != null) && rawIndex >= plan.intervals.length ? plan.intervals.length - 1 : rawIndex;
         const speedMs = (Number(data.state?.speed) || 0) / 3.6;
         // The shown interval is the one the rider is in: the target switches at the boundary,
         // when the countdown reaches zero (Dave, 2026-10-27). The plan's boundaries are the
@@ -370,23 +379,29 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             if (closed?.finished && closed.wbalEndJ == null) {
                 closed.wbalEndJ = state.wbalJ;
             }
-            // The finish: Sauce's distance to go is spent (when the event has a length), else the
-            // plan's end. The finish time is the clock's at that tick; the interval ridden closes there.
+            // The finish: the measured course's finish (its time between this tick and the last, at
+            // the finish metre), else Sauce's distance to go spent (when the event has a length),
+            // else the plan's end at this tick's time. The interval ridden closes there.
             const toGo = distanceToGoM(data);
-            const finished = sauceLength
-                ? eventNow && toGo != null && toGo <= 0
-                : index >= plan.intervals.length;
+            const finished = courseEndM != null
+                ? planM >= courseEndM
+                : sauceLength
+                    ? eventNow && toGo != null && toGo <= 0
+                    : index >= plan.intervals.length;
+            const lastPoint = state.lastRacePoint;
+            state.lastRacePoint = {planM, raceS: clock.elapsedS};
             if (finished) {
-                state.finishS = clock.elapsedS;
-                closeInterval(state.tracking, {raceS: clock.elapsedS, power: Number.isFinite(power) ? power : null});
+                state.finishS = courseEndM != null ? crossingS(lastPoint, {planM, raceS: clock.elapsedS}, courseEndM) : clock.elapsedS;
+                closeInterval(state.tracking, {raceS: state.finishS, power: Number.isFinite(power) ? power : null});
                 const ridden = state.tracking.stats[state.tracking.lastIndex];
                 if (ridden?.finished && ridden.wbalEndJ == null) {
                     ridden.wbalEndJ = state.wbalJ;
                 }
                 setStatus('finished', nowMs);
+                const how = courseEndM != null ? ' (the course\'s finish)' : '';
                 log(state.gunS != null
-                    ? `Finished: ${(clock.elapsedS + state.gunS).toFixed(1)} s from the gun (${clock.elapsedS.toFixed(1)} s from the timing line)`
-                    : `Finished: ${clock.elapsedS.toFixed(1)} s on the clock`, nowMs);
+                    ? `Finished: ${(state.finishS + state.gunS).toFixed(1)} s from the gun (${state.finishS.toFixed(1)} s from the timing line)${how}`
+                    : `Finished: ${state.finishS.toFixed(1)} s on the clock${how}`, nowMs);
             }
         } else {
             state.index = index;
@@ -651,9 +666,10 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
 }
 
 /**
- * Where the race ends in plan metres. With the course locked: the rider's plan metre plus the
- * distance to go on the odometer (scaled as the course is). Otherwise the event's distance from
- * the line, when Sauce reports one shorter than the plan; else the plan's end.
+ * Where the race ends in plan metres. A measured course on the road: its finish. With the course
+ * locked: the rider's plan metre plus the distance to go on the odometer (scaled as the course
+ * is). Otherwise the event's distance from the line, when Sauce reports one shorter than the
+ * plan; else the plan's end.
  */
 function finishMetre(data, plan, planM = null, course = null) {
     if (!plan) {
@@ -661,6 +677,10 @@ function finishMetre(data, plan, planM = null, course = null) {
     }
     if (plan.fromHere) {
         return plan.lengthM;     // made to end at the finish (or the route lap's end)
+    }
+    const measuredEndM = courseMetre(course) != null ? courseFinishM(plan, data) : null;
+    if (measuredEndM != null) {
+        return measuredEndM;
     }
     const eventM = eventLengthM(data);
     if (eventM == null) {
@@ -671,6 +691,38 @@ function finishMetre(data, plan, planM = null, course = null) {
         return planM + course.k * (eventM - ed);
     }
     return Math.min(plan.lengthM, eventM + lineInPlanM(data, plan));
+}
+
+// Sauce's event length this far from a measured course's finish: another race (more laps, another
+// route) than the plan's, and the course's finish is not this race's.
+const COURSE_FINISH_TRUST_M = 500;
+
+/**
+ * The finish of a course whose finish was measured from races (route.finish_source: metre 0 is
+ * the timing line and finish_m the finish, past the course's last point when the finish is
+ * beyond the route data), in plan metres, or null. Sauce's own event length comes from the route
+ * data and can be wrong: 84 m long on Crit Cross (2026-11-23), so the mod finished 7 s after the
+ * line (24:15 for ZwiftPower's 24:08). A course measured for its line only (the Hilly Route) keeps
+ * Sauce's finish, which was right there.
+ */
+function courseFinishM(plan, data) {
+    if (plan?.finishSource !== 'measured' || plan.fromHere || !plan.course) {
+        return null;
+    }
+    const endM = plan.finishM ?? plan.lengthM;
+    if (!(endM > 0)) {
+        return null;
+    }
+    const eventM = eventLengthM(data);
+    return eventM != null && Math.abs(eventM - endM) > COURSE_FINISH_TRUST_M ? null : endM;
+}
+
+/** The race time at metre m between two race points ({planM, raceS}); the later one's without a straddle. */
+function crossingS(before, after, m) {
+    if (before && Number.isFinite(before.planM) && Number.isFinite(before.raceS) && after.planM > before.planM && before.planM <= m && m <= after.planM) {
+        return before.raceS + (m - before.planM) / (after.planM - before.planM) * (after.raceS - before.raceS);
+    }
+    return after.raceS;
 }
 
 function idOf(data) {

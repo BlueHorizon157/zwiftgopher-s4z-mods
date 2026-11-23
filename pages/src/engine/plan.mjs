@@ -57,6 +57,8 @@ export function normalisePlan(raw, {code = null, card = null} = {}) {
         routeMPerGameM: scaleOf(route.route_m_per_game_m),
         lineSource: route.line_source === 'measured' || route.line_source === 'rule' ? route.line_source : null,
         finishM: num(route.finish_m) > 0 ? num(route.finish_m) : null,
+        // The finish measured from races, not only the line (planner 2026-11-23): the race ends at finishM.
+        finishSource: route.finish_source === 'measured' ? 'measured' : null,
         leadInM: km(route.lead_in_km),
         cp,
         cpUsed,
