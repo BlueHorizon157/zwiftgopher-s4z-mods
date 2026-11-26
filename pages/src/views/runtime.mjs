@@ -8,7 +8,7 @@ import * as sauce from '../sauce.mjs';
 import * as store from '../store.mjs';
 import {fetchEventInfo} from '../eventinfo.mjs';
 import {VERSION} from '../version.mjs';
-import {checkForUpdate, RELEASES_URL, CLAIM_MS} from '../update-check.mjs';
+import {checkForUpdate, installKind, RELEASES_URL, CLAIM_MS} from '../update-check.mjs';
 import {createEngine} from '../engine/engine.mjs';
 import {createRaceWatch} from './race-watch.mjs';
 import * as recorder from '../recorder.mjs';
@@ -632,6 +632,9 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         if (sauce.isReplay) {
             const asked = new URLSearchParams(window.location.search).get('update');
             update = asked ? {latest: asked, available: true} : update;
+        } else if (await installKind(sauce.common.rpc, window.location.pathname) === 'store') {
+            // Sauce updates a store install itself when it starts.
+            return;
         } else {
             update = await checkForUpdate({fetchFn: fetch, storage: sauce.storage, current: VERSION});
             // Another window is asking GitHub (CLAIM_MS): look at its answer a little later.

@@ -1,7 +1,8 @@
 // The TT HUD's check for a newer version (pages/src/update-check.mjs).
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {compareVersions, newestTag, fetchLatest, checkForUpdate, STORAGE_KEY, UPDATE_CHECK_MS, TIMEOUT_MS} from '../pages/src/update-check.mjs';
+import {compareVersions, newestTag, fetchLatest, checkForUpdate, STORAGE_KEY, UPDATE_CHECK_MS, TIMEOUT_MS,
+    modIdFromPath, installKindOf, askInstallKind} from '../pages/src/update-check.mjs';
 
 const answer = (status, json) => ({ok: status >= 200 && status < 300, status, json: async () => json});
 function fakeFetch(routes) {
@@ -93,4 +94,34 @@ test('a GitHub that never answers ends the check like a failed one (audit 11)', 
     assert.ok(TIMEOUT_MS >= 1000);
     const hang = (url, init) => new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), {name: 'AbortError'}))));
     assert.equal(await fetchLatest(hang, 30), null);
+});
+
+test('the mod id comes from the page address Sauce serves it on', () => {
+    assert.equal(modIdFromPath('/mods/zwiftgopher-tt/pages/hud.html'), 'zwiftgopher-tt');
+    assert.equal(modIdFromPath('/mods/168b965a-c458-49ad-adc7-ee7e8e378ea2/pages/settings.html'), '168b965a-c458-49ad-adc7-ee7e8e378ea2');
+    assert.equal(modIdFromPath('/pages/hud.html'), null, 'not a mod page');
+    assert.equal(modIdFromPath(undefined), null);
+});
+
+const storeId = '168b965a-c458-49ad-adc7-ee7e8e378ea2';
+const mods = [
+    {id: 'zwiftgopher-tt', manifest: {id: 'zwiftgopher-tt', name: 'ZwiftGopher TT'}, packed: false},
+    {id: storeId, manifest: {name: 'ZwiftGopher TT'}, packed: true},
+];
+
+test('a store install is told apart by the top-level id Sauce reports, not the manifest', () => {
+    assert.equal(installKindOf(mods, 'zwiftgopher-tt'), 'folder');
+    assert.equal(installKindOf(mods, storeId), 'store');
+    assert.equal(installKindOf(mods, 'someone-else'), null);
+    assert.equal(installKindOf(null, storeId), null);
+});
+
+test('asking Sauce: the V1 call first, the older name next, null when neither answers', async () => {
+    const path = `/mods/${storeId}/pages/hud.html`;
+    assert.equal(await askInstallKind({getAvailableModsV1: async () => mods}, path), 'store');
+    const older = {getAvailableModsV1: async () => { throw new Error('no such call'); }, getAvailableMods: async () => mods};
+    assert.equal(await askInstallKind(older, path), 'store');
+    assert.equal(await askInstallKind({}, path), null, 'a Sauce without either call');
+    assert.equal(await askInstallKind({getAvailableModsV1: async () => mods}, '/pages/x.html'), null, 'not a mod page');
+    assert.equal(await askInstallKind(null, path), null);
 });

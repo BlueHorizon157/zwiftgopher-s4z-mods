@@ -13,7 +13,7 @@ import {migrateFieldPrefs} from './engine/field-model.mjs';
 import {linkStart, linkStatus, linkRevoke, signedUpTimeTrials, nextTimeTrial, choosePlanForEvent} from './views/shelf-sync.mjs';
 import {plannerLinkSupport} from './views/link-ping.mjs';
 import {VERSION} from './version.mjs';
-import {checkForUpdate, RELEASES_URL} from './update-check.mjs';
+import {checkForUpdate, installKind, RELEASES_URL} from './update-check.mjs';
 
 const KEYS = {hud: 'zg-tt-hud', list: 'zg-tt-list', field: 'zg-tt-field', rivals: 'zg-tt-rivals'};
 const TITLES = {hud: 'TT HUD settings', list: 'TT interval list settings', field: 'TT field settings', rivals: 'TT rivals settings'};
@@ -543,6 +543,10 @@ function formatSpan(ms) {
 async function initVersion() {
     document.getElementById('version-current').textContent = `v${VERSION}`;
     const status = document.getElementById('version-status');
+    if (await installKind(common.rpc, window.location.pathname) === 'store') {
+        status.textContent = 'kept up to date by Sauce';
+        return;
+    }
     const {latest, available} = await checkForUpdate({fetchFn: fetch, storage, current: VERSION});
     if (available) {
         // A button, so the keyboard reaches it.

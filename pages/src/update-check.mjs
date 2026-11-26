@@ -93,3 +93,44 @@ export async function checkForUpdate({fetchFn, storage, current, now = Date.now(
     }
     return {latest, available: Boolean(latest && current && compareVersions(latest, current) > 0)};
 }
+
+// A copy installed from Sauce's mod store is kept up to date by Sauce, so it does not ask GitHub.
+
+/** This copy's mod id: Sauce serves a mod's pages under /mods/<id>/. Null anywhere else. */
+export function modIdFromPath(pathname) {
+    const m = /^\/mods\/([^/]+)\//.exec(String(pathname ?? ''));
+    return m ? decodeURIComponent(m[1]) : null;
+}
+
+/**
+ * 'store' (packed, from Sauce's mod store), 'folder' (unpacked) or null when the list does not
+ * have this id. mods: Sauce's getAvailableMods answer. The id is the top-level one Sauce reports,
+ * never the manifest's: a store install ignores the manifest id.
+ */
+export function installKindOf(mods, id) {
+    const mine = id && Array.isArray(mods) ? mods.find(m => m?.id === id) : null;
+    return mine ? (mine.packed ? 'store' : 'folder') : null;
+}
+
+/** installKindOf for a page, from Sauce. Null when Sauce cannot say (old Sauce, test page). */
+export async function askInstallKind(rpc, pathname) {
+    const id = modIdFromPath(pathname);
+    if (!id || !rpc) {
+        return null;
+    }
+    for (const method of ['getAvailableModsV1', 'getAvailableMods']) {
+        try {
+            return installKindOf(await rpc[method](), id);
+        } catch {
+            // An older Sauce without this call: try the next name.
+        }
+    }
+    return null;
+}
+
+/** askInstallKind for this page, asked once. */
+let kindAsked = null;
+export function installKind(rpc, pathname) {
+    kindAsked ??= askInstallKind(rpc, pathname);
+    return kindAsked;
+}
