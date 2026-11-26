@@ -1,13 +1,17 @@
-# TT Interval Surfaces
+# How the mod follows a race
 
-This directory hosts the two browser surfaces that power the Zwift TT toolkit:
+Every window runs its own engine (`pages/src/engine/`) on Sauce's data for the rider
+(`athlete/watching`, about three ticks a second) and, for the field and rivals windows, the riders
+nearby. The engine is pure: it reads no clock or storage of its own, so it runs in Node under
+`npm test` and replays recorded races exactly (`test/fixtures/recordings/`, anonymised). The windows
+are views over it, so they always agree.
 
-- `tt-dashboard.mjs` renders the pacing dashboard (gauges, finish countdown, debug view).
-- `tt-interval-list.mjs` renders the detailed interval table (target vs. actual metrics for every block).
+The plan is the planner's plan file (`zg-tt-plan/1`, documented with the planner): intervals with
+their start and end metres, target power, plan time, gradient, the W′ the plan leaves, and from
+November 2026 time marks inside each interval, the course itself and where its timing line and
+finish are.
 
-Both screens can be opened independently, and they cooperate through `/tt-dashboards/shared-state` in `localStorage`.
-
-## How the plan metre is found (mod, 2026-11-10)
+## Where you are on the plan
 
 The mod places the rider on the plan's metres (`pages/src/engine/align.mjs`, `course.mjs`,
 `engine.mjs`). Two things had to be found: where the timing line is on the plan's route data,
@@ -39,10 +43,15 @@ and how the game's `eventDistance` (zero at the line) maps onto that data.
   plan length minus the event length when that is a stretch of 0 to 500 m, else the file's
   `start_line_m` (0 on most files), and the plan metre is `eventDistance` plus that line.
   Free rides and plans from here never use the course.
-- **The finish.** With the event's length known, the race ends when Sauce's distance to go is spent,
-  not at the plan's last metre. With the course locked, the finish metre is the rider's metre plus
-  the distance to go, so it can lie past the plan's end; the last interval stays the target until
-  then, and the finished time is the clock's at that tick. The plan's pace carries on past the end.
+- **The finish.** On a plan whose finish the planner measured from races (`route.finish_source`
+  `measured`, plans from 2026-11-23), the race ends at `route.finish_m` on the course, timed between
+  ticks, unless Sauce's event length is more than 500 m away from it (another race on the course).
+  Otherwise, with the event's length known, the race ends when Sauce's distance to go is spent, not
+  at the plan's last metre: with the course locked the finish metre is the rider's metre plus the
+  distance to go, so it can lie past the plan's end; the last interval stays the target until then,
+  and the finished time is the clock's at that tick. The plan's pace carries on past the end.
+  Sauce's length comes from its route data and can be wrong (84 m long on Crit Cross), which is
+  why a measured finish wins.
 - **The clock.** Zwift's clock, or the event distance, starts it at the line. Once the course locks,
   the plan time at the start is re-anchored to the matched line.
 - **A mass start.** The game's distance and timer start at a timing line there too, so the plan's
@@ -55,7 +64,7 @@ and how the game's `eventDistance` (zero at the line) maps onto that data.
   A window opened mid-race takes the crossing from Zwift's timer (to the second); with no start
   time from Sauce nothing is added and every time runs from the line.
 
-Measured on Dave's California Dreamin' ride (route 966890401, 2026-11-10, plan NYC92U, the
+Measured on a recorded California Dreamin' TT (route 966890401, 2026-11-10, plan NYC92U, the
 recording in `test/fixtures/recordings/`): the line is at route-data metre 160.2 (+/- 2) and the
 game's metres are 0.998656 x `eventDistance` + 160.17 (residual sd 1.65 m, max 5 m). The course
 locks at `eventDistance` 37.6 m (the implied line 159.5 m), 3 s after the line. Against the
@@ -67,7 +76,7 @@ the Sauce finish (`eventDistance` 21157.7, plan metre 21290 against the true 212
 at 2095.6 s (Zwift: 2095 s). Without the course the same ride is late by 15 s median (34 s worst
 at the bend): the old rule put the line at the pen.
 
-Measured on Dave's Watopia Hilly Route race (route 2737483381, a 6.1 km custom distance, mass
+Measured on a recorded Watopia Hilly Route race (route 2737483381, a 6.1 km custom distance, mass
 start, no draft, 2026-11-11, ZwiftPower event 5780317, plan KM96SD; the recording and both plans
 are in `test/fixtures/recordings/`, `test/recording-mass-start.test.mjs`):
 
@@ -96,42 +105,38 @@ past a vertex projects onto the vertex with its along-road distance as the offse
 pass for a fix on the road for the first metres past every vertex (on a straight in the unit tests
 that locked the line 6 m wrong).
 
-## Finish-time prediction pipeline
+## The countdown to the next change
 
-1. **Plan ingestion** – Each module loads the shared plan snapshot published by whichever window fetched the plan. A plan is treated as an ordered set of intervals with power targets and durations.
-2. **Distance alignment** – `resolvePlanDistanceKm()` blends event progress (if Zwift exposes it) with the rider's reported distance plus manual/auto offsets so that “where am I in the plan?” stays accurate even if the course is longer/shorter than planned.
-3. **Interval stats accumulation** – Every telemetry tick updates `state.intervalStats[idx]` with elapsed milliseconds and a power integral. When an interval boundary is crossed we call `finalizeIntervalStats()` for the one that just ended and `beginIntervalStats()` for the next. The dashboard now performs this tracking locally, so predictions continue even if the interval list window never opens.
-4. **Pacing ratio** – Once at least `MIN_PACING_SAMPLE_SECONDS` of completed intervals exist we compute an actual/plan ratio (clamped between 0.25× and 4×) that estimates how much quicker or slower the rider is moving than scripted.
-5. **Prediction synthesis** – `computeFinishPrediction()` sums:
-   - `elapsedSeconds`: actual time already ridden (including a partial current interval if available).
-   - `planRemaining`: plan seconds still to go (full remaining intervals + any unfinished remainder of the current block).
-   - `predictedRemaining = planRemaining * pacingRatio`.
-   - `predictedSeconds = max(elapsedSeconds, elapsedSeconds + predictedRemaining)` and it is clamped so the finish clock can never show less time than has already elapsed.
-6. **Shared broadcast** – The resulting structure (predicted total/remaining/delta seconds) is written to `/tt-dashboards/shared-state.finishPrediction` so whichever window is visible can render it instantly.
+`countdown.mjs`. The seconds to the next change count down a second a second and settle on when
+the rider will reach the change, so a hill inside an interval does not make them jump. The estimate
+is the plan's time for the metres left in the interval (from the interval's time marks: a flat
+interval that ends on a climb spends most of its time at the end), answered by the rider's power in
+this interval against its target (the interval's average so far, leaning on the target for its
+first half minute) and by the rider's speed against the plan's at that power over the last five
+minutes (a draft, a planner a little off). The shown figure eases onto the estimate over a few
+seconds and reaches zero at the change. The target switches exactly at the plan's boundary: the
+planner put it where the change pays, so the mod never moves it, and the amber warning (10 s by
+default) is the rider's to use.
 
-### Joining mid-race
+Back-test on four recorded TTs, every tick against when the interval really ended: mean error
+12.7 s for the old distance-over-speed figure, 6.1 s with the clock, 3.4 s with time marks.
 
-Late joins are common, so the prediction logic takes extra steps to avoid double-counting the part of the race that already happened:
+## Ahead, behind and the time to go
 
-- **Partial interval detection** – `detectPartialInterval()` compares the actual distance where we first see the rider to the expected start distance of the active plan interval (scaled to the event distance). If the gap exceeds `INTERVAL_START_TOLERANCE_KM`, the first interval is marked `partial`. Partial intervals are time-tracked so pacing and elapsed clocks remain correct, but they are excluded from plan-completion percentages and pacing-ratio samples.
-- **Progress pinning** – If Zwift provides `remaining`/`remainingEnd` telemetry we pin `resolveBaseDistanceKm()` to that progress rather than the raw bike distance. This ensures riders who hop in with late lap counters still enter the correct interval.
-- **Plan offsets** – Manual offsets and the auto-offset derived from event completion are baked into every distance comparison, so mid-race starts can be aligned quickly without reloading the plan.
-- **Look-ahead** – The next target shows a few seconds (setting, default 5 s) before its boundary, at the current speed. The planner places boundaries where the power changes, so the anticipation lives here.
-- **Plan CP and W'** – The plan's W'bal is tracked with the CP and W' the plan was made with (`rider.cp_used`, `rider.wprime_used_j` in the plan file `zg-tt-plan/1`); older plans fall back to FTP and `settings.wPrime`.
-- **Race elapsed snapshots** – When each interval completes, `finalizeIntervalStats()` snapshots the actual race elapsed time (`watching.state.time`) into `stats.raceElapsedSnapshot`. This becomes the authoritative baseline for predictions.
-- **Prediction from baseline** – `computeFinishPrediction()` finds the last completed interval with a snapshot, uses that as the elapsed baseline, then adds predicted remaining time for future intervals. This ignores all interval durations before the baseline (many are zero for mid-race joins) and uses the event clock as truth.
-- **Example**: Join at 2:13:35 (8015s), complete interval #143 at 2:14:00 (8040s):
-  - Baseline: 8040s (from snapshot)
-  - Remaining: intervals #144-293, predicted at ~35kph with pacing ratio
-  - Predicted finish: 8040s + (remaining intervals × ratio)
-  - Time remaining: remaining intervals × ratio (not comparing to full plan)
-- **Delta calculation** – Shows how much time gained/lost vs plan for remaining intervals: `delta = (remainingPlanSeconds × pacingRatio) - remainingPlanSeconds = remainingPlanSeconds × (pacingRatio - 1)`. Positive = slower than plan, negative = faster. Only shown if delta ≥ 120 seconds (~1km at 30 km/h).
-- **Safe countdowns** – Predictions always use the most recent race elapsed snapshot or current telemetry, ensuring displayed time can never be less than actual elapsed.
+`tracking.mjs` `predict`. The time to go is the plan's time for the rest of the race to the finish
+(see above), answered the same two ways as the countdown: the rider's power against the targets
+over the last ten minutes (leaning on the plan for the first five), through the physics of what is
+left, and their speed against the plan's for the power they rode (leaning on the plan for the first
+minute). The race's first 30 s after the line count for neither: the launch and the speed carried
+over the line say nothing about the rest. Ahead or behind is that prediction against the plan's own
+time, on the same clock. Both ratios are clamped (power 0.5 to 1.5, speed 0.6 to 1.6), and the
+finish can never come before the time already ridden.
 
-Because both windows maintain their own `intervalStats` arrays, they do not step on each other. When only the dashboard is open it now produces the shared finish prediction itself; when both are open their outputs agree because they ingest the same telemetry-derived plan distance and apply the same clamping rules.
+## W′
 
-## Troubleshooting checklist
-
-- **Finish clock stuck at "—"** – Ensure a plan is loaded and either event progress or rider distance is available; without both, the system cannot map onto the scripted intervals.
-- **Prediction seems slow/fast** – Confirm at least 60 seconds of intervals have been finished after joining. Until then `computePacingRatio()` defaults to 1× (plan pace).
-- **Interval stats missing** – Verify `/tt-dashboards/shared-state` is writable. The snapshot helper (`shared-plan-utils.mjs`) trims heavy plan properties to avoid exceeding `localStorage` quotas.
+`wbal.mjs` is the planner's own W′ balance kernel, run on the rider's live power with the CP and
+W′ the plan was made with (`rider.cp_used`, `rider.wprime_used_j`): above CP the balance falls by
+(P − CP)·dt; below CP it refills on Bartram's (2018) time constant, calibrated, and never faster
+than the power held back. So the live bar spends and refills exactly as the plan's W′ figures were
+computed, and "below plan" means the rider has spent more than the plan had by that point. (Sauce's
+own W′ gives every rider 20 kJ.) A plan from here starts the balance where the ride so far left it.

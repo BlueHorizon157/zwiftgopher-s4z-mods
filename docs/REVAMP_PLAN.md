@@ -1,5 +1,11 @@
 # TT Sauce4Zwift mod — Audit and Revamp Plan
 
+> **History.** The audit and plan the mod was rebuilt from in October and November 2026 (0.7
+> on). Every phase is done. It is kept for the decisions it records, which the code's comments
+> cite by section; where a later release changed one, the release notes in `docs/releases/` say so.
+> How the mod works today is in `docs/prediction-pipeline.md` and the README. (`docs/perf-baseline.md`,
+> named below, was retired on 2026-11-26 with its table never filled in.)
+
 **Date:** 2026-10-27. **Code reviewed at:** mod `master` 94c61a3 (today's "plan CP and W' for
 W'bal, look-ahead setting"), against the planner branch `claude/tt-planner` with its
 uncommitted Phase 5 work (`inc/ttplanfile.class.php`, `inc/ttsharedplans.class.php`: share

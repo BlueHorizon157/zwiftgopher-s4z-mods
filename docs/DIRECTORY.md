@@ -1,7 +1,8 @@
 # Listing the mod in the Sauce mod directory
 
-REVAMP_PLAN.md 5.4 and decision 6: submit after Phase 5; alphas keep going out as GitHub
-releases. This is what the listing needs, ready to send.
+REVAMP_PLAN.md 5.4 and decision 6. Releases go out as GitHub releases (full releases since
+0.8.2) until the listing is live. This is what the listing needs, ready to send. Not sent yet
+(2026-11-26).
 
 ## How the directory works
 
@@ -42,18 +43,21 @@ Each release:
 
 | Field | Value |
 |---|---|
-| `version` | `manifest.json` version (0.7.0 first) |
+| `version` | `manifest.json` version |
 | `minVersion` | 2.0.0. The page check passes on Sauce 2.0.0-beta.10 and 2.4.0-alpha.5. |
 | zip, `size`, `hash` | The zip `scripts/release.sh` builds from the tag (`dist/zwiftgopher-s4z-mods-v<version>.zip`, one top folder with `manifest.json` in it, no tests, docs or fixtures). The script prints its size and sha256. |
 | `notes` | One line from the release notes. |
 
 ## Before sending it
 
-1. Release 0.7.0 with the planner deploy (the plan file's card plans and the share text
-   ship with the planner), not before.
-2. A real TT recorded with the field or rivals window open has confirmed the start line
-   and the field's assumptions (REVAMP_PLAN.md, Phase 4 open points).
-3. The logo URL resolves, so `docs/brand/logo.png` is pushed to master.
-4. Once the listing is live, the settings page's update hint (a GitHub tag check once a
+Done: the planner the mod needs is live (0.7.0 shipped with it); real races have been
+recorded with the field and rivals open (California Dreamin' 2026-11-10, Fan Flats
+2026-11-18, both in `test/fixtures/recordings`); the logo URL resolves.
+
+Still to do:
+
+1. Run the page check (`scripts/page-check.mjs`) on the Sauce version riders have now, and set
+   `minVersion` from it.
+2. Once the listing is live, the settings page's update hint (a GitHub release check once a
    day) can go, since Sauce updates directory installs itself. The planner's mod page
    should then point to the directory, and keep the zip for manual installs.

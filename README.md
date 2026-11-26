@@ -52,8 +52,8 @@ window runs on its own, so they always agree.
 3. The HUD says *ready* with the route's name. In the pen it counts down to the start; the
    clock starts when you cross the timing line.
 
-Codes last seven days. The newest ten plans are kept in the mod (settings → Plans) and the
-one made for the event's route is picked for you. To load another plan while one is active,
+Codes last seven days. The newest ten plans are kept in the mod (settings → Plans), one for
+each course, and the one made for the event's route is picked for you. To load another plan while one is active,
 hover the HUD and press **Plan** (a code on the clipboard is offered in the tray too).
 
 ### Linking to the planner
@@ -69,9 +69,8 @@ plan sent again under the same code replaces the one loaded before the start. Th
 shows *Sauce has it ✓* once the mod has saved the plan. Nothing arrives while you race.
 
 The link is a token the mod keeps for itself; the planner keeps only its hash, and either side
-can end it (settings → Plans → **Unlink**, or the planner's Devices list). Linking needs the
-planner update of November 2026; until then the settings page says so and codes work as
-before.
+can end it (settings → Plans → **Unlink**, or the planner's Devices list). If the mod cannot
+reach the planner's linking, the settings page says so and codes work as before.
 
 ### Events
 
@@ -92,7 +91,8 @@ for, so the picker marks them.
 Signed up but no plan? Linked, the next-TT line (and, in the pen, *this event: … · no plan
 yet*) has **Plan it**: the planner builds an optimised plan for that event with your last
 planner settings (or its defaults: settings → Advanced → *Plan it uses*), in a few seconds,
-and the HUD arms it. The plan is on your shelf like any other, so the planner's Load dialog
+and the HUD arms it. An event that sets the bike sets it here too: the CTT bike in a CTT event,
+level 0 with upgrades off, a road bike when TT bikes are not allowed. The plan is on your shelf like any other, so the planner's Load dialog
 opens it for tuning. Six plans an hour, twenty a day; the planner itself is not limited that
 way.
 
@@ -109,7 +109,8 @@ you are and the HUD rides it at once, measured from the moment you pressed, on *
   rest will take for how much of your CP is left. The W′ bar starts where you are.
 - **The bike.** A road bike, unless the event is no-draft or you have raced it with no draft
   at all (TT bikes get none). Any draft is a road bike. Settings → Advanced → *Plan from
-  here's bike* can say Road or TT for good.
+  here's bike* can say Road or TT for good. In an event that sets the bike (a CTT event, or
+  upgrades off), the planner plans on that bike.
 - **Where it applies.** Races by distance once they have started, and free rides on a route
   (the plan ends where the route's lap does). Not a race ridden for a time, not a free ride
   with no route, not the last 500 m.
@@ -125,11 +126,12 @@ It shares Plan it's six plans an hour.
 ### Choosing a strategy
 
 An optimised plan carries the optimiser's three ways to ride it: *Fastest*, *Balanced* and
-*Safe finish*. The HUD's top line shows the one you are on; click it (or **Plan** in the
+*Safe Finish*. The HUD's top line shows the one you are on; click it (or **Plan** in the
 tray, or settings → Plans) and pick another, before the start or during the race. Every window
 rides the new one. During a race the targets change in place: the clock, your position and
-your W′ carry on, and the interval you are in starts its statistics again. A plan edited in
-the planner during a race waits until it is over.
+your W′ carry on, and the interval you are in starts its statistics again. One picked after the
+finish is for the next ride. A plan edited in the planner during a race waits until it is over.
+In the dial the strategy shows at the top while you race; in the stack it leads the top line.
 
 ![plan panel](docs/screenshots/hud-strategy-jungle.png)
 
@@ -154,9 +156,9 @@ the planner during a race waits until it is over.
   predicted finish time? Settings → Pacing → *Finish shows* → *Predicted finish time*. Before
   the start it shows the plan's time; after the finish, your time.
 
-Hover the HUD for the tray: **offset** (nudge the plan ±10 m if its boundaries come early or
-late), **bias** (every target ±1 %), **Reset** (clear this race's statistics), **Plan** (the
-plan panel: strategy and code) and settings.
+Hover the HUD for the tray (or Tab to it): **offset** (nudge the plan ±10 m if its boundaries
+come early or late), **bias** (every target ±1 %), **Reset** (clear this race's statistics),
+**Plan** (the plan panel: strategy and code; Esc closes it) and settings.
 
 ## Where you are on the course
 
@@ -196,19 +198,23 @@ measured at the same distance along the course, where you have both been, so it 
 with like. In a TT riders start apart, so a rider behind you on the road can be ahead on the
 clock. Each rider's place is their rank among the riders you can compare with, you included.
 A rider who has finished keeps their time: it is frozen at the line on their own clock, and
-their place is among the finishers. Riders you cannot yet compare, or have not seen for two
-minutes, sit below a divider with the reason. Click *gap* to switch between the gap now and
-the gap at the finish (predicted from the pace of the last minutes). The next column is the
+their place is among the finishers. Riders you cannot yet compare, have not seen for two
+minutes, or who left the event before the finish, sit below a divider with the reason. Click the
+gap column's heading (*now*) to switch between the gap now and the gap at the finish (predicted
+from the pace of the last minutes; blank until your plan gives you a time to go, and in order of
+the predicted gap once the outlook has settled). The next column is the
 time you gain (+, green) or lose (−, orange) on each rider a minute, over the last four minutes
 (the last minute until four have passed), so a sprint barely moves it. The header sums you up:
 *you 5th of 18 compared*, with the place you are heading for (*→ 4th*) once the outlook has
-settled. After you finish it reads *you finished 2nd of 3 so far*.
+settled. After you finish it reads *you finished 2nd of 3 seen so far*: your place among the
+riders the mod has seen cross the line, so a rider who finished out of its sight is not counted.
 
 The finish outlook predicts each rider's gap to the line at their pace, using your own time to
 go from the plan (which knows the route), so no rider is modelled on the course. It is not
 shown until 20 minutes of racing or five minutes to go: before that the middle of the rivals
 strip shows your place only. Once it has settled, one word sits in the middle of the rivals
-strip and under the field header:
+strip and under the field header. It names only riders who have a pace (as the strip's colours
+do):
 
 | Verdict | When |
 |---|---|
@@ -235,7 +241,11 @@ The track reaches ±30 s each way by default. Settings → Rivals → *Track ran
 or ±5 min, or fits the whole field; its ends count the riders beyond the range on each side.
 
 The field and the rivals strip need an event: outside one, riders have no shared distance to
-compare.
+compare, so they show nothing. With *every category* on, the field adds the other categories of
+the event you are in, not every rider on the map. The finish is where the HUD's is: on a course
+whose finish has been measured, that finish, not Sauce's route length. While you watch another
+rider in Zwift you stay in the middle of the field and the strip, and the outlook pauses
+(*spectating*).
 
 In a group ride or race there is no timing line: the clock runs from the start and the HUD
 says so. Riding the planned route outside an event, the plan arms itself on the route and
@@ -247,8 +257,9 @@ Right-click any window for Sauce's titlebar and its settings button (the HUD als
 its tray). One settings page serves every window and shows what that window uses. Plans:
 the library, code entry and the active plan's strategy. Look: background (clear, smoke, dark, solid), halo strength,
 size, and for the HUD its layout, band words and cadence/HR/speed. Pacing: power smoothing,
-on-target band, the amber warning time, how the clock starts. Field: gap now or at the
-finish, every category. Rivals: the track range. Advanced: what Plan it
+on-target band, the amber warning time, whether the finish cell shows the time to go or the
+predicted finish time, how the clock starts. Field: gap now or at the finish, every category.
+Rivals: one or two riders named each side, the track range. Advanced: what Plan it
 plans with, Plan from here's bike and the strategy it starts on, debug log, the telemetry recorder,
 and *Keep race recordings*.
 
@@ -263,11 +274,34 @@ default; a race Sauce was closed during is saved when Sauce next runs. Sauce kee
 profile's settings apart, so turn it on in every profile you race in (and look for a race in Settings
 from a window of the profile you rode it in). *Record telemetry* does not need to be on.
 
+Send it on the [ZwiftGopher Discord](https://discord.gg/GeZNJp8S6D) or attach it to a
+[GitHub issue](https://github.com/BlueHorizon157/zwiftgopher-s4z-mods/issues).
+
+## What the mod sends, and where
+
+The mod talks to two places, and to nothing else:
+
+- **zwiftgopher.com** (the planner). Loading a plan by its code sends the code. Linking sends
+  your Zwift id and name as Sauce reports them, and a name for the device; after that, with the
+  link's token: the list of your plans (about once a minute while a HUD window is open and no race
+  runs), which ones arrived, the time trials you signed up for (so the planner's picker can mark
+  them), and, when you press them, *Plan it* (the event or route) and *Plan from here* (the event
+  or route, where you are on it and the power Sauce kept for the ride so far). What the planner
+  keeps is in the [guide](https://zwiftgopher.com/TT/guide.php#privacy).
+- **api.github.com**, at most once a day for all windows together, to see whether a newer
+  release is out. It sends nothing about you.
+
+Kept race recordings and the telemetry recorder stay in Sauce's browser storage on your computer
+until you save one to a file.
+
 ## Development
 
 Screenshots without Sauce: `scripts/sauce-standin/server.mjs` serves the windows with a
 stand-in for Sauce's `common.mjs`, and `scripts/guide-shots.mjs` pairs them with a local
-planner and captures the guide's pictures (`--out=../ZwiftGopher/TT/images/guide --webp`).
+planner and captures the guide's pictures (`--out=../ZwiftGopher/TT/images/guide --webp
+--race=cd`: the race moments from the recorded California Dreamin' TT; `CHROME=` to use an
+installed Chrome). The planner's mod page (`TT/images/sauce-mod`) and the screenshots above are
+the same race moments: the mod page's are copies of the guide's, these are them at 1x.
 
 ```
 npm test                       # engine, kernel, plan and page tests (node --test)
@@ -280,7 +314,9 @@ from `pages/fixtures/` instead of live data (`&seek=<s>` fast-forwards, `&bg=sno
 paints a stand-in background). The synthetic recordings come from
 `scripts/make-synthetic-telemetry.mjs`, with six made-up rivals for the field windows.
 Settings → Advanced → *Record telemetry* records a real ride for that purpose (`?replay=idb`
-plays it back), and a kept race plays with `?replay=race-<subgroup id>`.
+plays it back), and a kept race plays with `?replay=race-<subgroup id>`. A replay window starts
+from a copy of your plans, link and controls and keeps what it changes to itself, so replaying a
+race never touches the windows you ride with.
 `node scripts/page-check.mjs --out=docs/screenshots` regenerates the screenshots above (it
 writes every moment; the README uses a few). `docs/REVAMP_PLAN.md` is the plan and the audit; `scripts/release.sh`
 builds the release zip from a tag.
