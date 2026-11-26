@@ -195,6 +195,7 @@ html[data-band-words="false"] .live .word { display: none; }
 .toast .text { overflow: hidden; text-overflow: ellipsis; }
 .toast button { padding: 0.1em 0.5em; }
 .hud:hover .toast,
+.hud:has(.tray:focus-within) .toast,
 .hud.tray-pinned .toast { bottom: 2.3em; }
 
 /* idle: the plan code, obvious; the figures stay out of the way */
@@ -270,6 +271,7 @@ html[data-band-words="false"] .live .word { display: none; }
   pointer-events: none;
 }
 .hud:hover .tray,
+.tray:focus-within,
 html.settings-mode .tray,
 .hud.tray-pinned .tray {
   opacity: 1;
@@ -305,7 +307,8 @@ html[data-layout="strip"] .hud-grid {
   align-items: center;
 }
 html[data-layout="strip"] .cell + .cell { border-left: 1px solid var(--ink-line); padding-left: 1em; }
-html[data-layout="strip"] .vitals { grid-column: 1 / -1; border: 0; padding: 0; justify-content: center; gap: 1.6em; font-size: max(11px, 0.95em); }
+/* .cell.vitals: as specific as ".cell + .cell" above, so its border and padding go; a row, not the cell's column */
+html[data-layout="strip"] .cell.vitals { grid-column: 1 / -1; flex-direction: row; align-items: baseline; border: 0; padding: 0; justify-content: center; gap: 1.6em; font-size: max(11px, 0.95em); }
 html[data-layout="strip"] .dial-svg { display: none; }
 html[data-layout="strip"] .idle { flex-direction: row; flex-wrap: wrap; gap: 0.4em 1.2em; }
 html[data-layout="strip"] .idle .hint { display: none; }
@@ -408,7 +411,17 @@ html[data-layout="dial"] .progress { display: none; }
 html[data-layout="dial"] .tray { font-size: max(11px, calc(var(--f) * 10)); left: 14%; right: 14%; bottom: 3%; border-radius: 0.5em; padding: 0.4em; }
 /* the banner (starts in, ready, finished, a length mismatch): a row above the finish */
 html[data-layout="dial"] .banner { position: absolute; top: calc(var(--t) * 51); left: calc(var(--t) * 76); right: calc(var(--t) * 76); padding: 0; text-align: center; font-size: max(11px, calc(var(--f) * 10)); color: rgba(245, 247, 250, 0.88); }
+/* the strategy chip sits by the plan time before the start (below); racing it is the banner's first line, as the update chip is */
 html[data-layout="dial"] .banner .chip:not(.update) { display: none; }
+html[data-layout="dial"] .hud[data-state="racing"] .banner .chip:not(.update) { display: table; margin: 0 auto 0.05em; font-size: max(10px, 0.8em); line-height: 1.2; }
+html[data-layout="dial"] .hud[data-state="racing"] .banner:has(.chip) { transform: translateY(-1.15em); }
+/* spectating: the rings are the rider's own, dimmed as the figures are */
+.hud.spectating .dial-svg { opacity: 0.45; }
+/* the new-plan offer: where the W' words are (hidden while it shows), inside the circle and clear of the tray; the name is cut by an ellipsis, the tooltip has the rest */
+html[data-layout="dial"] .toast,
+html[data-layout="dial"] .hud:hover .toast,
+html[data-layout="dial"] .hud:has(.tray:focus-within) .toast { top: calc(var(--t) * 180); bottom: auto; max-width: calc(var(--t) * 150); transform: translate(-50%, -50%); font-size: max(11px, calc(var(--f) * 10.5)); }
+html[data-layout="dial"] .hud.offering .wbal { visibility: hidden; }
 html[data-layout="dial"] .finish .chip {
   pointer-events: auto;
   padding: 0 0.55em;
@@ -423,7 +436,7 @@ html[data-layout="dial"] .finish .chip {
 html[data-layout="dial"] .finish .chip:hover { border-color: var(--ink); }
 /* the route name and the finish banner repeat what the rows say: the dial has no room for them */
 html[data-layout="dial"] .banner .name { display: none; }
-html[data-layout="dial"] .hud[data-state="finished"] .banner { display: none; }
+html[data-layout="dial"] .hud[data-state="finished"] .banner:not(:has(.chip)) { display: none; }
 
 /* the rings */
 .dial-svg .disc { fill: transparent; }
@@ -474,7 +487,10 @@ html[data-show-live="true"][data-layout="stack"] .vitals { display: flex; }
 .idle .next-tt[hidden] { display: none; }
 .idle .next-tt .label { color: var(--ink-2); }
 html[data-layout="strip"] .idle .next-tt { display: none; }
-html[data-layout="strip"] .hud.choosing .idle .next-tt:not([hidden]) { display: flex; }
+html[data-layout="strip"] .hud.choosing .idle .next-tt:not([hidden]) { display: flex; flex-wrap: nowrap; max-width: 100%; }
+html[data-layout="strip"] .idle .next-tt .label { display: none; }
+html[data-layout="strip"] .idle .next-tt .text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-layout="strip"] .idle .next-tt button { flex: 0 0 auto; }
 .hud button * { text-shadow: none; }
 .hud button[aria-pressed="true"] { background: var(--ink); color: var(--panel-ink); border-color: transparent; }
 .hud button:disabled { opacity: 0.5; cursor: default; }
@@ -494,6 +510,8 @@ html[data-layout="strip"] .hud.choosing .idle .next-tt:not([hidden]) { display: 
 /* A newer TT HUD: the one chip in the accent's colour, so it reads as news, not a setting. */
 .banner .chip.update { color: #ffd43b; border-color: rgba(255, 212, 59, 0.55); }
 .banner .chip.update:hover { border-color: #ffd43b; }
+/* The stack: the strategy chip comes first in the banner (hud.mjs), flush left, so no words push it out. */
+html[data-layout="stack"] .banner .chip:not(.update) { margin-left: 0; }
 /* The stack's narrow banner: the update on a line of its own, in place of the cut-off route name. */
 html[data-layout="stack"] .banner .chip.update { display: table; margin: 0.35em 0 0; }
 html[data-layout="stack"] .banner .chip.update ~ .name { display: none; }

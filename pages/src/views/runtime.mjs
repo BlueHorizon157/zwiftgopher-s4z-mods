@@ -8,7 +8,7 @@ import * as sauce from '../sauce.mjs';
 import * as store from '../store.mjs';
 import {fetchEventInfo} from '../eventinfo.mjs';
 import {VERSION} from '../version.mjs';
-import {checkForUpdate, RELEASES_URL} from '../update-check.mjs';
+import {checkForUpdate, RELEASES_URL, CLAIM_MS} from '../update-check.mjs';
 import {createEngine} from '../engine/engine.mjs';
 import {createRaceWatch} from './race-watch.mjs';
 import * as recorder from '../recorder.mjs';
@@ -17,6 +17,7 @@ import {loadPlanByCode, fetchPlanByCode, loadReplayPlan} from './plan-loader.mjs
 import {syncOnce, chooseActivation, activePlanStep, planForPlace, fitsEvent, shouldPoll, linkStatus, choosePlanForEvent, nextTimeTrial, signedUpTimeTrials, signupRows, shelfSignups, shelfPlan, shelfPlanFromHere, PENDING_POLL_MS} from './shelf-sync.mjs';
 import {hereTarget, powerHistory, chooseBike, hereOffered, bikeWords, hereCard} from './from-here.mjs';
 import {createSharer} from './share.mjs';
+import {MIN_BIAS} from './dom.mjs';
 
 export const SETTINGS_DEFAULTS = {
     layout: 'auto',           // auto = the manifest window's ?layout
@@ -80,7 +81,13 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     let cardWaiting = false;
     const engine = createEngine({plan: activePlan(), prefs: prefs(), controls: store.getControls()});
     let lastResetAt = store.getControls().resetAt;
-    const eventInfoAsked = new Set();
+    // Subgroup -> {at, tries, busy}: Sauce is asked about the pen the rider is in whenever the
+    // engine has no event info for it (joining, joining again: the engine forgets it on leaving),
+    // not while an ask is out; an answer that says nothing (Sauce did not have the event yet) is
+    // asked again, EVENT_INFO_AGAIN_MS apart, EVENT_INFO_TRIES times.
+    const eventInfoAsked = new Map();
+    const EVENT_INFO_AGAIN_MS = 10000;
+    const EVENT_INFO_TRIES = 6;
     let tickSubgroup = null;            // the pen in the last tick, plan or not (see the tick handler)
     const messages = [];
     const note = message => {
@@ -97,7 +104,22 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     // place, the clock and the W' carrying on. The same plan republished by the planner during
     // a race, or a strategy chosen after the finish, waits until this window's race is over.
     const beforeStart = () => engine.state.status === 'idle' || engine.state.status === 'armed';
+    // The next-TT line says whether there is a plan for that event: work it out again as soon
+    // as the plans or the active plan change (a plan arriving, Use, Load, Clear, another
+    // window), not only once a minute. Coalesced, and after setup (refreshNextTT is below).
+    let libraryKey = null;
+    let nextTTSoon = null;
+    const plansChanged = () => {
+        const key = JSON.stringify([store.getActiveCode(), store.listPlans().map(p => [p.code, savedAtOf(p.code)])]);
+        if (key === libraryKey) {
+            return;
+        }
+        libraryKey = key;
+        clearTimeout(nextTTSoon);
+        nextTTSoon = setTimeout(() => refreshNextTT().catch(() => {}), 100);
+    };
     const syncPlan = () => {
+        plansChanged();
         const code = store.getActiveCode();
         const card = store.getActiveCard();
         const savedAt = savedAtOf(code);
@@ -179,6 +201,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         // away, so the panel offers another; any window may, and the store says it once.
         if (engine.state.hereSpent && engine.state.plan?.fromHere && activeCode && store.getActiveCode() === activeCode) {
             store.setActive(null);
+            syncPlan();        // this window hears no storage event for its own write
             note('The plan from here has ended: you left the race or route it was made for.');
         }
         // The pen the rider is in, from the tick: the engine only tracks the event while it has
@@ -192,14 +215,8 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             }
         }
         const sg = engine.state.event.subgroupId ?? tickSubgroup;
-        if (sg && (engine.state.event.kind == null || String(engine.state.event.infoFor) !== String(sg)) && !eventInfoAsked.has(String(sg))) {
-            eventInfoAsked.add(String(sg));
-            fetchEventInfo(sg).then(info => {
-                lastEventInfo = info;
-                engine.event('eventInfo', info);
-                pickForEvent(info);
-                draw();
-            }).catch(() => {});
+        if (sg && (engine.state.event.kind == null || String(engine.state.event.infoFor) !== String(sg))) {
+            askEventInfo(String(sg));
         }
         draw();
     }, {record: true});
@@ -207,10 +224,31 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
 
     // ---- the plan for the event (TT/RIDE_DAY_PLAN.md 2.4, rules 1 and 2) ----
     // Joining a subgroup: the plan made for this pen, else for this event, else for this route
-    // with the same laps or length, arms itself before the start; once per subgroup, so a
-    // plan the rider then chooses by hand stays.
+    // with the same laps or length, arms itself before the start; once per subgroup, for every
+    // window (the shelf state keeps which pen), so a plan the rider then chooses by hand stays,
+    // and stays when another window is opened in the pen.
     let pickedFor = null;
     let lastEventInfo = null;
+    const askEventInfo = sg => {
+        const asked = eventInfoAsked.get(sg) ?? {at: 0, tries: 0, busy: false};
+        eventInfoAsked.set(sg, asked);
+        if (asked.busy || (asked.tries > 0 && (asked.tries >= EVENT_INFO_TRIES || Date.now() - asked.at < EVENT_INFO_AGAIN_MS))) {
+            return;
+        }
+        asked.busy = true;
+        asked.at = Date.now();
+        fetchEventInfo(sg).then(info => {
+            asked.tries = info.kind == null ? asked.tries + 1 : 0;
+            lastEventInfo = info;
+            engine.event('eventInfo', info);
+            pickForEvent(info);
+            draw();
+        }).catch(() => {
+            asked.tries++;
+        }).finally(() => {
+            asked.busy = false;
+        });
+    };
     const planEntry = p => {
         const n = normalisePlan(p.raw, {code: p.code});
         return {code: p.code, routeId: p.routeId, laps: n?.laps ?? p.raw?.route?.laps ?? null, lengthM: n?.lengthM ?? null, routeName: p.routeName, event: p.event ?? p.raw?.meta?.event ?? null};
@@ -229,20 +267,34 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         return routeId ? {routeId} : null;
     };
     const pickForEvent = info => {
-        if (!info?.subgroupId || pickedFor === String(info.subgroupId) || !beforeStart()) {
+        const pen = info?.subgroupId ? String(info.subgroupId) : null;
+        if (!pen || pickedFor === pen || !beforeStart()) {
             return;
         }
-        pickedFor = String(info.subgroupId);
+        if (store.getShelf().pickedFor === pen) {
+            pickedFor = pen;
+            return;
+        }
+        const claim = () => {
+            pickedFor = pen;
+            store.setShelf({pickedFor: pen});
+        };
         const event = eventOf(info);
         const activeCode = store.getActiveCode();
         const code = choosePlanForEvent({plans: eventPlans(), event, activeCode});
         if (code) {
+            claim();
             store.setActive(code);
             store.setShelf({offer: null});
             syncPlan();
             note(`Plan ${code} for ${info.name ?? 'the event'}.`);
             return;
         }
+        // Sauce has not told which event this is: no pick yet; the next answer picks.
+        if (info.kind == null && info.routeId == null) {
+            return;
+        }
+        claim();
         // Nothing fits this pen: a plan for another course is put away rather than raced here
         // (Dave, 2026-11-09). Only when the event's course is known; a plan from here looks
         // after itself; the rider can load it again by hand and it stays (once per pen).
@@ -299,8 +351,13 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             const key = JSON.stringify(rows.map(r => r.subgroup_id).sort());
             const shelf = store.getShelf();
             if (shelf.signupsSent !== key && now - (shelf.signupsSentAt ?? 0) > 60000) {
-                store.setShelf({signupsSent: key, signupsSentAt: now});
-                shelfSignups(fetch, link.token, rows).catch(() => {});
+                // One try a minute; the planner having them is what marks them sent.
+                store.setShelf({signupsSentAt: now});
+                shelfSignups(fetch, link.token, rows).then(ok => {
+                    if (ok) {
+                        store.setShelf({signupsSent: key});
+                    }
+                }).catch(() => {});
             }
         }
         draw();
@@ -319,6 +376,15 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         }
         const next = nextTTOverride ?? nextTT;
         return next?.routeId ? {...next, inEvent: false} : null;
+    };
+    // The link ends only if it is still the one the request was made with: a pairing started
+    // meanwhile is not the answer's to end.
+    const endLink = token => {
+        if (store.getLink()?.token !== token) {
+            return false;
+        }
+        store.clearLink();
+        return true;
     };
     const planIt = async (target = null) => {
         const link = store.getLink();
@@ -345,7 +411,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
                     result = await shelfPlan(fetch, link.token, target, {inputsSource});
                 } else {
                     if (err.status === 401) {
-                        store.clearLink();
+                        endLink(link.token);
                     }
                     throw err;
                 }
@@ -409,7 +475,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
                     result = await shelfPlanFromHere(fetch, link.token, req, {inputsSource});
                 } else {
                     if (err.status === 401) {
-                        store.clearLink();
+                        endLink(link.token);
                     }
                     throw err;
                 }
@@ -448,6 +514,8 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     // every few seconds, so the planner's claim is seen even with the settings page closed.
     const windowId = Math.random().toString(36).slice(2, 8);
     let linkSupported = null;
+    let unsupportedAt = 0;     // when the planner last answered as if it had no shelf: asked again after UNSUPPORTED_RETRY_MS
+    const UNSUPPORTED_RETRY_MS = 10 * 60 * 1000;
     let syncing = false;
     const pendingStatus = async () => {
         const link = store.getLink();
@@ -478,7 +546,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     const pollShelf = async (force = false) => {
         const link = store.getLink();
         const shelf = store.getShelf();
-        if (syncing || linkSupported === false || sauce.isReplay) {
+        if (syncing || (linkSupported === false && Date.now() - unsupportedAt < UNSUPPORTED_RETRY_MS) || sauce.isReplay) {
             return;
         }
         if (!shouldPoll({link, quiet: beforeStart(), visible: common.isVisible(), lastPollAt: shelf.lastPollAt, now: Date.now(), force})) {
@@ -491,15 +559,20 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
                 fetchFn: fetch,
                 token: link.token,
                 etag: shelf.etag ?? null,
-                library: {has: store.getPlanEntry, save: (code, raw, meta) => store.savePlan(code, raw, {activate: false, ...meta}), prune: store.pruneShelf},
+                library: {has: store.getPlanEntry, save: (code, raw, meta) => store.savePlan(code, raw, {activate: false, ...meta}), prune: store.pruneShelf,
+                    dismissed: p => store.isDismissed(p.code, p.published_at ?? p.created_at ?? null)},
                 loadPlan: fetchPlanByCode,
+                // The request may outlast the pen: nothing changes once the race is on.
+                canApply: beforeStart,
             });
             if (r.status === 'revoked') {
-                store.clearLink();
-                note('The planner link has ended: link again from the settings page.');
+                if (endLink(link.token)) {
+                    note('The planner link has ended: link again from the settings page.');
+                }
             } else if (r.status === 'unsupported') {
                 linkSupported = false;
-                store.setShelf({unsupportedAt: Date.now()});
+                unsupportedAt = Date.now();
+                store.setShelf({unsupportedAt});
             } else if (r.status === 'ok') {
                 linkSupported = true;
                 store.setShelf({etag: r.etag, lastSyncAt: Date.now(), unsupportedAt: null});
@@ -540,6 +613,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             }
         } finally {
             syncing = false;
+            plansChanged();
             draw();
         }
     };
@@ -553,12 +627,17 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     // A newer TT HUD on GitHub (update-check.mjs): once a day for every window together. In
     // replay, ?update=<version> stands in for GitHub (scripts/page-check.mjs, screenshots).
     let update = {latest: null, available: false};
+    let updateReads = 0;
     const checkUpdate = async () => {
         if (sauce.isReplay) {
             const asked = new URLSearchParams(window.location.search).get('update');
             update = asked ? {latest: asked, available: true} : update;
         } else {
             update = await checkForUpdate({fetchFn: fetch, storage: sauce.storage, current: VERSION});
+            // Another window is asking GitHub (CLAIM_MS): look at its answer a little later.
+            if (!update.latest && ++updateReads <= 3) {
+                setTimeout(() => checkUpdate().catch(() => {}), CLAIM_MS + 5000);
+            }
         }
         draw();
     };
@@ -592,20 +671,26 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             draw();
             return true;
         },
-        /** Ride one of the plan's strategy cards (null: the plan as shared): before the start, or racing (in place). */
+        /**
+         * Ride one of the plan's strategy cards (null: the plan as shared): before the start, racing
+         * (in place), or after the finish for the next ride (it waits: syncPlan, cardWaiting).
+         */
         setStrategy(card) {
-            if (!(beforeStart() || engine.state.status === 'racing') || !activeCode) {
+            const finished = engine.state.status === 'finished';
+            if (!(beforeStart() || engine.state.status === 'racing' || finished) || !activeCode) {
                 return false;
             }
             store.setActiveCard(card);
             syncPlan();
-            note(`Strategy: ${engine.state.plan?.strategyLabel ?? 'as shared'}.`);
+            note(finished ? 'Strategy chosen for the next ride.' : `Strategy: ${engine.state.plan?.strategyLabel ?? 'as shared'}.`);
             draw();
             return true;
         },
         beforeStart,
         /** A strategy change is waiting for this race to end. */
         cardWaiting: () => cardWaiting,
+        /** The strategy card chosen (the store's; null: as shared), which may be waiting. */
+        chosenCard: () => store.getActiveCard(),
         reset() {
             const resetAt = Date.now();
             lastResetAt = resetAt;
@@ -622,7 +707,8 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             draw();
         },
         nudgeBias(dir) {
-            const bias = Math.round((store.getControls().bias + dir * 0.01) * 100) / 100;
+            // Never 0: a bias of 0 is read back as none (100 %) and the windows would disagree.
+            const bias = Math.max(MIN_BIAS, Math.round((store.getControls().bias + dir * 0.01) * 100) / 100);
             store.setControls({bias});
             engine.control('bias', bias);
             draw();
@@ -699,7 +785,8 @@ export function enginePrefs(p = {}) {
 /** Plain words for the engine's status, for any window. */
 export function statusWords(v) {
     switch (v.status) {
-        case 'idle': return v.plan ? 'waiting for Zwift' : (store.getLink()?.state === 'linked' ? 'waiting for a plan from the planner' : 'no plan loaded');
+        // A plan waits for its pen or its route (0.8.1); with no ticks at all, for Zwift.
+        case 'idle': return v.plan ? (v.rider ? 'not on its route yet' : 'waiting for Zwift') : (store.getLink()?.state === 'linked' ? 'waiting for a plan from the planner' : 'no plan loaded');
         case 'armed': return v.event?.inEvent ? 'ready, waiting for the start' : 'ready on the route';
         case 'racing': return 'racing';
         case 'finished': return 'finished';

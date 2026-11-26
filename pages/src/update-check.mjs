@@ -7,6 +7,10 @@ export const REPO = 'BlueHorizon157/zwiftgopher-s4z-mods';
 export const RELEASES_URL = `https://github.com/${REPO}/releases/latest`;
 export const UPDATE_CHECK_MS = 24 * 3600 * 1000;
 export const STORAGE_KEY = '/zg-tt/update-check';
+export const TIMEOUT_MS = 8000;
+// A window that starts a check says so at once, for this long: the others (they start together
+// with Sauce) read it and wait for its answer instead of asking too.
+export const CLAIM_MS = 60 * 1000;
 const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
 // The tags come sorted by name as text (v0.9.3 before v0.10.0), so all of them are read and the
 // highest version taken.
@@ -43,10 +47,16 @@ export function newestTag(tags) {
 }
 
 /** The newest version GitHub has, without the v, or null when it cannot be read. */
-export async function fetchLatest(fetchFn) {
+export async function fetchLatest(fetchFn, timeoutMs = TIMEOUT_MS) {
     const get = async url => {
-        const res = await fetchFn(url, {headers: {Accept: 'application/vnd.github+json'}});
-        return res.ok ? res.json() : null;
+        const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+        const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : null;
+        try {
+            const res = await fetchFn(url, {headers: {Accept: 'application/vnd.github+json'}, signal: ctl?.signal});
+            return res.ok ? await res.json() : null;
+        } finally {
+            clearTimeout(timer);
+        }
     };
     try {
         const release = await get(LATEST_API);
@@ -63,12 +73,16 @@ export async function fetchLatest(fetchFn) {
 /**
  * {latest, available}: the newest version known (from the day's check, or a new one when that is
  * older than UPDATE_CHECK_MS) and whether it is newer than current. storage: {get(key), set(key,
- * value)}. A failed check keeps what was known and is not tried again for an hour.
+ * value)}. A failed check keeps what was known and is not tried again for an hour; a check under
+ * way (CLAIM_MS) is not started again by another window.
  */
 export async function checkForUpdate({fetchFn, storage, current, now = Date.now()}) {
     const cached = storage?.get?.(STORAGE_KEY) || {};
     let latest = typeof cached.latest === 'string' ? cached.latest : null;
     if (!cached.at || now - cached.at > UPDATE_CHECK_MS) {
+        // The claim: no await between reading the answer and writing this, so of the windows that
+        // start together the first one asks and the rest see its claim.
+        storage?.set?.(STORAGE_KEY, {at: now - UPDATE_CHECK_MS + CLAIM_MS, latest});
         const fetched = await fetchLatest(fetchFn);
         if (fetched) {
             latest = fetched;

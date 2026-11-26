@@ -3,12 +3,15 @@
 // is and where the plan's sectors end; this converts those from plan metres to event metres.
 import * as sauce from '../sauce.mjs';
 import {createField, ingest, resetField} from '../engine/field-model.mjs';
-import {remainingOf} from './race-time.mjs';
+import {fetchEventInfo} from '../eventinfo.mjs';
+import {contextOf, eventSubgroupIdsOf} from './field-units.mjs';
 
-export function startFieldFeed({view, onUpdate = null}) {
+export function startFieldFeed({view, plan = () => null, onUpdate = null}) {
     const field = createField();
+    const subgroups = new Map();
     sauce.subscribe('nearby', list => {
-        ingest(field, list, Date.now(), contextOf(view()));
+        ingest(field, list, Date.now(), contextOf(view(), plan()));
+        eventSubgroupsOf(field, subgroups);
         onUpdate?.();
     }, {record: true});
     return {
@@ -17,36 +20,23 @@ export function startFieldFeed({view, onUpdate = null}) {
     };
 }
 
-export function contextOf(v) {
-    // Every rider's eventDistance sits at zero until the timing line, so in event metres
-    // the line is 0, whatever the route (docs/REVAMP_PLAN.md 6.2). The event's length is the
-    // line you finish at: a rider who passes it is finished (field-model.mjs). lengthFor is the
-    // category it was read for (null when the tick has none, as on a warm-up route).
-    return {lineM: 0, kind: v?.event?.kind ?? null, gunMs: v?.event?.startMs ?? null, lengthM: v?.event?.lengthM ?? null, lengthFor: v?.event?.lengthFor ?? null};
-}
-
-/**
- * The finish outlook's inputs from the window's view and the rows: your time to go, your race
- * time so far, and your race time at the finish (now plus the time to go; once you are through,
- * your own finish). Null where not known.
- */
-export function outlookInputsOf(v, list) {
-    const remainingS = remainingOf(v);
-    // In a mass start with a known start the field's clocks run from the gun (contextOf), so
-    // yours must here too: the result's clock. When that is not known (a late join, the gun not
-    // found) there is no race time of yours to set against a finisher's, and the outlook falls
-    // back to the gaps; the clock from the line still serves for the early gate.
-    const lineS = Number.isFinite(v?.race?.elapsedS) ? v.race.elapsedS : null;
-    const byGun = v?.event?.kind === 'group' && v?.event?.startMs != null;
-    const raceS = byGun ? (Number.isFinite(v?.race?.officialElapsedS) ? v.race.officialElapsedS : null) : lineS;
-    const elapsedS = raceS ?? lineS;
-    let homeFinishS = raceS != null && Number.isFinite(remainingS) ? raceS + remainingS : null;
-    if (homeFinishS == null) {
-        const home = list.find(r => r.isHome);
-        homeFinishS = home?.finished && home.finishRaceS != null ? home.finishRaceS : null;
+// The subgroups of the event you are in, asked once per category, for "every category": only its
+// own riders. Best effort: until the list is in (or if it never comes) the field falls back to the
+// riders seen since your category began (field-model.mjs inCurrentEvent).
+function eventSubgroupsOf(field, known) {
+    if (field.subgroupId == null) {
+        return;
     }
-    return {remainingS, elapsedS, homeFinishS};
+    const key = String(field.subgroupId);
+    if (!known.has(key)) {
+        known.set(key, null);
+        fetchEventInfo(field.subgroupId)
+            .then(info => (info?.eventId != null ? sauce.rpc.getEvent(Number(info.eventId)) : null))
+            .then(ev => known.set(key, eventSubgroupIdsOf(ev)))
+            .catch(() => {});
+    }
+    field.eventSubgroupIds = known.get(key);
 }
 
 // The pure helpers live in field-units.mjs (testable in node); re-exported here for the windows.
-export {boundariesOf, fmtGap, fmtRate, playCall, playOf, playWords, shortName} from './field-units.mjs';
+export {contextOf, outlookInputsOf, finishLineOf, topRowsOf, shownGapOf, boundariesOf, fmtGap, fmtRate, playCall, playOf, playWords, shortName} from './field-units.mjs';

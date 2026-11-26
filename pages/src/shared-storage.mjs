@@ -23,6 +23,37 @@ export const MOD_PREFIX = '/zg-tt/';
 export const LOCAL_PREFIX = '~zg-tt/';
 
 const localKey = key => LOCAL_PREFIX + key.slice(MOD_PREFIX.length);
+
+/**
+ * A copy of the mod's keys in a localStorage, held in memory, as a localStorage itself: for a
+ * replay window (?replay=), which reads what is there (the plans, the link) and writes only into
+ * the copy, so a replay never changes the plans, the controls or the link the real windows share.
+ */
+export function scratchLocal(local) {
+    const copy = new Map();
+    for (let i = 0; i < (local?.length ?? 0); i++) {
+        const key = local.key(i);
+        if (typeof key === 'string' && key.startsWith(LOCAL_PREFIX)) {
+            copy.set(key, local.getItem(key));
+        }
+    }
+    return {
+        getItem: key => (copy.has(key) ? copy.get(key) : null),
+        setItem: (key, value) => copy.set(key, String(value)),
+        removeItem: key => copy.delete(key),
+    };
+}
+
+/** Sauce's storage as the mod's storage reads it, with no writes (for the replay window's other keys). */
+export function readOnlyStorage(sauce) {
+    return {
+        get: (key, def) => sauce?.get(key, def),
+        set() {},
+        delete() {},
+        addEventListener: (type, fn) => sauce?.addEventListener?.(type, fn),
+        removeEventListener: (type, fn) => sauce?.removeEventListener?.(type, fn),
+    };
+}
 const isMod = key => typeof key === 'string' && key.startsWith(MOD_PREFIX);
 
 /**

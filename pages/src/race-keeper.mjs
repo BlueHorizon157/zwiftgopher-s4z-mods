@@ -58,7 +58,8 @@ export function observeTick(local, tick, nowMs, info = {}) {
     const s = tick.state ?? {};
     if (mem.sg !== sg) {
         mem = {sg, joinedAt: nowMs, penSeen: false, started: false, finished: false, seenAt: nowMs};
-        patches.push({key: sg, subgroupId: sg, joinedAt: nowMs, seenAt: nowMs});
+        // backAt: in the event now, so a leaving before this (and back) no longer ends the race.
+        patches.push({key: sg, subgroupId: sg, joinedAt: nowMs, backAt: nowMs, seenAt: nowMs});
     }
     const patch = {};
     const timerS = Number(s.time) || 0;
@@ -107,7 +108,9 @@ const latest = (a, b) => a == null ? (b ?? null) : b == null ? a : Math.max(a, b
 
 /**
  * Two windows' notes of the same race, in either order, give the same mark: the earliest join,
- * start, finish and leaving, the latest sighting, the first name, a plan code (the latest seen).
+ * start and finish, the latest sighting, the first name, a plan code (the latest seen). The
+ * leaving is the latest one, and none when the rider has been back in the event since (backAt):
+ * leaving the pen and joining it again, or one tick without the event, is not the end of the race.
  */
 export function mergeMark(a, b) {
     if (!a) {
@@ -116,6 +119,8 @@ export function mergeMark(a, b) {
     if (!b) {
         return {...a};
     }
+    const backAt = latest(a.backAt, b.backAt);
+    const leftAt = latest(a.leftAt, b.leftAt);
     return {
         ...a,
         ...b,
@@ -124,7 +129,8 @@ export function mergeMark(a, b) {
         joinedAt: earliest(a.joinedAt, b.joinedAt),
         startAt: earliest(a.startAt, b.startAt),
         finishAt: earliest(a.finishAt, b.finishAt),
-        leftAt: earliest(a.leftAt, b.leftAt),
+        leftAt: leftAt != null && backAt != null && backAt > leftAt ? null : leftAt,
+        backAt,
         seenAt: latest(a.seenAt, b.seenAt),
         timeS: a.timeS ?? b.timeS ?? null,
         name: a.name ?? b.name ?? null,

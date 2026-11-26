@@ -34,7 +34,9 @@ async function request(fetchFn, url, {method = 'GET', token = null, body = null,
     }
     try {
         const resp = await fetchFn(url, {method, headers: h, body: data ? data.toString() : undefined, signal: ctl?.signal});
-        const text = await resp.text().catch(() => '');
+        // A body that fails to arrive (the abort, a dropped connection) is a failed request, not an
+        // empty answer: the catch below gives it status 0.
+        const text = await resp.text();
         let json = null;
         try {
             json = text ? JSON.parse(text) : null;
@@ -91,12 +93,18 @@ export async function linkRevoke(fetchFn, token, deviceId = null) {
  * One sync: the listing (304 when nothing changed), the plans the library lacks or that were
  * republished, each fetched by its code and acknowledged.
  *
- * library: {has(code) -> entry|null, save(code, raw, meta), prune?(codes) -> removed codes};
+ * library: {has(code) -> entry|null, save(code, raw, meta), prune?(codes) -> removed codes,
+ * dismissed?(listing entry) -> whether the rider removed this plan by hand (it is not fetched);
  * loadPlan(code) -> {raw, meta}. The shelf keeps one plan per course; a plan from it that it no
  * longer lists (replaced, or taken off in the planner) leaves the library (prune).
- * Returns {status: 'unchanged'|'ok'|'revoked'|'unsupported'|'error'|'unpaired', etag, plans, added, removed, link, error}.
+ * canApply?() -> whether the library may change now (the caller's engine is before the start):
+ * asked before the library is touched and before each plan is saved, so a sync that began before
+ * the start changes nothing once the race is on; what was left is for the next poll.
+ * Returns {status: 'unchanged'|'ok'|'revoked'|'unsupported'|'error'|'unpaired', etag, plans, added, removed, link, error, incomplete}.
+ * incomplete: a plan could not be fetched or applied now; the etag is null then, so the next poll
+ * reads the listing again instead of being told 304.
  */
-export async function syncOnce({fetchFn, token, etag = null, library, loadPlan}) {
+export async function syncOnce({fetchFn, token, etag = null, library, loadPlan, canApply = null}) {
     const r = await request(fetchFn, `${base()}/shelf.php?action=list`, {token, headers: etag ? {'If-None-Match': etag} : {}});
     if (r.status === 304) {
         return {status: 'unchanged', etag, plans: null, added: [], removed: [], link: null};
@@ -111,17 +119,25 @@ export async function syncOnce({fetchFn, token, etag = null, library, loadPlan})
         return {status: 'error', etag, plans: null, added: [], removed: [], link: null, error: errorOf(r, `The planner answered HTTP ${r.status}.`)};
     }
     const plans = r.json.plans;
+    if (canApply && !canApply()) {
+        return {status: 'ok', etag: null, plans, added: [], removed: [], link: r.json.link ?? null, incomplete: true};
+    }
     // First the plans the shelf no longer has, so a replacement under a new code takes the place.
     const removed = library.prune ? library.prune(plans.map(p => p.code)) : [];
     const added = [];
+    let incomplete = false;
     for (const p of plans) {
-        if (!needsFetch(p, library.has(p.code))) {
+        if (library.dismissed?.(p) || !needsFetch(p, library.has(p.code))) {
             continue;
         }
         try {
             const {raw, meta} = await loadPlan(p.code);
+            if (canApply && !canApply()) {
+                incomplete = true;
+                break;
+            }
             library.save(p.code, raw, {
-                expiresAt: meta?.expires_at ?? p.expires_at ?? null,
+                expiresAt: p.expires_at ?? meta?.expires_at ?? null,
                 event: p.event ?? null,
                 source: p.source ?? 'planner',
                 publishedAt: p.published_at ?? p.created_at ?? null,
@@ -130,11 +146,13 @@ export async function syncOnce({fetchFn, token, etag = null, library, loadPlan})
             added.push(p.code);
             await request(fetchFn, `${base()}/shelf.php`, {method: 'POST', token, body: {action: 'fetched', code: p.code}});
         } catch (err) {
-            // Next poll tries again; the listing still counts as read.
+            // The next poll tries again, so the listing does not count as read: with its etag a 304
+            // would say nothing changed and the plan would never come.
+            incomplete = true;
             console.warn('[shelf] plan', p.code, err);
         }
     }
-    return {status: 'ok', etag: r.etag, plans, added, removed, link: r.json.link ?? null};
+    return {status: 'ok', etag: incomplete ? null : r.etag, plans, added, removed, link: r.json.link ?? null, incomplete};
 }
 
 /** A plan the library lacks, or one republished since (fetched_at NULL again, a newer published_at). */

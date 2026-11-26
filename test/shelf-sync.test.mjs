@@ -1,5 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {syncOnce, needsFetch, chooseActivation, activePlanStep, planForPlace, fitsEvent, shouldPoll, linkStart, linkStatus, serverSupportsLink, signedUpTimeTrials, POLL_GUARD_MS} from '../pages/src/views/shelf-sync.mjs';
 
 // A fetch that answers from a script: [{match: url substring, status, json, etag}].
@@ -85,7 +86,7 @@ test('a plan the library has is left alone unless it was republished', () => {
     assert.equal(needsFetch(plan('A'), {publishedAt: null}), true, 'kept before publications were recorded');
 });
 
-test('a failed plan download leaves the plan for the next poll and the listing read', async () => {
+test('a failed plan download leaves that plan for the next poll; the others are saved and acknowledged', async () => {
     const fetchFn = fakeFetch([
         {match: 'shelf.php?action=list', status: 200, json: listing([plan('AAAAAA'), plan('BBBBBB')]), etag: 'W/"e"'},
         {match: 'shelf.php', method: 'POST', status: 200, json: {success: true}},
@@ -297,4 +298,69 @@ test('a plan the shelf no longer lists (replaced or taken off) leaves the librar
         assert.deepEqual(r2.removed, []);
         assert.equal(lib.map.size, 2);
     }
+});
+
+test('a plan whose download failed is read again at the next poll: the listing is not kept as read (audit 3)', async () => {
+    // The planner's way (TTShelf::etag): the ETag is a hash of the listing, which an acknowledgement changes.
+    const shelf = [plan('AAAAAA')];
+    const etagOf = plans => `W/"${createHash('sha1').update(JSON.stringify(plans)).digest('hex').slice(0, 24)}"`;
+    const fetchFn = async (url, init = {}) => {
+        if (String(url).includes('action=list')) {
+            const etag = etagOf(shelf);
+            if (init.headers['If-None-Match'] === etag) {
+                return {status: 304, ok: false, text: async () => '', headers: {get: () => null}};
+            }
+            return {status: 200, ok: true, text: async () => JSON.stringify(listing(shelf)), headers: {get: n => (n === 'ETag' ? etag : null)}};
+        }
+        shelf.find(p => p.code === new URLSearchParams(init.body).get('code')).fetched_at = '2026-11-08 10:06:00';
+        return {status: 200, ok: true, text: async () => '{"success":true}', headers: {get: () => null}};
+    };
+    const lib = library();
+    let down = true;
+    let etag = null;
+    const poll = async () => {
+        const r = await syncOnce({fetchFn, token: 'zgt_x', etag, library: lib, loadPlan: async code => { if (down) { throw new Error('The planner did not answer in time.'); } return {raw: {code}, meta: {}}; }});
+        etag = r.etag;                                           // what the runtime keeps for the next poll
+        return r;
+    };
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+        const first = await poll();
+        assert.equal(first.status, 'ok');
+        assert.equal(first.etag, null, 'a plan is missing: the listing does not count as read');
+        down = false;
+        const second = await poll();
+        assert.equal(second.status, 'ok', 'asked for the listing again, not told 304');
+        assert.deepEqual(second.added, ['AAAAAA']);
+    } finally {
+        console.warn = warn;
+    }
+    assert.ok(lib.map.has('AAAAAA'));
+});
+
+test('an answer whose body fails to arrive is an error, not a planner without a shelf, and not "HTTP 200" (audit 8)', async () => {
+    const stalled = async () => ({status: 200, ok: true, headers: {get: () => null}, text: async () => { const e = new Error('The operation was aborted'); e.name = 'AbortError'; throw e; }});
+    const r = await syncOnce({fetchFn: stalled, token: 'zgt_x', library: library(), loadPlan: async () => ({})});
+    assert.equal(r.status, 'error');
+    assert.match(r.error, /did not answer in time/);
+    await assert.rejects(shelfPlan(stalled, 'zgt_x', {routeId: '1'}), /did not answer in time/);
+    // A 200 that is a page, not the shelf (an old server), is still "no shelf".
+    const html = async () => ({status: 200, ok: true, headers: {get: () => null}, text: async () => '<html>old server</html>'});
+    assert.equal((await syncOnce({fetchFn: html, token: 'zgt_x', library: library(), loadPlan: async () => ({})})).status, 'unsupported');
+});
+
+test('a sync that may not change the library (the race is on) fetches nothing and prunes nothing (audit 2)', async () => {
+    const fetchFn = fakeFetch([
+        {match: 'shelf.php?action=list', status: 200, json: listing([plan('NEWNEW')]), etag: 'W/"n"'},
+        {match: 'shelf.php', method: 'POST', status: 200, json: {success: true}},
+    ]);
+    const lib = library({OLDOLD: {raw: {}, shelf: true}});
+    const r = await syncOnce({fetchFn, token: 'zgt_x', library: lib, loadPlan: async () => { throw new Error('must not load'); }, canApply: () => false});
+    assert.deepEqual([r.added, r.removed, r.etag, r.incomplete], [[], [], null, true]);
+    assert.ok(lib.map.has('OLDOLD'));
+    // The race starts while a plan is being downloaded: it is not saved, and the listing is read again later.
+    let racing = false;
+    const r2 = await syncOnce({fetchFn, token: 'zgt_x', library: library(), loadPlan: async code => { racing = true; return {raw: {code}, meta: {}}; }, canApply: () => !racing});
+    assert.deepEqual([r2.added, r2.etag, r2.incomplete], [[], null, true]);
 });

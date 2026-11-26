@@ -527,3 +527,121 @@ test('a mass start with no start time from Sauce: each rider\'s clock starts at 
         assert.ok(Math.abs(r.startWT - (EPOCH + 19_000)) <= 1000, `${r.name} started at the line: ${r.startWT - EPOCH} ms`);
     }
 });
+
+// ---- the pre-1.0 audit of the field and rivals (2026-11-26) ----
+
+test('spectating: you (the self entry) stay home while another rider is watched', () => {
+    const mine = entry(1, {t: 10});
+    mine.self = true;
+    const other = entry(2, {watching: true, t: 10});
+    const watched = createField();
+    ingest(watched, [mine, other], EPOCH + 10_000, {lineM: 0, kind: 'tt'});
+    assert.equal(watched.homeId, '2', 'not spectating: the watched rider is home');
+    const spectating = createField();
+    ingest(spectating, [mine, other], EPOCH + 10_000, {lineM: 0, kind: 'tt', spectating: true});
+    assert.equal(spectating.homeId, '1', 'spectating: you stay home');
+    const list = rows(spectating, {nowMs: EPOCH + 10_000});
+    assert.equal(list.find(x => x.isHome)?.id, '1');
+});
+
+test('a rider who leaves the event before the finish is not compared (the gap they left with does not stand for ever)', () => {
+    const ctx = {lineM: 0, kind: 'tt', gunMs: null, lengthM: 20000, lengthFor: '9'};
+    const f = createField();
+    simulate(f, [
+        {id: 1, startS: 0, speedMs: 10, watching: true, name: 'Home'},
+        {id: 2, startS: 0, speedMs: 10.2, name: 'Quitter'},
+    ], 600, ctx);
+    assert.equal(rows(f, {nowMs: EPOCH + 600_000}).find(x => x.name === 'Quitter').comparable, true);
+    // Quits the event but rides on in the list: no category, the distance at zero.
+    for (let t = 601; t <= 1100; t++) {
+        ingest(f, [entry(1, {startS: 0, speedMs: 10, watching: true, t, name: 'Home'}), entry(2, {t, speedMs: 10.2, subgroup: 0, distanceM: 0, name: 'Quitter'})], EPOCH + t * 1000, ctx);
+    }
+    const list = rows(f, {nowMs: EPOCH + 1100_000});
+    const quitter = list.find(x => x.name === 'Quitter');
+    assert.equal(quitter.comparable, false);
+    assert.equal(quitter.reason, 'left the event');
+    assert.ok(quitter.distanceM > 5000, `the distance they reached is kept, not 0 (${quitter.distanceM})`);
+    assert.deepEqual(placeOf(list), {place: 1, of: 1}, 'nobody counts but you');
+    // Back in an event (a rejoin): compared again from a new start, not by the old gap.
+    ingest(f, [entry(1, {startS: 0, speedMs: 10, watching: true, t: 1101, name: 'Home'}), entry(2, {t: 1101, speedMs: 10, distanceM: 0, name: 'Quitter'})], EPOCH + 1101_000, ctx);
+    assert.equal(f.riders.get('2').left, false);
+});
+
+test('a rider who crosses the line out of the list and is seen again just past it is finished with a time, as one first seen past it is', () => {
+    const L = 20000;
+    const ctx = {lineM: 0, kind: 'tt', gunMs: null, lengthM: L, lengthFor: '9'};
+    const f = createField();
+    for (let t = 0; t <= 2100; t++) {
+        const list = [entry(1, {startS: 0, speedMs: 9.9, watching: true, t, name: 'Home'})];
+        // Rider 2 is out of the list from 1950 s (19.5 km) to 2005 s: it crosses the line unseen, 2000 s in.
+        if (t <= 1950 || t > 2005) {
+            list.push(entry(2, {startS: 0, speedMs: 10, t, name: 'Late'}));
+        }
+        ingest(f, list, EPOCH + t * 1000, ctx);
+    }
+    const late = rows(f, {nowMs: EPOCH + 2100_000}).find(x => x.name === 'Late');
+    assert.equal(late.finished, true);
+    assert.ok(Number.isFinite(late.finishRaceS), 'a time, not "finished, time not seen"');
+    assert.ok(Math.abs(late.finishRaceS - 2000) < 2, `about 2000 s (${late.finishRaceS})`);
+    assert.equal(late.finishPlace, 1, 'counted among the finishers');
+});
+
+test('a mass start: a rider seen after the event\'s start time arrived has the same clock as the riders seen before it (a window opened mid-race)', () => {
+    const ZWIFT_EPOCH_MS = 1414016074400;
+    const gunMs = EPOCH + ZWIFT_EPOCH_MS;     // the gun at world time EPOCH, on Unix scale
+    const f = createField();
+    // Everyone reaches the line 18 s after the gun: the game's distance and timer start there.
+    const at = (id, t, v, extra = {}) => entry(id, {startS: 18, speedMs: v, t, watching: id === 1, ...extra});
+    for (let t = 100; t <= 400; t++) {
+        const list = [at(1, t, 10), at(2, t, 10.2)];
+        if (t >= 200) {
+            list.push(at(3, t, 10.1));
+        }
+        // The event info (kind, start) arrives after the first ticks.
+        const ctx = t < 103 ? {lineM: 0, kind: null, gunMs: null} : {lineM: 0, kind: 'group', gunMs};
+        ingest(f, list, EPOCH + t * 1000, ctx);
+    }
+    const list = rows(f, {nowMs: EPOCH + 400_000});
+    const gap = id => list.find(x => x.id === String(id)).gapS;
+    // At metre 3820 home is at 382 s from the line; rider 3 got there at 378.2 s, rider 2 at 374.5 s.
+    assert.ok(Math.abs(gap(2) - 7.5) < 1, `rider 2 ${gap(2)}`);
+    assert.ok(Math.abs(gap(3) - 3.8) < 1, `rider 3 ${gap(3)} (was 17 s out)`);
+    for (const id of [1, 2, 3]) {
+        assert.equal(f.riders.get(String(id)).startSource, 'gun');
+    }
+});
+
+test('outside an event there is no field; every category means the riders of the event you are in', () => {
+    // A free ride: no category for home, riders about on the map.
+    const free = createField();
+    for (let t = 0; t < 30; t++) {
+        ingest(free, [entry(1, {watching: true, t, subgroup: 0, distanceM: 0}), entry(2, {t, subgroup: 0, distanceM: 0}), entry(3, {t, subgroup: 777, speedMs: 10})], EPOCH + t * 1000, {lineM: 0, kind: null});
+    }
+    assert.deepEqual(rows(free, {nowMs: EPOCH + 30_000}), []);
+    assert.deepEqual(rows(free, {nowMs: EPOCH + 30_000, allSubgroups: true}), []);
+
+    // An event 100 (home's category), its other category 101, another event's riders (555), a free rider,
+    // and a finisher left from an earlier event (50).
+    const f = createField();
+    const ctx = {lineM: 0, kind: 'tt', gunMs: null};
+    for (let t = 0; t <= 100; t++) {
+        ingest(f, [entry(9, {t, subgroup: 50, speedMs: 20, name: 'Old finisher'})], EPOCH + t * 1000, {...ctx, lengthM: 1500, lengthFor: '50'});
+    }
+    for (let t = 101; t <= 400; t++) {
+        const list = [
+            entry(1, {watching: true, t, subgroup: 100, startS: 101, speedMs: 10, name: 'Home'}),
+            entry(2, {t, subgroup: 100, startS: 101, speedMs: 10.1, name: 'Same'}),
+            entry(3, {t, subgroup: 101, startS: 101, speedMs: 9.9, name: 'Other category'}),
+            entry(4, {t, subgroup: 555, startS: 101, speedMs: 10.4, name: 'Other event'}),
+            entry(5, {t, subgroup: 0, distanceM: 0, name: 'Free'}),
+        ];
+        ingest(f, list, EPOCH + t * 1000, ctx);
+    }
+    const names = opts => rows(f, {nowMs: EPOCH + 400_000, ...opts}).map(x => x.name).sort();
+    assert.deepEqual(names({}), ['Home', 'Same']);
+    // The event's own subgroups are not known yet: riders in a category seen since yours began.
+    assert.deepEqual(names({allSubgroups: true}), ['Home', 'Other category', 'Other event', 'Same']);
+    // Known (the event's own list): only those.
+    f.eventSubgroupIds = new Set(['100', '101']);
+    assert.deepEqual(names({allSubgroups: true}), ['Home', 'Other category', 'Same']);
+});

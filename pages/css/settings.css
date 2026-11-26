@@ -2,9 +2,10 @@
 #settings {
   padding: 0 1rem 1rem;
 }
+/* !important: the host's own label rule (Sauce's settings page) must not show what this page hides */
 #settings .section[hidden],
 #settings label[hidden] {
-  display: none;
+  display: none !important;
 }
 #settings .section .desc {
   font-size: 0.85em;

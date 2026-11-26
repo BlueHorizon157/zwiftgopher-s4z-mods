@@ -2,7 +2,7 @@
 // the plans from the shelf that left it.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {courseOf, sameCourse, dropTwins, shelfLeavers} from '../pages/src/plan-library.mjs';
+import {courseOf, sameCourse, dropTwins, shelfLeavers, hasExpired} from '../pages/src/plan-library.mjs';
 
 const HILLY = '2737483381';
 const raw = (route, meta = {}) => ({schema: 'zg-tt-plan/1', route: {id: HILLY, ...route}, meta});
@@ -54,4 +54,19 @@ test('the plans from the shelf that it no longer lists leave; a plan loaded by i
     assert.deepEqual(shelfLeavers(plans, ['AAAAAA']), ['BBBBBB']);
     assert.deepEqual(shelfLeavers(plans, []), ['AAAAAA', 'BBBBBB'], 'an empty shelf: every shelf plan goes');
     assert.deepEqual(shelfLeavers(plans, ['AAAAAA', 'BBBBBB']), []);
+});
+
+test('a plan the shelf stops listing stays when it is the active plan or has expired (an ISO time, the SQL text in UTC, epoch seconds) (audit 2)', () => {
+    const now = Date.UTC(2026, 10, 28, 18, 0);
+    const plans = {
+        ACTIVE: entry(raw({laps: 1}), {shelf: true}),
+        ISOOLD: entry(raw({laps: 2}), {shelf: true, expiresAt: '2026-11-28T17:00:00Z'}),
+        SQLOLD: entry(raw({laps: 3}), {shelf: true, expiresAt: '2026-11-28 17:59:59'}),
+        EPOCHOLD: entry(raw({laps: 4}), {shelf: true, expiresAt: Math.floor(now / 1000) - 5}),
+        SOON: entry(raw({laps: 5}), {shelf: true, expiresAt: '2026-11-28 18:00:01'}),
+        FUTURE: entry(raw({laps: 6}), {shelf: true, expiresAt: '2026-12-01T00:00:00+00:00'}),
+        NOEND: entry(raw({laps: 7}), {shelf: true}),
+    };
+    assert.deepEqual(shelfLeavers(plans, [], {activeCode: 'ACTIVE', now}), ['SOON', 'FUTURE', 'NOEND']);
+    assert.deepEqual([hasExpired({expiresAt: '2026-11-28 18:00:00'}, now), hasExpired({expiresAt: 'soon'}, now), hasExpired({}, now)], [true, false, false]);
 });

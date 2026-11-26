@@ -1,5 +1,7 @@
 // What kind of event the rider is in and when it started (docs/REVAMP_PLAN.md 1.2), from
-// Sauce's event RPCs, cached per subgroup. The engine takes it as event('eventInfo').
+// Sauce's event RPCs, cached per subgroup (an answer that says nothing is not kept: Sauce may
+// not have had the event yet, and the next ask goes to it again). The engine takes it as
+// event('eventInfo').
 import {rpc} from './sauce.mjs';
 
 const cache = new Map();
@@ -43,5 +45,10 @@ export async function fetchEventInfo(subgroupId) {
         };
     })();
     cache.set(key, promise);
+    promise.then(info => {
+        if (info.kind == null) {
+            cache.delete(key);
+        }
+    }, () => cache.delete(key));
     return promise;
 }

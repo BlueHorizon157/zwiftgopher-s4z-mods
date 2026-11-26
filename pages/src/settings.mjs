@@ -10,7 +10,8 @@ import {loadPlanByCode} from './views/plan-loader.mjs';
 import {normalisePlan} from './engine/plan.mjs';
 import {SETTINGS_DEFAULTS} from './views/runtime.mjs';
 import {migrateFieldPrefs} from './engine/field-model.mjs';
-import {linkStart, linkStatus, linkRevoke, serverSupportsLink, signedUpTimeTrials, nextTimeTrial, choosePlanForEvent} from './views/shelf-sync.mjs';
+import {linkStart, linkStatus, linkRevoke, signedUpTimeTrials, nextTimeTrial, choosePlanForEvent} from './views/shelf-sync.mjs';
+import {plannerLinkSupport} from './views/link-ping.mjs';
 import {VERSION} from './version.mjs';
 import {checkForUpdate, RELEASES_URL} from './update-check.mjs';
 
@@ -89,9 +90,9 @@ async function initLink() {
             const who = link.riderName ? `${link.riderName} (Zwift id ${link.zwiftId})` : `Zwift id ${link.zwiftId}`;
             const when = shelf.lastSyncAt ? `last checked ${agoWords(shelf.lastSyncAt)}` : 'not checked yet';
             els.linkedText.textContent = `Linked as ${who}${link.plannerLabel ? `; planner on ${link.plannerLabel}` : ''}. Plans arrive while a HUD window is open and no race is running; ${when}.`;
-            els.devices.innerHTML = devices.map(d => `<li><b>${esc(d.kind === 'mod' ? 'Sauce mod' : 'Planner')}</b> ${esc(d.label ?? '')}${d.id === link.deviceId ? ' <i>(this Sauce)</i>' : ''}`
+            setMarkup(els.devices, devices.map(d => `<li><b>${esc(d.kind === 'mod' ? 'Sauce mod' : 'Planner')}</b> ${esc(d.label ?? '')}${d.id === link.deviceId ? ' <i>(this Sauce)</i>' : ''}`
                 + ` <span class="muted">· ${esc(d.last_seen_at ? `seen ${agoWords(d.last_seen_at)}` : 'not seen yet')}</span>`
-                + `${d.id === link.deviceId ? '' : ` <button type="button" class="btn small" data-device="${d.id}">Remove</button>`}</li>`).join('');
+                + `${d.id === link.deviceId ? '' : ` <button type="button" class="btn small" data-device="${esc(d.id)}">Remove</button>`}</li>`).join(''));
         }
         if (state === 'expired') {
             say('The code ran out before the planner used it. Start again.');
@@ -99,15 +100,27 @@ async function initLink() {
             say('The link has ended. Link again when you need it.');
         }
     };
-    // An old planner has no link.php: say so rather than fail on the button.
-    const supported = await serverSupportsLink(fetch);
-    if (!supported) {
-        els.block.classList.add('unsupported');
-        els.start.disabled = true;
-        say('The planner does not offer linking yet: the planner side is updated first, then this works.');
-        render();
-        return;
-    }
+    // What the planner said to the ping (link-ping.mjs): 'yes', 'no' (an old planner with no link.php:
+    // say so rather than fail on the button) or 'away' (no answer just now: the buttons still work,
+    // Unlink clears the link here whatever the planner says, and the ping is asked again every 30 s).
+    let support = 'yes';
+    const SUPPORT_SAYS = {
+        no: 'The planner does not offer linking yet. Plans still load with their code, below.',
+        away: "Can't reach the planner right now: trying again. Plans already here still work.",
+    };
+    const showSupport = () => {
+        els.block.classList.toggle('unsupported', support !== 'yes');
+        els.start.disabled = support === 'no';
+        if (support !== 'yes') {
+            say(SUPPORT_SAYS[support]);
+        } else if (Object.values(SUPPORT_SAYS).includes(els.message.textContent)) {
+            say('');
+        }
+    };
+    const ping = async () => {
+        support = await plannerLinkSupport(fetch);
+        showSupport();
+    };
     const athleteName = a => a?.sanitizedFullname ?? a?.fullname ?? [a?.firstName ?? a?.fname, a?.lastName ?? a?.lname].filter(Boolean).join(' ') ?? null;
     els.start.addEventListener('click', async () => {
         els.start.disabled = true;
@@ -130,7 +143,7 @@ async function initLink() {
         } catch (err) {
             say(err.message);
         } finally {
-            els.start.disabled = false;
+            els.start.disabled = support === 'no';
             render();
         }
     });
@@ -141,7 +154,11 @@ async function initLink() {
         say(text, true);
         render();
         if (link?.token) {
-            await linkRevoke(fetch, link.token).catch(() => {});
+            const ended = await linkRevoke(fetch, link.token).catch(() => false);
+            if (!ended && text) {
+                // The link is gone here whatever the planner says; it may still list this Sauce.
+                say(`${text} The planner did not confirm it, so it may still list this Sauce: remove it in the planner's Devices list.`);
+            }
         }
     };
     els.cancel.addEventListener('click', () => endLink(''));
@@ -206,6 +223,12 @@ async function initLink() {
     store.onChange(render);
     render();
     refreshDevices();
+    ping();
+    setInterval(() => {
+        if (support === 'away') {
+            ping();
+        }
+    }, 30000);
 }
 
 // ---- the next time trials (TT/RIDE_DAY_PLAN.md 2.4) ----
@@ -245,11 +268,11 @@ function initNextTimeTrials() {
         }
         rows.sort((a, b) => a.ts - b.ts);
         box.hidden = rows.length === 0;
-        list.innerHTML = rows.slice(0, 6).map(r => {
+        setMarkup(list, rows.slice(0, 6).map(r => {
             const when = new Date(r.ts).toLocaleString([], {weekday: 'short', hour: '2-digit', minute: '2-digit'});
             const status = r.planCode ? `plan ${esc(r.planCode)}${r.planCode === store.getActiveCode() ? ' (active)' : ''}` : 'no plan yet';
             return `<li><b>${esc(when)}</b> ${esc(r.name ?? '')} <span class="muted">· ${status}${r.source === 'shelf' ? ' · from the planner' : ' · signed up'}</span></li>`;
-        }).join('');
+        }).join(''));
     };
     refresh();
     setInterval(refresh, 60000);
@@ -342,10 +365,10 @@ function renderPlans() {
     const plans = store.listPlans();
     renderStrategy(active);
     if (!plans.length) {
-        tbody.innerHTML = '<tr class="empty"><td colspan="5">No plans yet. Load one with its code above.</td></tr>';
+        setMarkup(tbody, '<tr class="empty"><td colspan="5">No plans yet. Load one with its code above.</td></tr>');
         return;
     }
-    tbody.innerHTML = plans.map(p => `
+    setMarkup(tbody, plans.map(p => `
         <tr class="${p.code === active ? 'active' : ''}">
           <td>${esc(p.code)}</td>
           <td>${esc(p.routeName ?? 'custom route')}${courseText(p.raw) ? ` <span class="muted">· ${esc(courseText(p.raw))}</span>` : ''}</td>
@@ -355,7 +378,7 @@ function renderPlans() {
             ${p.code === active ? '' : `<button type="button" class="btn small" data-action="use" data-code="${esc(p.code)}">Use</button>`}
             <button type="button" class="btn small" data-action="remove" data-code="${esc(p.code)}">Remove</button>
           </td>
-        </tr>`).join('');
+        </tr>`).join(''));
 }
 
 /** The active plan's strategy cards (5.2), when the plan file carries their plans. */
@@ -373,14 +396,14 @@ function renderStrategy(code) {
         return;
     }
     document.getElementById('strategy-plan').textContent = `${code}, ${plan.routeName ?? 'custom route'}`;
-    document.getElementById('strategy-choices').innerHTML = choices.map(c => `
+    setMarkup(document.getElementById('strategy-choices'), choices.map(c => `
         <label class="choice">
           <input type="radio" name="strategy" value="${esc(c.value)}" data-key="${esc(c.key)}"${c.selected ? ' checked' : ''}>
           <span class="name">${esc(c.label)}</span>
           <span class="tnum">${esc(c.timeText ?? '')}</span>
           <span class="tnum">${Number.isFinite(c.avgPowerW) ? `${Math.round(c.avgPowerW)} W` : ''}</span>
           <span class="tnum">${Number.isFinite(c.minWbalKj) ? `W′ low ${c.minWbalKj.toFixed(1)} kJ` : ''}</span>
-        </label>`).join('');
+        </label>`).join(''));
 }
 
 function expiryWords(expiresAt) {
@@ -468,13 +491,13 @@ function initKeptRaces() {
         }
         shown = key;
         table.hidden = !races.length;
-        body.innerHTML = races.map(r => `<tr data-key="${esc(r.key)}">
+        setMarkup(body, races.map(r => `<tr data-key="${esc(r.key)}">
             <td>${esc(raceWhen(r))}<br><span class="muted">${esc(r.name ?? `event ${r.key}`)}</span></td>
             <td>${esc(r.code ?? '—')}</td>
             <td>${r.timeS != null ? esc(formatSpan(r.timeS * 1000)) : '<span class="muted">not finished</span>'}</td>
             <td>${((r.bytes ?? 0) / (1024 * 1024)).toFixed(1)} MB</td>
             <td class="actions"><button type="button" class="btn small" data-act="save">Save</button><button type="button" class="btn small" data-act="delete">Delete</button></td>
-        </tr>`).join('');
+        </tr>`).join(''));
     };
     checkbox.addEventListener('change', () => {
         recorder.setKeeping(checkbox.checked);
@@ -522,13 +545,38 @@ async function initVersion() {
     const status = document.getElementById('version-status');
     const {latest, available} = await checkForUpdate({fetchFn: fetch, storage, current: VERSION});
     if (available) {
-        status.textContent = `Update available: v${latest}`;
+        // A button, so the keyboard reaches it.
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn small';
+        button.title = 'Opens the release page';
+        button.textContent = `Update available: v${latest}`;
+        button.addEventListener('click', () => window.open(RELEASES_URL, '_blank'));
+        status.replaceChildren(button);
         status.classList.add('alert');
-        status.onclick = () => window.open(RELEASES_URL, '_blank');
     } else {
         status.textContent = latest ? 'up to date' : '';
     }
 }
+
+/**
+ * Set an element's markup only when it changed, and keep the keyboard focus through a rebuild:
+ * a list drawn again on every change would drop the focus from the radio or button being used.
+ */
+function setMarkup(el, html) {
+    if (el.__markup === html) {
+        return;
+    }
+    el.__markup = html;
+    const active = document.activeElement;
+    const had = active && active !== el && el.contains(active) ? focusKey(active) : null;
+    el.innerHTML = html;
+    if (had) {
+        [...el.querySelectorAll(active.tagName)].find(e => focusKey(e) === had)?.focus();
+    }
+}
+
+const focusKey = e => ['type', 'name', 'value', 'data-action', 'data-code', 'data-device', 'data-key'].map(a => e.getAttribute(a)).join('|');
 
 function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));

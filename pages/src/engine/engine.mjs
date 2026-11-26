@@ -17,6 +17,10 @@
 // 12.8 km and 26 minutes in, which 0.9.6 took for a race 12.8 km along). So after the subgroup
 // arrives nothing is placed or started until the rider is seen at the start (align.mjs
 // atEventStart). And a race whose rider is back at the start for PEN_HOLD_MS is armed again.
+// The wait is not for ever (2026-11-26 audit): a rider who joins a race in progress, or whose
+// subgroup drops out and returns, is never seen at the start. It ends when the ticks show
+// another course than the one the join began on, or after JOIN_WAIT_MS; and the same subgroup
+// back within REJOIN_MS is the same race, not a join.
 //
 // A plan from here (plan.fromHere: views/from-here.mjs) belongs to the moment it was asked
 // for: it races at once from its anchor while the rider is still in that event, or on that
@@ -25,9 +29,9 @@
 import {normalisePlan} from './plan.mjs';
 import {locate, at, boundary, BEFORE} from './cursor.mjs';
 import {createClock, advanceClock, worldTimeOf, gunToLineS} from './clock.mjs';
-import {inEvent, subgroupOf, atEventStart, routeMatches, planMetre, rideDistanceM, mismatchM, eventLengthM, eventLengthFor, eventDistanceM, distanceToGoM, lineInPlanM, alignmentOf, OUT_OF_STEP_M} from './align.mjs';
+import {inEvent, subgroupOf, atEventStart, routeMatches, planMetre, rideDistanceM, mismatchM, eventLengthM, raceLengthM, eventLengthFor, eventDistanceM, distanceToGoM, lineInPlanM, alignmentOf, numberOrNull, OUT_OF_STEP_M} from './align.mjs';
 import {createTracking, advance, closeInterval, shiftStarts, predict, planTimeAtMetre} from './tracking.mjs';
-import {createCourseTracker, advanceCourse, courseMetre} from './course.mjs';
+import {createCourseTracker, advanceCourse, courseMetre, maxStepM} from './course.mjs';
 import {update as wbalUpdate} from './wbal.mjs';
 import {createCountdown, advanceCountdown} from './countdown.mjs';
 
@@ -47,6 +51,22 @@ const OUT_OF_STEP_MOVE_M = 25;      // the kept out-of-step figure moves only fo
 // rejoin, or a clock started by mistake. Longer than one stray tick; the pen's own ticks can be
 // 17 s apart while Zwift loads the course.
 export const PEN_HOLD_MS = 2000;
+// Joined and never seen at the start: the ticks are taken as the race's after this long. The Fan
+// Flats warm-up ticks (2026-11-18) were 3 s of the subgroup and then 17 s of nothing before the
+// pen, so they are over long before this; and if a stale tick did get through, the pen arms the
+// race again (PEN_HOLD_MS).
+export const JOIN_WAIT_MS = 30000;
+// The same subgroup seen again this soon after it was lost is the same race.
+export const REJOIN_MS = 20000;
+// A finish by Sauce's distance to go counts when the rider's event distance is this near the
+// event's length: Sauce's remaining is the length less the event distance, so a real finish
+// always is, and a stray reading of 0 in the middle of the race is not.
+export const FINISH_SLACK_M = 50;
+// The file a plan came from, apart from its intervals (the signature): the course, the finish, the
+// timing line, CP and W'. A plan sent again with the same intervals and these changed (after the
+// planner's update, or the rider's numbers) is not the plan already loaded (2026-11-26 audit).
+const inputsOf = p => `${p.course ? `${p.course.count}:${p.course.m[p.course.count - 1]}` : 0}|${p.startLineM}|${p.finishM}|${p.finishSource}|${p.cp}|${p.wPrimeJ}`;
+const samePlan = (a, b) => a?.signature === b?.signature && (!a || inputsOf(a) === inputsOf(b));
 // The alignment for the view: on the course, the out-of-step figure is the kept one.
 const alignmentWith = (a, keptStepM) => (a.mode === 'course' ? {...a, outOfStepM: keptStepM ?? null} : a);
 // The course tracker of a plan, for a race in an event (course.mjs); none for a free ride or a
@@ -95,6 +115,15 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         outOfStepM: null,
         // Joined an event and not yet seen at its start: the ticks may still be the free ride's.
         joining: false,
+        // The world time the join began, the course the rider was on then, and the last subgroup
+        // seen with its world time (a subgroup back within REJOIN_MS is no join).
+        joinSinceMs: null,
+        joinCourseId: null,
+        lastInEvent: null,
+        // The subgroup the rider finished in, then cleared the race (Reset, a plan loaded): the
+        // timer keeps running and the distance to go stays spent after the finish, so the next
+        // race starts only at a real start (the pen, or another event), never on the old timer.
+        afterFinish: null,
         // The world time the rider was first seen at the start of the event, in a row of such ticks.
         atStartSinceMs: null,
         // The clock was cleared and has not started since: in an event its first start may take
@@ -183,12 +212,28 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         const wasJoining = state.joining;
         const startNow = atEventStart(data);
         const sgNow = subgroupOf(data);
+        const worldMs = worldTimeOf(data, nowMs);
+        const courseId = numberOrNull(data.state?.courseId);
         if (!sgNow || startNow) {
             state.joining = false;
         } else if (state.prevTick && subgroupOf(state.prevTick) !== sgNow) {
-            state.joining = true;
+            const back = state.lastInEvent?.sg === sgNow && worldMs >= state.lastInEvent.worldMs && worldMs - state.lastInEvent.worldMs <= REJOIN_MS;
+            if (!back) {
+                state.joining = true;
+                state.joinSinceMs = worldMs;
+                state.joinCourseId = courseId;
+            }
+        } else if (state.joining && (worldMs - state.joinSinceMs >= JOIN_WAIT_MS || (courseId != null && state.joinCourseId != null && courseId !== state.joinCourseId))) {
+            // Not at the start after all this time, or the world has changed since the join (the
+            // stale ticks carry the warm-up's course): the rider joined a race in progress.
+            state.joining = false;
         }
-        const worldMs = worldTimeOf(data, nowMs);
+        if (sgNow && !state.joining) {
+            state.lastInEvent = {sg: sgNow, worldMs};
+        }
+        if (state.afterFinish != null && (!sgNow || startNow || sgNow !== state.afterFinish)) {
+            state.afterFinish = null;
+        }
         state.atStartSinceMs = startNow ? (state.atStartSinceMs ?? worldMs) : null;
 
         const plan = state.plan;
@@ -217,8 +262,15 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 if (state.status !== 'idle') {
                     clearRace(subgroupId ? `event ${subgroupId}` : 'left the event', nowMs);
                 }
-                state.event = {subgroupId, kind: subgroupId ? state.event.kind && state.event.infoFor === subgroupId ? state.event.kind : null : null, startMs: null, name: null, infoFor: subgroupId ? state.event.infoFor : null};
-                if (state.status === 'racing' || state.status === 'finished') {
+                // What Sauce said of this event stays when it came before the subgroup was seen here
+                // (the rider had no plan then: the engine only follows the event with one). The
+                // subgroup is a number on a tick and a string in the info.
+                const known = subgroupId && String(state.event.infoFor) === String(subgroupId);
+                state.event = {subgroupId, kind: known ? state.event.kind : null, startMs: known ? state.event.startMs : null, name: known ? state.event.name : null, infoFor: subgroupId ? state.event.infoFor : null};
+                if (!subgroupId) {
+                    // Left the event: idle, so the plan arms on its route below as on any free ride.
+                    setStatus('idle', nowMs);
+                } else if (state.status === 'racing' || state.status === 'finished') {
                     setStatus('armed', nowMs);
                 }
             }
@@ -248,7 +300,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         }
         // Joined, not yet at the start: the tick is still the free ride's, so nothing is placed,
         // matched or started (a plan from here looks after itself: hereInPlace).
-        const waiting = state.joining && !plan.fromHere;
+        const waiting = (state.joining || state.afterFinish != null) && !plan.fromHere;
 
         // The course (course.mjs): in an event, the rider's position is matched on the plan's own
         // course; until it locks, the old rule places the rider.
@@ -331,11 +383,11 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         }
 
         // The cursor, the statistics, the prediction, the W'.
-        const power = Number(data.state?.power);
+        const power = numberOrNull(data.state?.power) ?? NaN;
         const rawIndex = planM == null ? state.index : locate(plan.intervals, planM, state.index);
         // With the event's length known, the race ends at the finish, not the plan's end: past
         // the plan's last boundary the last interval stays the target and is ridden on.
-        const sauceLength = eventLengthM(data) != null;
+        const sauceLength = raceLengthM(data) != null;
         // A measured course ends at the finish (courseFinishM): with the course locked the race
         // ends there, whatever Sauce's event length says.
         const courseEndM = courseLocked ? courseFinishM(plan, data) : null;
@@ -347,6 +399,31 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         state.displayIndex = index;
         if (state.status === 'racing' && clock.running && planM != null) {
             const before = state.tracking.lastIndex;
+            // A boundary crossed between two ticks was crossed in between, not at this tick: with
+            // a gap in the ticks (a dropout, a stall) the whole gap went to the interval left, whose
+            // metres were counted in full, and the rider looked slow by the length of the gap for
+            // minutes (2026-11-26 audit: a 6 s gap over the first boundary of Crit Cross put the
+            // prediction 24 s out). Not timed by when the metre moved by itself (the course's lock)
+            // or further than any rider rides in the time.
+            const lp = state.lastRacePoint;
+            if (!courseJustLocked && before != null && before >= 0 && index > before && lp && Number.isFinite(lp.planM) && planM > lp.planM) {
+                const dtS = clock.elapsedS - lp.raceS;
+                if (dtS > 0 && planM - lp.planM <= maxStepM(dtS)) {
+                    for (let j = before; j < index && j < plan.intervals.length; j++) {
+                        const boundaryM = plan.intervals[j].endM;
+                        const share = Math.min(1, Math.max(0, (boundaryM - lp.planM) / (planM - lp.planM)));
+                        advance(state.tracking, {
+                            index: j + 1,
+                            raceS: lp.raceS + share * dtS,
+                            power: Number.isFinite(power) ? power : null,
+                            planM: boundaryM,
+                            intervals: plan.intervals,
+                            atStart: false,
+                            startLineM: lineM,
+                        });
+                    }
+                }
+            }
             advance(state.tracking, {
                 index,
                 raceS: clock.elapsedS,
@@ -383,10 +460,13 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             // the finish metre), else Sauce's distance to go spent (when the event has a length),
             // else the plan's end at this tick's time. The interval ridden closes there.
             const toGo = distanceToGoM(data);
+            // Sauce's distance to go is spent, with the rider at the event's length (FINISH_SLACK_M):
+            // one stray reading of 0 mid-race (2026-11-26 audit) is not the finish.
+            const edM = eventDistanceM(data);
             const finished = courseEndM != null
                 ? planM >= courseEndM
                 : sauceLength
-                    ? eventNow && toGo != null && toGo <= 0
+                    ? eventNow && toGo != null && toGo <= 0 && edM != null && raceLengthM(data) - edM <= FINISH_SLACK_M
                     : index >= plan.intervals.length;
             const lastPoint = state.lastRacePoint;
             state.lastRacePoint = {planM, raceS: clock.elapsedS};
@@ -396,6 +476,11 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 const ridden = state.tracking.stats[state.tracking.lastIndex];
                 if (ridden?.finished && ridden.wbalEndJ == null) {
                     ridden.wbalEndJ = state.wbalJ;
+                }
+                // The total and the ahead or behind are the finish's own, not the last prediction's
+                // (made up to a second before, from the tick before it).
+                if (state.lastPrediction) {
+                    state.lastPrediction = {...state.lastPrediction, remainingS: 0, totalS: state.finishS, deltaS: state.finishS - state.lastPrediction.planTotalS};
                 }
                 setStatus('finished', nowMs);
                 const how = courseEndM != null ? ' (the course\'s finish)' : '';
@@ -439,7 +524,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
     }
 
     function smoothPower(data, nowMs) {
-        const p = Number(data.state?.power);
+        const p = numberOrNull(data.state?.power) ?? NaN;
         if (!Number.isFinite(p)) {
             return;
         }
@@ -452,6 +537,14 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             state.ema += alpha * (p - state.ema);
         }
         state.emaMs = ms;
+    }
+
+    // After a finish the rider is still in the event, with the timer running on and the distance
+    // to go spent: clearing the race there must not start a new one on that timer (a Reset or a
+    // plan loaded after the finish gave a second finish, 30 s late, in the audit). The subgroup
+    // to wait out, or null.
+    function spentEvent() {
+        return state.status === 'finished' && state.tick && inEvent(state.tick) ? subgroupOf(state.tick) : null;
     }
 
     function control(name, value) {
@@ -473,13 +566,15 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         switch (name) {
             case 'plan': {
                 const next = payload?.plan ? (payload.plan.signature ? payload.plan : normalisePlan(payload.plan, {code: payload.code})) : null;
-                if (next?.signature === state.plan?.signature) {
+                if (samePlan(next, state.plan)) {
                     return;
                 }
+                const spent = spentEvent();
                 state.plan = next;
                 state.hereSpent = false;
                 state.controls = {...DEFAULT_CONTROLS};
                 clearRace(next ? `plan ${next.routeName ?? next.code ?? ''}` : 'plan cleared', nowMs);
+                state.afterFinish = spent;
                 setStatus('idle', nowMs);
                 if (next && state.tick) {
                     tick(state.tick, nowMs);
@@ -493,7 +588,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 // rider's controls stay; the interval statistics start again (the strategies'
                 // intervals differ), the interval in progress as a partial one.
                 const next = payload?.plan ? (payload.plan.signature ? payload.plan : normalisePlan(payload.plan, {code: payload.code})) : null;
-                if (next?.signature === state.plan?.signature) {
+                if (samePlan(next, state.plan)) {
                     return;
                 }
                 if (state.status !== 'racing' || !next || !state.plan) {
@@ -514,8 +609,10 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 }
                 break;
             }
-            case 'reset':
+            case 'reset': {
+                const spent = spentEvent();
                 clearRace('reset by the rider', nowMs);
+                state.afterFinish = spent;
                 // The rider says the race is now: a join still waiting for the pen gives way (the
                 // pen, if it comes, arms the race again: PEN_HOLD_MS).
                 state.joining = false;
@@ -525,6 +622,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                     state.armedWorldMs = worldTimeOf(state.tick, nowMs);
                 }
                 break;
+            }
             case 'start':
                 // Free ride: start the clock now (the manual kind starts on the next tick).
                 if (state.status === 'armed' && state.tick && !inEvent(state.tick)) {
@@ -600,7 +698,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             rider: data ? {athleteId: idOf(data), name: nameOf(data), weightKg: Number(data.athlete?.weight) || plan?.weightKg || null} : null,
             live: {
                 powerW: Number.isFinite(live) ? live : null,
-                rawPowerW: Number.isFinite(Number(s.power)) ? Number(s.power) : null,
+                rawPowerW: numberOrNull(s.power),
                 speedKmh: Number.isFinite(Number(s.speed)) ? Number(s.speed) : null,
                 cadence: Number.isFinite(Number(s.cadence)) ? Number(s.cadence) : null,
                 heartrate: Number.isFinite(Number(s.heartrate)) ? Number(s.heartrate) : null,
@@ -682,7 +780,7 @@ function finishMetre(data, plan, planM = null, course = null) {
     if (measuredEndM != null) {
         return measuredEndM;
     }
-    const eventM = eventLengthM(data);
+    const eventM = raceLengthM(data);
     if (eventM == null) {
         return plan.lengthM;
     }
@@ -713,7 +811,7 @@ function courseFinishM(plan, data) {
     if (!(endM > 0)) {
         return null;
     }
-    const eventM = eventLengthM(data);
+    const eventM = raceLengthM(data);
     return eventM != null && Math.abs(eventM - endM) > COURSE_FINISH_TRUST_M ? null : endM;
 }
 

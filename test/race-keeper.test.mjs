@@ -358,3 +358,77 @@ test('California Dreamin\': leaving the event after the finish keeps the finish 
     assert.equal(toAt - fromAt, mark.finishAt - mark.joinedAt + LEAD_MS + TAIL_MS);
     assert.ok(mark.timeS > 2000 && mark.timeS < 2200, `timer at the finish ${mark.timeS}`);
 });
+
+test('leaving the event and joining it again is not the end of the race: it is still saved, whole (audit 9)', () => {
+    const sg = '900';
+    const min = m => T0 + m * 60000;
+    const {marks} = feed([
+        {at: min(0), tick: tick(sg, {time: 0, ed: 0})},
+        {at: min(2), tick: tick(0)},                                                  // out of the event ...
+        {at: min(2) + 6000, tick: tick(sg, {time: 0, ed: 0})},                        // ... and back in the pen six seconds later
+        {at: min(4) + 6000, tick: tick(sg, {time: 0, ed: 0})},
+        {at: min(10), tick: tick(sg, {time: 1, ed: 10, remaining: 19990})},           // the gun
+        {at: min(30), tick: tick(sg, {time: 1200, ed: 15000, remaining: 5000})},
+        {at: min(40), tick: tick(sg, {time: 1800, ed: 20001, remaining: -1})},        // the line
+    ]);
+    const mark = marks[sg];
+    assert.equal(mark.leftAt, null, 'back in the event: not left');
+    assert.deepEqual(marksDue(marks, min(4) + 6000 + TAIL_MS + 1), {save: [], drop: [], forget: []}, 'not dropped as a race that never started');
+    assert.deepEqual(marksDue(marks, mark.finishAt + TAIL_MS).save.map(m => m.key), [sg], 'saved two minutes after the finish');
+
+    // One tick without the event in the middle of the race does not cut it short either.
+    const cut = feed([
+        {at: min(10), tick: tick(sg, {time: 1, ed: 10, remaining: 19990})},
+        {at: min(15), tick: tick(0)},
+        {at: min(15) + 1000, tick: tick(sg, {time: 300, ed: 5000, remaining: 15000})},
+    ]);
+    assert.equal(cut.marks[sg].leftAt, null);
+    assert.deepEqual(marksDue(cut.marks, min(15) + 1000 + TAIL_MS + 1000).save, [], 'still running');
+
+    // Leaving for good after the race still ends it, in either order of the windows' notes.
+    const left = {key: sg, leftAt: min(41), seenAt: min(41)};
+    const back = {key: sg, backAt: min(0)};
+    assert.equal(mergeMark(mergeMark(marks[sg], left), back).leftAt, min(41));
+    assert.equal(mergeMark(mergeMark(back, left), marks[sg]).leftAt, min(41));
+});
+
+test('a race whose save failed is saved at a later sweep; after five failures it is given up (audit 9)', async () => {
+    const storage = memoryStorage();
+    const T = Date.UTC(2026, 10, 28, 18, 0);
+    storage.set(MARKS_KEY, {900: {key: '900', subgroupId: '900', joinedAt: T, startAt: T + 600000, finishAt: T + 2400000, seenAt: T + 2400000, timeS: 1800}});
+    let calls = 0;
+    let failing = 3;
+    const recorder = {...fakeRecorder(), saveRace: async mark => {
+        calls++;
+        if (failing-- > 0) {
+            throw new Error('QuotaExceededError');
+        }
+        return {key: mark.key, bytes: 1};
+    }};
+    const watch = createRaceWatch({storage, engine: {state: {}}, recorder});
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+        const over = T + 2400000 + TAIL_MS + 1000;
+        assert.deepEqual((await watch.sweep(over)).saved, []);
+        assert.equal(storage.get(MARKS_KEY)['900'].doneAt ?? null, null, 'not done: it will be tried again');
+        await watch.sweep(over + 30000);
+        await watch.sweep(over + 60000);
+        const saved = await watch.sweep(over + 90000);
+        assert.deepEqual(saved.saved.map(s => s.key), ['900'], 'the fourth try saved it');
+        assert.equal(storage.get(MARKS_KEY)['900'].saved, true);
+        assert.equal(calls, 4);
+
+        // A disk that stays broken: five tries, then done and not saved.
+        storage.set(MARKS_KEY, {901: {key: '901', subgroupId: '901', joinedAt: T, startAt: T + 600000, finishAt: T + 2400000, seenAt: T + 2400000}});
+        failing = Infinity;
+        calls = 0;
+        for (let i = 0; i < 8; i++) {
+            await watch.sweep(over + 200000 + i * 30000);
+        }
+        assert.equal(calls, 5);
+        assert.deepEqual([storage.get(MARKS_KEY)['901'].saved, storage.get(MARKS_KEY)['901'].doneAt != null], [false, true]);
+    } finally {
+        console.warn = warn;
+    }
+});

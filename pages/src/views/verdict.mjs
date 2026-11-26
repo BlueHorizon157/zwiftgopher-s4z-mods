@@ -1,7 +1,7 @@
 // The finish outlook's verdict in words (engine/finish-outlook.mjs), for the field window's
 // header and the rivals strip's middle: a word for the kind, a headline and the detail. Shown
 // only once the outlook is settled (the early kind is for the windows to leave out).
-import {fmtGap, shortName} from './field-feed.mjs';
+import {fmtGap, shortName} from './field-units.mjs';
 
 export const VERDICT_WORD = {early: 'early', done: 'finished', clear: 'clear', defend: 'defend', chase: 'chase', contested: 'contested'};
 
@@ -58,6 +58,14 @@ export function verdictText(o) {
         break;
     }
     return {word: VERDICT_WORD[v.kind], kind: v.kind, headline, detail};
+}
+
+/**
+ * "of 38 seen so far": the finishers count is the riders the mod has seen cross the line, not the
+ * event's field (a rider who finished out of its sight is not in it). short: "of 38 seen".
+ */
+export function seenWords(count, {short = false} = {}) {
+    return short ? `of ${count} seen` : `of ${count} seen so far`;
 }
 
 /** "1st", "2nd", "11th", "23rd". */

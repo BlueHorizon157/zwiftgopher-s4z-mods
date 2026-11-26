@@ -44,7 +44,7 @@ export const FIELD_DEFAULTS = {
 };
 
 export function createField(opts = {}) {
-    return {opts: {...FIELD_DEFAULTS, ...opts}, riders: new Map(), homeId: null, subgroupId: null, lastMs: null, lengthM: null, lengthFor: null};
+    return {opts: {...FIELD_DEFAULTS, ...opts}, riders: new Map(), homeId: null, subgroupId: null, lastMs: null, lengthM: null, lengthFor: null, eventSinceMs: null, eventSubgroupIds: null};
 }
 
 export function resetField(field) {
@@ -53,6 +53,8 @@ export function resetField(field) {
     field.subgroupId = null;
     field.lengthM = null;
     field.lengthFor = null;
+    field.eventSinceMs = null;
+    field.eventSubgroupIds = null;
 }
 
 const idOf = e => {
@@ -63,8 +65,15 @@ const num = v => (v == null || v === '' ? NaN : Number(v));
 // A subgroup of 0 (or none) is no category: a rider who has finished or left reports it so.
 const usable = v => v != null && v !== '' && Number(v) !== 0 && Number.isFinite(Number(v));
 
-/** The home rider's entry in a nearby list: the one being watched, else the logged-in rider. */
-export function homeEntryOf(list) {
+/**
+ * The home rider's entry in a nearby list: the one being watched, else the logged-in rider.
+ * While the mod is spectating (the engine has paused your race for another watched rider) you
+ * stay home: self first.
+ */
+export function homeEntryOf(list, {self = false} = {}) {
+    if (self) {
+        return list.find(e => e?.self) ?? list.find(e => e?.watching) ?? null;
+    }
     return list.find(e => e?.watching) ?? list.find(e => e?.self) ?? null;
 }
 
@@ -76,7 +85,7 @@ function newRider(id) {
         distanceM: null, lastSeenMs: null,
         cp: new Float64Array(64).fill(NaN), lastK: 0, lastM: null, lastWT: null, arrivedWT: null, prev: null, settled: false,
         startWT: null, startSource: null, startLoWT: null, startHiWT: null,
-        finished: false, finishWT: null, finishRaceApproxS: null,
+        finished: false, finishWT: null, finishRaceApproxS: null, left: false,
     };
 }
 
@@ -95,6 +104,7 @@ function clearTrack(r) {
     r.finished = false;
     r.finishWT = null;
     r.finishRaceApproxS = null;
+    r.left = false;
 }
 
 function setCheckpoint(r, k, wt) {
@@ -123,17 +133,23 @@ function setCheckpoint(r, k, wt) {
  * was read for (the subgroup of the home tick that reported it as the event's length; null when
  * the tick reported none, absent from callers that only pass lengths of the current category).
  * A group event with a known start runs every rider's clock from the gun, as its result does;
- * without one each rider's clock starts at the line, as in a TT.
+ * without one each rider's clock starts at the line, as in a TT. {spectating} the engine has
+ * paused your race for another watched rider: you (the self entry) stay home.
  */
-export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs = null, lengthM = null, lengthFor} = {}) {
+export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs = null, lengthM = null, lengthFor, spectating = false} = {}) {
     const o = field.opts;
     const byGun = kind === 'group' && gunMs != null && Number.isFinite(Number(gunMs));
     const list = Array.isArray(entries) ? entries : [];
-    const home = homeEntryOf(list);
+    const home = homeEntryOf(list, {self: spectating});
     field.homeId = home ? idOf(home) : field.homeId;
     // The home rider reports subgroup 0 once it has stopped past the finish: keep its category.
     const category = home && usable(home.state?.eventSubgroupId) ? String(home.state.eventSubgroupId) : null;
     if (category != null) {
+        // A new category is a new event: the riders seen since then are its riders (rows, allSubgroups).
+        if (String(field.subgroupId) !== category) {
+            field.eventSinceMs = nowMs;
+            field.eventSubgroupIds = null;
+        }
         field.subgroupId = home.state.eventSubgroupId;
     }
     setLength(field, category, lengthM, lengthFor);
@@ -157,6 +173,7 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
                 clearTrack(r);
             }
             r.subgroupId = subgroupId;
+            r.left = false;
         }
         r.name = a.sanitizedFullname || a.fullname || r.name;
         r.team = a.team || null;
@@ -176,11 +193,18 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
         if (!Number.isFinite(m) || m < 0) {
             continue;
         }
-        r.distanceM = m;
         // A distance that drops to about the line with no category is a rider leaving the event
-        // (Sauce reports 0): the race is kept, not cleared. A distance that goes back in the event
-        // is a new event or a rejoin.
+        // (Sauce reports 0): the race is kept, not cleared, and so is the distance they reached.
+        // A distance that goes back in the event is a new event or a rejoin.
         const leaving = subgroupId == null && m <= o.spacingM;
+        if (!leaving || r.distanceM == null) {
+            r.distanceM = m;
+        }
+        // One who has not finished and is no longer in the event is not compared: they would sit
+        // at the gap they left with, seen in the list for as long as they ride on.
+        if (leaving && r.lastM != null && r.lastM > o.spacingM && !r.finished) {
+            r.left = true;
+        }
         if (r.lastM != null && m < r.lastM - o.spacingM && !leaving) {
             clearTrack(r);
         }
@@ -225,11 +249,15 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
             if (L != null && r.lastM < L && m >= L) {
                 if (dt <= o.maxGapS * 1000) {
                     r.finishWT = r.lastWT + dt * ((L - r.lastM) / dm);
+                } else {
+                    r.finishRaceApproxS = approxFinishS(s, m, L, o);
                 }
                 r.finished = true;
             }
         }
-        if (r.startWT == null && byGun) {
+        // A rider placed from the line before the event's start time was known (a window opened
+        // mid-race) is moved to the gun, so every clock is the same one.
+        if (byGun && (r.startSource !== 'gun' || r.startWT == null)) {
             r.startWT = unixToWorldMs(gunMs, wt);
             r.startSource = 'gun';
         }
@@ -252,11 +280,7 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
         // no time is estimated.
         if (!r.finished && L != null && m >= L && (r.lastM == null || r.lastM >= L)) {
             r.finished = true;
-            const tm = num(s.time);
-            const kmh = num(s.speed);
-            if (Number.isFinite(tm) && tm >= 0 && m - L <= o.finishSeenM && kmh > 1) {
-                r.finishRaceApproxS = Math.max(0, tm - (m - L) / (kmh / 3.6));
-            }
+            r.finishRaceApproxS = approxFinishS(s, m, L, o);
         }
     }
     // Unseen for evictMs: gone, except the home rider and a finisher (its finish place and the
@@ -297,6 +321,17 @@ function setLength(field, category, lengthM, lengthFor) {
         field.lengthM = null;
         field.lengthFor = null;
     }
+}
+
+/**
+ * A finish time for a rider seen only past the line, within finishSeenM of it: their race time
+ * here less the way they rode back to the line at this speed (about, to a second or two).
+ * Null further on, or without a timer or a speed.
+ */
+function approxFinishS(s, m, L, o) {
+    const tm = num(s.time);
+    const kmh = num(s.speed);
+    return Number.isFinite(tm) && tm >= 0 && m - L <= o.finishSeenM && kmh > 1 ? Math.max(0, tm - (m - L) / (kmh / 3.6)) : null;
 }
 
 /**
@@ -497,6 +532,22 @@ export function compare(field, home, r, {boundaries = null} = {}) {
 }
 
 /**
+ * Every category: the riders of the event you are in. Its subgroups when they are known
+ * (field.eventSubgroupIds, from the event's own list), else the riders with a category seen since
+ * your category began. Riders of other events on the map, riders on a free ride and the finishers
+ * of your last event are not in it.
+ */
+function inCurrentEvent(field, r) {
+    if (r.subgroupId == null) {
+        return false;
+    }
+    if (r.subgroupId === field.subgroupId) {
+        return true;
+    }
+    return field.eventSubgroupIds ? field.eventSubgroupIds.has(String(r.subgroupId)) : (r.lastSeenMs ?? 0) >= (field.eventSinceMs ?? 0);
+}
+
+/**
  * The rows to draw: home and the riders of its subgroup (all riders with allSubgroups), each
  * with its comparison against home on the clock. Comparable riders come first, nearest ahead
  * first, each with its like-for-like place (1 is the rider furthest ahead on the clock, home
@@ -505,12 +556,16 @@ export function compare(field, home, r, {boundaries = null} = {}) {
  */
 export function rows(field, {nowMs = null, allSubgroups = false, boundaries = null} = {}) {
     const o = field.opts;
+    // No category yet: you are not in an event (a free ride), so there is no field to show.
+    if (field.subgroupId == null) {
+        return [];
+    }
     const home = field.homeId ? field.riders.get(field.homeId) : null;
     const homeStarted = Boolean(home && home.startWT != null && home.lastK >= 1);
     const out = [];
     for (const r of field.riders.values()) {
         const isHome = r.id === field.homeId;
-        if (!isHome && !allSubgroups && field.subgroupId != null && r.subgroupId !== field.subgroupId) {
+        if (!isHome && (allSubgroups ? !inCurrentEvent(field, r) : r.subgroupId !== field.subgroupId)) {
             continue;
         }
         // A finisher is not stale in the sense of the field: its finish time and place stand.
@@ -521,6 +576,8 @@ export function rows(field, {nowMs = null, allSubgroups = false, boundaries = nu
             reason = homeStarted ? null : 'not started';
         } else if (stale) {
             reason = 'not seen for two minutes';
+        } else if (r.left && !r.finished) {
+            reason = 'left the event';
         } else if (r.lastK < 1 && r.startWT == null) {
             reason = 'not started';
         } else if (!cmp) {

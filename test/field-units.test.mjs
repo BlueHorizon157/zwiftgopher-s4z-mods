@@ -1,6 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {fmtGap, fmtRate, boundariesOf, shortName, playOf, playCall, playWords} from '../pages/src/views/field-units.mjs';
+import {fmtGap, fmtRate, boundariesOf, shortName, playOf, playCall, playWords, contextOf, finishLineOf, outlookInputsOf, shownGapOf, topRowsOf, eventSubgroupIdsOf} from '../pages/src/views/field-units.mjs';
+import {createField, ingest, rows, finishRaceOf} from '../pages/src/engine/field-model.mjs';
+import {finishOutlook} from '../pages/src/engine/finish-outlook.mjs';
+import {verdictText, seenWords} from '../pages/src/views/verdict.mjs';
 
 test('fmtGap rounds before choosing the format, so no value outgrows its column', () => {
     assert.equal(fmtGap(4.24), '4.2 s');
@@ -73,4 +76,120 @@ test('playCall waits for a rider\'s pace, and is faint until the outlook settles
     assert.deepEqual(playCall({state: 'beaten', finished: true, paceSPerMin: null}, {settled: true}), {play: 'threat', faint: false});
     // Not in play: no call.
     assert.equal(playCall({state: 'clear', paceSPerMin: 3}, {settled: true}), null);
+});
+
+// ---- the pre-1.0 audit of the field and rivals (2026-11-26) ----
+
+// What the engine's view shows of a race on Crit Cross: the plan's finish measured at 15266.6 plan
+// metres (0.99856 plan metres a game metre, the line at 0), Sauce's own length 84 m long.
+const crit = {finishSource: 'measured', finishM: 15266.6, lengthM: 15266.6, routeMPerGameM: 0.99856};
+const critView = (event = {}, race = {}) => ({
+    event: {kind: 'tt', subgroupId: '9', routeMatches: true, lineM: 0, lengthM: 15349, lengthFor: '9', ...event},
+    race: {finishM: 15266.6, ...race},
+    controls: {offsetM: 0},
+});
+
+test('the field finishes where the plan has a measured finish, not at Sauce\'s longer length', () => {
+    const ctx = contextOf(critView(), crit);
+    assert.ok(Math.abs(ctx.lengthM - 15266.6 / 0.99856) < 0.01, `finish ${ctx.lengthM} event metres`);
+    assert.equal(ctx.lengthFor, '9');
+    // The riders' finish times are at that line: 10 m/s from the line reaches 15288.6 m in 1528.9 s
+    // (at Sauce's 15349 m it would be 1534.9 s, the 6 s the HUD does not have).
+    const f = createField();
+    const entry = (id, t, v) => ({
+        athleteId: id, watching: id === 1, athlete: {sanitizedFullname: `R${id}`}, stats: {},
+        state: {eventDistance: t * v, worldTime: t * 1000, time: Math.floor(t), speed: v * 3.6, eventSubgroupId: 9},
+    });
+    for (let t = 0; t <= 1700; t++) {
+        ingest(f, [entry(1, t, 10), entry(2, t, 10.5)], t * 1000, ctx);
+    }
+    assert.ok(Math.abs(finishRaceOf(f.riders.get('1')) - 1528.9) < 1, `home ${finishRaceOf(f.riders.get('1'))}`);
+    assert.ok(Math.abs(finishRaceOf(f.riders.get('2')) - 1456.0) < 1, `rider 2 ${finishRaceOf(f.riders.get('2'))}`);
+    // Sauce's length stands when the plan has no measured finish, or it is not this route's.
+    assert.equal(contextOf(critView(), {...crit, finishSource: null}).lengthM, 15349);
+    assert.equal(contextOf(critView({routeMatches: false}), crit).lengthM, 15349);
+    assert.equal(contextOf(critView(), {...crit, fromHere: {}}).lengthM, 15349);
+    // The engine ends the race elsewhere (Sauce's length more than 500 m from the plan's finish: another race).
+    assert.equal(contextOf(critView({}, {finishM: 18000}), crit).lengthM, 15349);
+});
+
+test('the rider\'s offset and the timing line come off the plan\'s finish, as for the sectors', () => {
+    const v = critView({lineM: 160}, {finishM: 15426.6});
+    v.controls.offsetM = 20;
+    assert.ok(Math.abs(finishLineOf(v, {...crit, finishM: 15426.6}) - (15426.6 - 20 - 160) / 0.99856) < 0.01);
+});
+
+test('with no length from Sauce (a route newer than its build) the plan\'s finish is the finish', () => {
+    const plan = {lengthM: 21155.5, routeMPerGameM: 1};
+    const v = {event: {kind: 'tt', subgroupId: '7', routeMatches: true, lineM: 0, lengthM: null, lengthFor: null}, race: {finishM: 21155.5}, controls: {offsetM: 0}};
+    const ctx = contextOf(v, plan);
+    assert.equal(ctx.lengthM, 21155.5);
+    assert.equal(ctx.lengthFor, '7', 'for the category the plan is racing in');
+    const f = createField();
+    for (let t = 0; t <= 2200; t++) {
+        const e = id => ({
+            athleteId: id, watching: id === 1, athlete: {}, stats: {},
+            state: {eventDistance: t * 10 * (id === 1 ? 1 : 1.02), worldTime: t * 1000, time: t, speed: 36, eventSubgroupId: 7},
+        });
+        ingest(f, [e(1), e(2)], t * 1000, ctx);
+    }
+    assert.ok(f.riders.get('1').finished && f.riders.get('2').finished, 'both finished, with no length from Sauce');
+    assert.ok(Math.abs(finishRaceOf(f.riders.get('1')) - 2115.55) < 1);
+    const list = rows(f, {nowMs: 2200_000});
+    assert.equal(list.find(x => x.isHome).finishPlace, 2);
+    // Not a plan for this route, or no plan at all: still no finish.
+    assert.equal(contextOf({...v, event: {...v.event, routeMatches: false}}, plan).lengthM, null);
+    assert.equal(contextOf(v, null).lengthM, null);
+});
+
+test('spectating: the finish outlook has no numbers (your race stopped where it was) and you stay home', () => {
+    const v = {status: 'racing', spectating: {athleteId: '2', name: 'Other'}, race: {running: true, remainingS: 725.6, elapsedS: 1352, finishM: 21000}, event: {}};
+    assert.deepEqual(outlookInputsOf(v, []), {remainingS: null, elapsedS: null, homeFinishS: null});
+    assert.equal(finishOutlook([], outlookInputsOf(v, [])), null, 'no outlook, so no verdict or colours');
+    assert.equal(contextOf(v, null).spectating, true);
+    assert.equal(contextOf({...v, spectating: null}, null).spectating, false);
+    // Not spectating: the same view gives its time to go.
+    assert.equal(outlookInputsOf({...v, spectating: null}, []).remainingS, 725.6);
+});
+
+test('"at the finish" shows nothing while there is no outlook, not the gap now under that heading', () => {
+    const rider = {id: 'a', isHome: false, comparable: true, gapS: 7.5};
+    assert.equal(shownGapOf(rider, null, 'finish'), null);
+    assert.equal(shownGapOf(rider, {finishGapS: 3.2}, 'finish'), 3.2);
+    assert.equal(shownGapOf(rider, null, 'clock'), 7.5);
+    assert.equal(shownGapOf({...rider, isHome: true}, null, 'clock'), null);
+    assert.equal(shownGapOf({...rider, comparable: false}, null, 'clock'), null);
+});
+
+test('at the finish, the rows sort by the predicted gap only once the outlook has settled, so the place numbers read in order', () => {
+    const rider = (id, gapS, place) => ({id, isHome: false, comparable: true, gapS, place});
+    const list = [rider('a', 9, 1), {id: 'home', isHome: true, comparable: true, gapS: 0, place: 2}, rider('b', -3, 3)];
+    const outlook = settled => ({settled, riders: new Map([['a', {finishGapS: -4}], ['b', {finishGapS: 6}]])});
+    const ids = top => top.map(r => r.id).join(',');
+    // Early: the rows keep the order of the gap now (the place column is the place now).
+    assert.equal(ids(topRowsOf(list, {mode: 'finish', outlook: outlook(false)})), 'a,home,b');
+    // Settled: the predicted order, with predicted places.
+    assert.equal(ids(topRowsOf(list, {mode: 'finish', outlook: outlook(true)})), 'b,home,a');
+    // The gap now: always the rows' order.
+    assert.equal(ids(topRowsOf(list, {mode: 'clock', outlook: outlook(true)})), 'a,home,b');
+    assert.deepEqual(topRowsOf(list, {mode: 'finish', outlook: outlook(false)}).map(r => r.shownGapS), [-4, 0, 6]);
+});
+
+test('an event\'s subgroup ids come from Sauce\'s event, as strings', () => {
+    assert.deepEqual([...eventSubgroupIdsOf({eventSubgroups: [{id: 7457944}, {id: 7457948}, {name: 'no id'}]})], ['7457944', '7457948']);
+    assert.equal(eventSubgroupIdsOf({eventSubgroups: []}), null);
+    assert.equal(eventSubgroupIdsOf(null), null);
+});
+
+test('the finish count says what it counts: the riders seen to cross, not the event', () => {
+    assert.equal(seenWords(38), 'of 38 seen so far');
+    assert.equal(seenWords(32, {short: true}), 'of 32 seen');
+});
+
+test('the chase line stops saying how much faster catches them in the last 30 seconds', () => {
+    const list = [{id: 'home', name: 'You', isHome: true, comparable: true, gapS: 0, place: 5, finished: false},
+        {id: 'a', name: 'Sam Patel', isHome: false, comparable: true, gapS: 4, paceSPerMin: 0, paceSpanS: 240, homeSinceS: 0, finished: false, finishRaceS: null}];
+    const detail = remainingS => verdictText(finishOutlook(list, {remainingS, elapsedS: 1500, homeFinishS: 1500 + remainingS})).detail;
+    assert.match(detail(60), /^S\. Patel 4\.0 s up at the finish: 4\.0 s a minute faster catches them$/);
+    assert.equal(detail(10), 'S. Patel 4.0 s up at the finish');
 });

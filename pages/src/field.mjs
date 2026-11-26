@@ -5,10 +5,10 @@
 // cannot compare yet sit below a divider with the reason. Rows are keyed by rider and only their
 // changed cells are written; the home row stays in view.
 import {startWindow} from './views/runtime.mjs';
-import {startFieldFeed, boundariesOf, fmtGap, fmtRate, outlookInputsOf} from './views/field-feed.mjs';
+import {startFieldFeed, boundariesOf, fmtGap, fmtRate, outlookInputsOf, topRowsOf, shownGapOf} from './views/field-feed.mjs';
 import {rows as fieldRows, drift, gapModeOf, migrateFieldPrefs, GAP_MODES} from './engine/field-model.mjs';
 import {finishOutlook} from './engine/finish-outlook.mjs';
-import {verdictText, ordinal} from './views/verdict.mjs';
+import {verdictText, ordinal, seenWords} from './views/verdict.mjs';
 import {setText, setHidden} from './views/dom.mjs';
 
 const MANUAL_SCROLL_HOLD_MS = 5000;
@@ -16,6 +16,8 @@ const DIVIDER_ID = '\u0001divider';
 const GAP_LABEL = {clock: 'now', finish: 'at the finish'};
 const PLACE_TITLE = 'Your place on the clock: how many of the riders you can compare with are ahead of you, '
     + 'each at the same distance along the course. Compared means seen in the last two minutes and past the same point as you';
+const FINISHED_TITLE = 'Your place among the riders the mod has seen cross the line so far: riders who finished out of its sight are not counted';
+const FINISH_WAITS_TITLE = 'The gap at the finish comes from your plan\'s time to go: nothing to show until it has one';
 
 const els = {};
 let win = null;
@@ -23,6 +25,7 @@ let feed = null;
 const rowEls = new Map();
 let holdScrollUntil = 0;
 let lastOrder = '';
+let gapTitle = '';           // the gap heading's own tooltip (field.html)
 let prevOutlook = null;      // last render's finish outlook (its states are sticky too)
 
 export function main() {
@@ -33,6 +36,7 @@ export function main() {
     els.rows.addEventListener('wheel', hold, {passive: true});
     els.rows.addEventListener('touchstart', hold, {passive: true});
     els.rows.addEventListener('pointerdown', hold);
+    gapTitle = els.gapMode.title;
     els.gapMode.addEventListener('click', () => {
         const next = GAP_MODES[(GAP_MODES.indexOf(gapMode()) + 1) % GAP_MODES.length];
         win.settings?.set('gapMode', next);
@@ -46,7 +50,7 @@ export function main() {
             for (const [k, v] of Object.entries(migrateFieldPrefs(api.prefs()))) {
                 api.settings?.set(k, v);
             }
-            feed = startFieldFeed({view: api.view});
+            feed = startFieldFeed({view: api.view, plan: () => api.engine.state.plan});
             window.zgtt.field = feed.field;
         },
         onReset: () => {
@@ -55,6 +59,8 @@ export function main() {
                 el.remove();
             }
             rowEls.clear();
+            lastOrder = '';
+            prevOutlook = null;
         },
     });
 }
@@ -79,18 +85,17 @@ function render(v) {
     const {remainingS, elapsedS, homeFinishS} = outlookInputsOf(v, list);
     const outlook = finishOutlook(list, {remainingS, elapsedS, homeFinishS, prev: prevOutlook});
     prevOutlook = outlook;
+    // No time to go yet (no plan, or not racing, or spectating): there is no gap at the finish to show.
+    const headTitle = mode === 'finish' && !outlook ? FINISH_WAITS_TITLE : gapTitle;
+    if (els.gapMode.title !== headTitle) {
+        els.gapMode.title = headTitle;
+    }
     const home = list.find(r => r.isHome) ?? null;
     const settled = Boolean(outlook?.settled);
     const ctx = {mode, outlook, settled, length: feed.field.lengthM};
     // The riders you can compare with, in the order of the gap shown: now (the rows' order) or
     // at the finish (the predicted gap). Riders you cannot compare yet come below a divider.
-    const top = list.filter(r => r.isHome || r.comparable).map(r => ({
-        ...r,
-        shownGapS: r.isHome ? 0 : mode === 'finish' && outlook?.riders.get(r.id) ? outlook.riders.get(r.id).finishGapS : r.gapS,
-    }));
-    if (mode === 'finish' && outlook) {
-        top.sort((a, b) => (b.shownGapS ?? -1e9) - (a.shownGapS ?? -1e9));
-    }
+    const top = topRowsOf(list, {mode, outlook});
     const bottom = list.filter(r => !r.isHome && !r.comparable);
     const items = [...top, ...(bottom.length ? [{id: DIVIDER_ID, divider: true}] : []), ...bottom];
 
@@ -101,7 +106,7 @@ function render(v) {
     const predicted = settled ? outlook.home.predictedPlace : null;
     let place = '';
     if (home?.finished && home.finishPlace) {
-        place = `you finished ${ordinal(home.finishPlace)} of ${home.finishers} so far`;
+        place = `you finished ${ordinal(home.finishPlace)} ${seenWords(home.finishers)}`;
     } else if (pl.place != null) {
         place = `you ${ordinal(pl.place)} of ${pl.of} compared`;
         if (predicted != null && predicted !== pl.place) {
@@ -109,14 +114,25 @@ function render(v) {
         }
     }
     setText(els.place, place);
-    const placeTitle = `${PLACE_TITLE}${predicted != null && !home?.finished ? '. The arrow is the place you are heading for at the finish, at the pace of the last minutes' : ''}`;
+    const placeTitle = home?.finished && home.finishPlace ? FINISHED_TITLE
+        : `${PLACE_TITLE}${predicted != null && !home?.finished ? '. The arrow is the place you are heading for at the finish, at the pace of the last minutes' : ''}`;
     if (els.place.title !== placeTitle) {
         els.place.title = placeTitle;
     }
     // The verdict: clear, defend, chase or contested, and why (once the outlook is settled).
     const vt = list.length && settled ? verdictText(outlook) : null;
-    setHidden(els.verdict, !vt || vt.kind === 'early');
-    if (vt && vt.kind !== 'early') {
+    if (v.spectating && list.length) {
+        // Your race is paused while you watch another rider: no outlook from the numbers it stopped at.
+        setHidden(els.verdict, false);
+        setText(els.verdictHead, 'Spectating');
+        setText(els.verdictDetail, 'the finish outlook is paused while you watch another rider');
+        if (els.verdict.className !== 'verdict early') {
+            els.verdict.className = 'verdict early';
+        }
+    } else {
+        setHidden(els.verdict, !vt || vt.kind === 'early');
+    }
+    if (!v.spectating && vt && vt.kind !== 'early') {
         setText(els.verdictHead, vt.headline);
         setText(els.verdictDetail, vt.detail);
         const cls = `verdict ${vt.kind}`;
@@ -218,7 +234,7 @@ function updateRow(el, r, ctx) {
     put(el, 'name', c.name, r.isHome ? 'you' : r.name);
     // A rider you cannot compare yet says why, where the team would be.
     put(el, 'team', c.team, !r.isHome && !r.comparable ? (r.reason ?? '') : (r.isHome ? '' : (r.team ?? '')));
-    const sign = r.isHome || !r.comparable ? null : (ctx.mode === 'finish' && x ? x.finishGapS : r.gapS);
+    const sign = shownGapOf(r, x, ctx.mode);
     if (Number.isFinite(sign)) {
         // ▲ the rider is ahead of you on the clock, ▼ behind.
         put(el, 'glyph', c.glyph, Math.abs(sign) < 0.05 ? '' : sign > 0 ? '▲' : '▼');
@@ -252,7 +268,7 @@ function updateRow(el, r, ctx) {
     }
     const pct = Number.isFinite(r.distanceM) && ctx.length > 0 ? Math.min(100, r.distanceM / ctx.length * 100) : null;
     const distTitle = fin
-        ? `${r.isHome ? 'You' : r.name} finished in ${Number.isFinite(r.finishRaceS) ? fmtClock(r.finishRaceS) : 'a time not seen'}${r.finishPlace ? `, ${ordinal(r.finishPlace)} of ${r.finishers} finished so far` : ''}`
+        ? `${r.isHome ? 'You' : r.name} finished in ${Number.isFinite(r.finishRaceS) ? fmtClock(r.finishRaceS) : 'a time not seen'}${r.finishPlace ? `, ${ordinal(r.finishPlace)} of ${r.finishers} finishers seen so far` : ''}`
         : Number.isFinite(r.distanceM) ? `${(r.distanceM / 1000).toFixed(1)} km done${pct != null ? `, ${pct.toFixed(0)} % of the event` : ''}` : '';
     if (el.cache.distTitle !== distTitle) {
         el.cache.distTitle = distTitle;

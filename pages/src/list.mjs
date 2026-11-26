@@ -4,7 +4,7 @@
 // sits a third of the way down so more of what is coming is in view.
 import {startWindow, statusWords} from './views/runtime.mjs';
 import {clipboardCode} from './views/plan-loader.mjs';
-import {setText, setHidden, setClass, fmtTime, deltaWords, finishFigure, planTimeS} from './views/dom.mjs';
+import {setText, setHidden, setClass, fmtTime, fmtPlanTime, fmtWattDelta, fmtGrade, deltaWords, finishFigure, figureText, planTimeS, rideAverage} from './views/dom.mjs';
 import {planTimeAtMetre} from './engine/tracking.mjs';
 
 const MANUAL_SCROLL_HOLD_MS = 5000;
@@ -84,10 +84,10 @@ function render(v) {
 
     // Header.
     setText(els.route, plan.routeName ?? 'Custom route');
-    const planTime = fmtTime(planTimeS(v));
-    // The time to go while racing (or, by the setting, the predicted finish), else the plan's or the ride's time.
+    const planTime = fmtPlanTime(planTimeS(v));
+    // The time to go while racing (or, by the setting, the predicted finish), else the plan's or the ride's time, said with what it is.
     const fig = finishFigure(v, win.prefs().finishShows);
-    setText(els.finish, fig.label === 'to go' ? `${fmtTime(fig.seconds)} to go` : fmtTime(fig.seconds));
+    setText(els.finish, figureText(fig));
     // The strategy ridden, when the plan has the optimiser's cards: "balanced plan 14:23 ...".
     const strategy = plan.strategyLabel ? `${plan.strategyLabel.toLowerCase()} ` : '';
     // A plan for another distance is said in both states (the finish is predicted to the event's end).
@@ -101,7 +101,7 @@ function render(v) {
     setText(els.delta, words);
     setClass(els.delta, 'ahead', words.startsWith('ahead'));
     setClass(els.delta, 'behind', words.startsWith('behind'));
-    const actual = rideAverage(v.stats);
+    const actual = rideAverage(v.stats, 10);
     setText(els.power, actual != null
         ? `avg ${Math.round(plan.avgPowerW)} W planned, ${Math.round(actual)} W so far`
         : `avg ${Math.round(plan.avgPowerW)} W planned, W′ ${(plan.wPrimeJ / 1000).toFixed(1)} kJ`);
@@ -166,7 +166,7 @@ function updateRow(row, iv, s, v, bandW, isNow) {
     if (done && !s.partial && s.avgPowerW != null) {
         const d = s.avgPowerW - iv.powerW;
         const band = d < -bandW ? 'd-under' : d > bandW ? 'd-over' : 'd-on';
-        put(row, 'wd', row.cells.wd, `${d >= 0 ? '+' : '−'}${Math.abs(Math.round(d))}`, band);
+        put(row, 'wd', row.cells.wd, fmtWattDelta(d), band);
     } else {
         put(row, 'wd', row.cells.wd, '');
     }
@@ -183,7 +183,7 @@ function updateRow(row, iv, s, v, bandW, isNow) {
         put(row, 'td', row.cells.td, '');
     }
     const g = iv.grade;
-    put(row, 'g', row.cells.g, Number.isFinite(g) ? `${g > 0.5 ? '▲' : g < -0.5 ? '▼' : '▬'} ${g.toFixed(1)}%` : '',
+    put(row, 'g', row.cells.g, Number.isFinite(g) ? `${g > 0.5 ? '▲' : g < -0.5 ? '▼' : '▬'} ${fmtGrade(g)}` : '',
         `c g${g > 0.5 ? ' grade-up' : g < -0.5 ? ' grade-down' : ''}`);
     put(row, 'wb', row.cells.wb, Number.isFinite(iv.wbalKj) ? iv.wbalKj.toFixed(1) : '');
     if (done && Number.isFinite(s.wbalEndJ) && Number.isFinite(iv.wbalKj)) {
@@ -227,16 +227,4 @@ function scrollToActive() {
             c.scrollTop = next;
         }
     });
-}
-
-function rideAverage(stats) {
-    let work = 0;
-    let time = 0;
-    for (const s of stats ?? []) {
-        if (s && s.elapsedS > 0 && Number.isFinite(s.workJ)) {
-            work += s.workJ;
-            time += s.elapsedS;
-        }
-    }
-    return time >= 10 ? work / time : null;
 }

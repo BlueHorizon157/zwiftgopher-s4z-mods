@@ -20,6 +20,7 @@ function begin(tracking, index, {raceS, planM, interval, partial}) {
         startPlanM: planM,
         elapsedS: 0,
         workJ: 0,
+        powerS: 0,
         avgPowerW: null,
         finished: false,
         partial,
@@ -41,8 +42,10 @@ function advanceOne(stats, raceS, power) {
     }
     stats.elapsedS += dt;
     if (Number.isFinite(power)) {
+        // The average is over the seconds with a reading: a dropout is not 0 W (2026-11-26 audit).
         stats.workJ += power * dt;
-        stats.avgPowerW = stats.workJ / stats.elapsedS;
+        stats.powerS += dt;
+        stats.avgPowerW = stats.workJ / stats.powerS;
     }
     stats.lastRaceS = raceS;
 }

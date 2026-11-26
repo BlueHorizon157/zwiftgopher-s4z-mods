@@ -58,7 +58,14 @@ export async function fetchPlanByCode(text) {
         const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
         try {
             const resp = await fetch(`${shareUrl()}?action=load&code=${code}`, {signal: ctl.signal});
-            const body = await resp.json().catch(() => ({}));
+            // Text that is not JSON (a page from a proxy) is an answer with no plan; a body that
+            // fails to arrive (the abort, a dropped connection) is no answer, said as such below.
+            const body = await resp.json().catch(err => {
+                if (err?.name === 'SyntaxError') {
+                    return {};
+                }
+                throw err;
+            });
             if (resp.status === 404) {
                 throw new Error(`No plan for ${code}: it may have expired (codes last seven days).`);
             }

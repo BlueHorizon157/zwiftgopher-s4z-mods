@@ -66,3 +66,14 @@ test('every window page has the settings key the settings page writes for it', (
         assert.equal(link, forOf[w.file], `${w.file} opens its own settings`);
     }
 });
+
+test('a reset in the field window and the rivals strip also forgets the rows it had and the outlook\'s sticky states', () => {
+    // field.mjs and rivals.mjs cannot be loaded in node (they need Sauce's modules): their reset
+    // handlers are read. A stale row order made the field window attach no rows after a reset
+    // that left the same order, and sticky states from the last race carried into the next.
+    const body = src => src.match(/onReset: \(\) => \{([\s\S]*?)\n        \},/)[1];
+    const field = body(read('pages/src/field.mjs'));
+    assert.match(field, /lastOrder = ''/);
+    assert.match(field, /prevOutlook = null/);
+    assert.match(body(read('pages/src/rivals.mjs')), /prevOutlook = null/);
+});

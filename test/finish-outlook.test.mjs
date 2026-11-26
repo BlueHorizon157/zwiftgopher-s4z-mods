@@ -180,3 +180,31 @@ test('verdicts', () => {
     assert.equal(v([home(), r('a', 8, 1)], {remainingS: 0}).kind, 'done');
     assert.equal(v([home(), r('a', 8, 1)], {elapsedS: 300}).kind, 'early', 'before the gate');
 });
+
+// ---- the pre-1.0 audit of the field and rivals (2026-11-26) ----
+
+test('the verdict calls only riders with a pace (or finished), as the rivals strip does', () => {
+    // Rider 2 is clear with a pace; rider 3 has just come into view 3 s behind with no pace yet.
+    const list = [home(), r('2', 60, 0.2), r('3', -3, null, 0)];
+    const o = finishOutlook(list, {remainingS: 280, elapsedS: 1300, homeFinishS: 1580});
+    assert.equal(o.riders.get('3').state, 'pressure', 'the rider is still at their gap as it stands');
+    assert.equal(o.riders.get('3').early, true);
+    assert.equal(o.verdict.kind, 'clear', 'but nobody is called on a gap with no pace');
+    assert.equal(o.verdict.backS, null, 'and the clear line does not count them either');
+    // Once they have a pace they are called.
+    const paced = finishOutlook([home(), r('2', 60, 0.2), r('3', -3, -0.2, 120)], {remainingS: 280, elapsedS: 1300, homeFinishS: 1580});
+    assert.equal(paced.verdict.kind, 'defend');
+    assert.equal(paced.verdict.rider.id, '3');
+    // Nobody with a pace: too early to tell, as before.
+    assert.equal(finishOutlook([home(), r('3', -3, null, 0)], {remainingS: 280, elapsedS: 1300, homeFinishS: 1580}).verdict.kind, 'early');
+});
+
+test('"s a minute faster catches them" is not worked out in the last 30 seconds (it grows without limit)', () => {
+    const list = [home(), r('a', 4, 0)];
+    const need = remainingS => finishOutlook(list, {remainingS, elapsedS: 1500, homeFinishS: 1500 + remainingS}).riders.get('a').needSPerMin;
+    assert.equal(OUTLOOK.needMinS, 30);
+    assert.equal(need(60), 4);
+    assert.equal(need(30), 8);
+    assert.equal(need(29), null);
+    assert.equal(need(1), null);
+});

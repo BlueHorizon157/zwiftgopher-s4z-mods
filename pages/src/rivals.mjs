@@ -14,7 +14,7 @@ import {startFieldFeed, boundariesOf, fmtGap, shortName, outlookInputsOf, playCa
 import {rows as fieldRows, rivalsOf, trackScale, trackRangeOf, drift, migrateFieldPrefs} from './engine/field-model.mjs';
 import {setText, setClass} from './views/dom.mjs';
 import {finishOutlook} from './engine/finish-outlook.mjs';
-import {verdictText, ordinal} from './views/verdict.mjs';
+import {verdictText, ordinal, seenWords} from './views/verdict.mjs';
 
 const els = {};
 let win = null;
@@ -34,7 +34,7 @@ export function main() {
             for (const [k, v] of Object.entries(migrateFieldPrefs(api.prefs()))) {
                 api.settings?.set(k, v);
             }
-            feed = startFieldFeed({view: api.view});
+            feed = startFieldFeed({view: api.view, plan: () => api.engine.state.plan});
             window.zgtt.field = feed.field;
         },
         onReset: () => {
@@ -43,6 +43,7 @@ export function main() {
                 d.remove();
             }
             dots.clear();
+            prevOutlook = null;
         },
     });
 }
@@ -174,11 +175,11 @@ function renderMe(o, rv, v) {
     if (finishedPlace) {
         setText(els.meLabel, 'finished');
         setText(els.meBig, ordinal(finishedPlace));
-        setText(els.meSmall, `of ${home.finishers} so far`);
+        setText(els.meSmall, seenWords(home.finishers, {short: true}));
         if (els.me.className !== 'me done') {
             els.me.className = 'me done';
         }
-        const title = `You finished in ${Number.isFinite(home.finishRaceS) ? fmtClock(home.finishRaceS) : 'a time not seen'}`;
+        const title = `You finished in ${Number.isFinite(home.finishRaceS) ? fmtClock(home.finishRaceS) : 'a time not seen'}, ${ordinal(finishedPlace)} of the ${home.finishers} riders the mod has seen cross the line`;
         if (els.me.title !== title) {
             els.me.title = title;
         }
@@ -190,7 +191,8 @@ function renderMe(o, rv, v) {
         const verdict = vt && vt.kind !== 'early' ? vt : null;
         const pred = o?.settled ? o.home.predictedPlace : null;
         const heading = pred != null && pred !== place;
-        setText(els.meLabel, verdict ? verdict.word : 'you');
+        // Spectating: your race is paused for another watched rider, so no verdict from its numbers.
+        setText(els.meLabel, verdict ? verdict.word : v?.spectating ? 'spectating' : 'you');
         setText(els.meBig, ordinal(place));
         setText(els.meSmall, `of ${rv.all.length + 1}${heading ? ` → ${ordinal(pred)}` : ''}`);
         const cls = `me${verdict ? ` ${verdict.kind}` : ''}${heading ? (pred < place ? ' up' : ' down') : ''}`;

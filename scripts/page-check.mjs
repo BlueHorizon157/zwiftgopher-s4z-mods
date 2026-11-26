@@ -452,6 +452,12 @@ try {
             }
         }
         if (huds.length) {
+            // The replay pages keep their store in memory (a replay writes nothing the real windows
+            // share), so the card the loop picked is put into the shared store from a live window:
+            // the list and the settings page below read it there.
+            await b.goto(`${MOD}/list.html?windowId=zg-strategy-seed`);
+            await b.waitFor('window.zgtt', 15000);
+            await b.eval(`fetch('fixtures/${PLAN}.json').then(r => r.json()).then(raw => { const s = window.zgtt.store; s.savePlan('REPLAY', raw); s.setActiveCard(${JSON.stringify(chosen)}); })`);
             // Another window opened now rides the same card; the settings page shows it chosen.
             await b.size(...SIZES.list);
             await b.goto(`${MOD}/list.html?replay=${REPLAY}&plan=${PLAN}&speed=0.1&seek=20&windowId=zg-strategy-list`);

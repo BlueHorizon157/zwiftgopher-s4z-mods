@@ -11,6 +11,7 @@ import {MARKS_KEY, observeTick, applyPatches, marksDue, viewSnapshot} from '../r
 
 const SNAPSHOT_MS = 1000;
 const ZG_OWNER = 'zg';
+const SAVE_TRIES = 5;             // a save that throws (the disk, the quota) is tried again at the next sweeps, this often
 
 export function createRaceWatch({storage, engine, recorder}) {
     let local = null;
@@ -73,7 +74,11 @@ export function createRaceWatch({storage, engine, recorder}) {
                 try {
                     summary = await recorder.saveRace(mark);
                 } catch (err) {
-                    console.warn('[race-watch] save failed', err);
+                    // Not done: the race is saved at a later sweep (SAVE_TRIES, then given up).
+                    const tries = (mark.saveTries ?? 0) + 1;
+                    console.warn(`[race-watch] save failed (${tries} of ${SAVE_TRIES})`, err);
+                    patches.push(tries >= SAVE_TRIES ? {key: mark.key, doneAt: nowMs, saved: false, saveTries: tries} : {key: mark.key, saveTries: tries});
+                    continue;
                 }
                 if (summary) {
                     saved.push(summary);

@@ -40,6 +40,7 @@ export const OUTLOOK = {
     settledS: 240,        // a pace from fewer seconds than this is early (shown faint)
     gateElapsedS: 1200,   // the outlook is settled after 20 minutes of racing ...
     gateToGoS: 300,       // ... or with 5 minutes or less to go
+    needMinS: 30,         // "N s a minute faster catches them" only with this long to go (it is absurd in the last seconds)
 };
 
 const AHEAD = new Set(['beat', 'reach']);
@@ -104,7 +105,7 @@ export function finishOutlook(list, {remainingS = null, elapsedS = null, homeFin
             gapS,
             finishGapS,
             paceSPerMin: pace,
-            needSPerMin: remMin > 0 ? Math.abs(finishGapS) / remMin : null,
+            needSPerMin: remainingS >= o.needMinS ? Math.abs(finishGapS) / remMin : null,
             finished: Boolean(r.finished),
             finishS: r.finished && r.finishRaceS != null ? r.finishRaceS : (finishing != null ? finishing - finishGapS : null),
             early: !settled || (!known && !r.finished && (pace == null || !((r.paceSpanS ?? 0) >= o.settledS))),
@@ -142,8 +143,11 @@ export function finishOutlook(list, {remainingS = null, elapsedS = null, homeFin
  *   chase      you beat someone, or one finishes close ahead
  *   clear      nobody close either way: ride your plan
  */
-function verdictOf(all, home, remainingS, settled) {
+function verdictOf(everyone, home, remainingS, settled) {
     const base = {rider: null, others: 0, lo: null, hi: null, spreadS: null, upS: null, backS: null};
+    // A rider is called once there is a pace for them, as on the rivals strip (0.9.2): one without
+    // is at their gap as it stands, which says nothing yet about the finish.
+    const all = everyone.filter(x => x.paceSPerMin != null || x.finished);
     const ahead = all.filter(x => x.finishGapS > 0).sort((a, b) => a.finishGapS - b.finishGapS);
     const behind = all.filter(x => x.finishGapS <= 0).sort((a, b) => b.finishGapS - a.finishGapS);
     base.upS = ahead[0]?.finishGapS ?? null;
@@ -151,7 +155,7 @@ function verdictOf(all, home, remainingS, settled) {
     if (remainingS <= 0) {
         return {...base, kind: 'done'};
     }
-    if (!settled || !all.length || all.every(x => x.paceSPerMin == null && !x.finished)) {
+    if (!settled || !all.length) {
         return {...base, kind: 'early'};
     }
     const by = state => all.filter(x => x.state === state).sort((a, b) => Math.abs(a.finishGapS) - Math.abs(b.finishGapS));

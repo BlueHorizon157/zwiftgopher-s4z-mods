@@ -48,6 +48,9 @@ export function getPlanEntry(code) {
  * One plan per course (Dave, 2026-11-12): a plan for a course the library already has a plan
  * for replaces it, whatever its code; the replaced plan's place as the active plan passes to
  * the new one. Plans from here are kept apart.
+ *
+ * Ten plans are kept (MAX_PLANS): the active plan is never the one to go, then plans from here,
+ * then the oldest.
  */
 export function savePlan(code, raw, {activate = true, expiresAt = null, event = null, source = null, publishedAt = null, shelf = false} = {}) {
     const lib = library();
@@ -65,9 +68,17 @@ export function savePlan(code, raw, {activate = true, expiresAt = null, event = 
         publishedAt: publishedAt ?? raw?.meta?.published?.at ?? null,
         shelf,
     };
-    const codes = Object.keys(lib.plans).sort((a, b) => (lib.plans[b].loadedAt ?? 0) - (lib.plans[a].loadedAt ?? 0));
-    for (const old of codes.slice(MAX_PLANS)) {
-        delete lib.plans[old];
+    // Over the ten: plans from here go first, then the oldest; never the plan just saved nor the
+    // plan that is active once this is done (it may be the oldest, loaded long ago and chosen since).
+    const active = activate || tookActive ? code : getActiveCode();
+    const spare = Object.keys(lib.plans).length - MAX_PLANS;
+    if (spare > 0) {
+        const isHere = c => (lib.plans[c]?.raw?.meta?.from_here ? 1 : 0);
+        const victims = Object.keys(lib.plans).filter(c => c !== code && c !== active)
+            .sort((a, b) => (isHere(b) - isHere(a)) || (lib.plans[a].loadedAt ?? 0) - (lib.plans[b].loadedAt ?? 0));
+        for (const old of victims.slice(0, spare)) {
+            delete lib.plans[old];
+        }
     }
     storage.set(KEYS.plans, lib);
     if (activate) {
@@ -81,11 +92,14 @@ export function savePlan(code, raw, {activate = true, expiresAt = null, event = 
 /**
  * The plans from the shelf that the shelf no longer has (replaced by a newer plan for their
  * course, or taken off in the planner) leave the library. codes: the shelf's listing.
- * Returns the codes removed.
+ * Never the active plan, and never a plan that has expired (the shelf stops listing those: they
+ * stay usable here). Returns the codes removed. A plan taken off by hand that the shelf no longer
+ * lists is forgotten as such (removePlan).
  */
 export function pruneShelf(codes) {
     const lib = library();
-    const gone = shelfLeavers(lib.plans, codes);
+    forgetDismissed(codes);
+    const gone = shelfLeavers(lib.plans, codes, {activeCode: getActiveCode(), now: Date.now()});
     if (!gone.length) {
         return [];
     }
@@ -93,19 +107,53 @@ export function pruneShelf(codes) {
         delete lib.plans[code];
     }
     storage.set(KEYS.plans, lib);
-    if (gone.includes(getActiveCode())) {
-        setActive(null);
-    }
     return gone;
 }
 
 export function removePlan(code) {
     const lib = library();
+    const entry = lib.plans[code];
     delete lib.plans[code];
     storage.set(KEYS.plans, lib);
+    if (entry?.shelf) {
+        dismiss(code, entry.publishedAt);
+    }
     if (getActiveCode() === code) {
         setActive(null);
     }
+}
+
+// A plan the rider removed by hand stays removed while the shelf lists it as it was: the shelf
+// state keeps {code: its publication} for it, and a plan republished in the planner (a new
+// publication) comes back. Kept to the plans the shelf still lists (pruneShelf) and thirty.
+const MAX_DISMISSED = 30;
+
+function dismiss(code, publishedAt) {
+    const removed = {...(getShelf().removed ?? {})};
+    delete removed[code];
+    removed[code] = publishedAt ?? '';
+    for (const old of Object.keys(removed).slice(0, Math.max(0, Object.keys(removed).length - MAX_DISMISSED))) {
+        delete removed[old];
+    }
+    setShelf({removed});
+}
+
+function forgetDismissed(codes) {
+    const removed = getShelf().removed;
+    if (!removed || typeof removed !== 'object') {
+        return;
+    }
+    const keep = new Set((codes ?? []).map(String));
+    const left = Object.fromEntries(Object.entries(removed).filter(([code]) => keep.has(code)));
+    if (Object.keys(left).length !== Object.keys(removed).length) {
+        setShelf({removed: left});
+    }
+}
+
+/** The rider removed this plan by hand and the shelf still lists the same publication of it. */
+export function isDismissed(code, publishedAt) {
+    const removed = getShelf().removed;
+    return Boolean(removed && Object.hasOwn(removed, code) && (publishedAt == null || String(publishedAt) === String(removed[code] ?? '')));
 }
 
 export function getActiveCode() {
@@ -165,11 +213,40 @@ export function getLink() {
 }
 
 export function setLink(link) {
+    // The planner makes a new link, with a shelf of its own, for every pairing: the plans the old
+    // link's shelf brought are ordinary plans from here on (its listing would call them gone).
+    const before = getLink();
+    if (link?.linkId != null && before?.linkId != null && String(link.linkId) !== String(before.linkId)) {
+        detachShelf();
+    }
     storage.set(KEYS.link, link && link.token ? {...link} : null);
 }
 
 export function clearLink() {
+    detachShelf();
     storage.set(KEYS.link, null);
+}
+
+/**
+ * The plans that came from a shelf become ordinary plans in the library (they leave by the ten
+ * plans or a newer plan for their course, as a plan loaded by its code does), and the shelf's
+ * listing state starts again. For when the link ends or a new one starts: "the plans here stay".
+ */
+export function detachShelf() {
+    const lib = library();
+    let changed = false;
+    for (const entry of Object.values(lib.plans)) {
+        if (entry?.shelf) {
+            entry.shelf = false;
+            changed = true;
+        }
+    }
+    if (changed) {
+        storage.set(KEYS.plans, lib);
+    }
+    if (getShelf().etag != null || getShelf().removed) {
+        setShelf({etag: null, removed: null});
+    }
 }
 
 /**

@@ -81,7 +81,7 @@
       <div class="toast" id="toast" hidden>
         <span class="text" id="toast-text"></span>
         <button type="button" class="primary" data-action="use-offer" id="toast-use">Use</button>
-        <button type="button" data-action="dismiss-offer" id="toast-dismiss" title="Keep the current plan">×</button>
+        <button type="button" data-action="dismiss-offer" id="toast-dismiss" title="Keep the current plan" aria-label="Dismiss">×</button>
       </div>
 
       <div class="idle" id="idle">
@@ -115,7 +115,7 @@
           <button type="button" class="primary" id="update-open" title="Opens the release page: download the zip and unpack it over the mod's folder, then restart Sauce">Download</button>
         </div>
         <div class="code-row" id="code-row">
-          <input type="text" id="plan-code" maxlength="6" placeholder="plan code" autocomplete="off" spellcheck="false" aria-label="Plan code">
+          <input type="text" id="plan-code" maxlength="80" placeholder="plan code" autocomplete="off" spellcheck="false" aria-label="Plan code">
           <button type="button" class="primary" id="load-plan">Load</button>
           <button type="button" id="close-panel" title="Keep this plan (Esc)" hidden>Close</button>
           <button type="button" id="clear-plan" title="Ride with no plan: then Plan from here, or Plan it in a pen" hidden>Clear plan</button>
@@ -133,7 +133,7 @@
         </div>
         <div class="group">
           <span class="label">bias</span>
-          <button type="button" data-action="bias-down" title="Targets 1 % lower">−</button>
+          <button type="button" data-action="bias-down" id="bias-down" title="Targets 1 % lower">−</button>
           <span class="value tnum" id="bias-value">100%</span>
           <button type="button" data-action="bias-up" title="Targets 1 % higher">+</button>
         </div>

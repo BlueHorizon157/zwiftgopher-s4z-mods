@@ -5,6 +5,9 @@
 //                             instead of live data, and runs the
 //                             window's clock (Date.now) on the recording's time;
 //   subscribe(..., {record: true})  feeds the telemetry recorder from that subscription.
+// A replay window keeps the mod's shared state (plans, active plan, controls, link) in memory,
+// copied from the real one when it opens: what it does never reaches the real windows
+// (mod-storage.mjs).
 import * as common from '/pages/src/common.mjs';
 import * as recorder from './recorder.mjs';
 import {parseJsonl, createReplayer, rpcCacheOf, rpcKey} from './replay.mjs';

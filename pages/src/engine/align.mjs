@@ -61,6 +61,16 @@ export function eventLengthM(tick) {
 }
 
 /**
+ * The length of the race the rider is in, for the race's own figures (the line, the finish, a
+ * plan for another distance): the event's length, not a route's. A free ride reports its route's
+ * lap the same way (remainingType 'route'; the free ticks of the California Dreamin' recording),
+ * which is not where a plan on that route ends.
+ */
+export function raceLengthM(tick) {
+    return tick?.remainingType !== 'route' ? eventLengthM(tick) : null;
+}
+
+/**
  * The category the tick's length belongs to: the tick's own subgroup when Sauce reports the
  * length as the event's (remainingType 'event'); else null. A free ride reports its route's
  * length the same way (remainingType 'route'), and a tick can still carry it just after the
@@ -86,7 +96,7 @@ export function distanceToGoM(tick) {
 
 /** Plan length minus event length when that is a gate-to-line stretch (0 to LINE_MAX_M); else null. */
 export function lineOffsetM(tick, plan) {
-    const eventM = eventLengthM(tick);
+    const eventM = raceLengthM(tick);
     if (eventM == null || !(plan?.lengthM > 0) || plan.fromHere) {
         return null;
     }
@@ -156,7 +166,7 @@ export function planMetre(tick, {offsetM = 0, anchorDistanceM = null, plan = nul
  * over 1 %, or the plan longer by more than a gate-to-line stretch; else null.
  */
 export function mismatchM(tick, plan) {
-    const eventM = eventLengthM(tick);
+    const eventM = raceLengthM(tick);
     if (eventM == null || !(plan?.lengthM > 0) || plan.fromHere) {
         return null;
     }

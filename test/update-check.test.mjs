@@ -1,7 +1,7 @@
 // The TT HUD's check for a newer version (pages/src/update-check.mjs).
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {compareVersions, newestTag, fetchLatest, checkForUpdate, STORAGE_KEY, UPDATE_CHECK_MS} from '../pages/src/update-check.mjs';
+import {compareVersions, newestTag, fetchLatest, checkForUpdate, STORAGE_KEY, UPDATE_CHECK_MS, TIMEOUT_MS} from '../pages/src/update-check.mjs';
 
 const answer = (status, json) => ({ok: status >= 200 && status < 300, status, json: async () => json});
 function fakeFetch(routes) {
@@ -70,4 +70,27 @@ test('a failed check keeps what was known and waits an hour before trying again'
     await checkForUpdate({fetchFn: down, storage: store, current: '0.9.3', now: now + 60_000});
     assert.equal(down.calls.length, 1, 'not asked again within the hour');
     assert.deepEqual(await checkForUpdate({fetchFn: down, storage: memory(), current: '0.9.3', now}), {latest: null, available: false}, 'nothing known: nothing shown');
+});
+
+test('windows that start together ask GitHub once between them (audit 11)', async () => {
+    const store = memory();
+    let requests = 0;
+    const slow = async () => {
+        requests++;
+        await new Promise(resolve => setTimeout(resolve, 60));
+        return answer(200, {tag_name: 'v1.0.1'});
+    };
+    const starts = [0, 5, 10, 20, 30, 40].map(ms => new Promise(resolve => setTimeout(resolve, ms)).then(() => checkForUpdate({fetchFn: slow, storage: store, current: '1.0.0'})));
+    const results = await Promise.all(starts);
+    assert.equal(requests, 1, 'one request');
+    assert.deepEqual(results[0], {latest: '1.0.1', available: true}, 'the window that asked has the answer');
+    // The others read it from the shared storage a little later.
+    assert.deepEqual(await checkForUpdate({fetchFn: slow, storage: store, current: '1.0.0'}), {latest: '1.0.1', available: true});
+    assert.equal(requests, 1);
+});
+
+test('a GitHub that never answers ends the check like a failed one (audit 11)', async () => {
+    assert.ok(TIMEOUT_MS >= 1000);
+    const hang = (url, init) => new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), {name: 'AbortError'}))));
+    assert.equal(await fetchLatest(hang, 30), null);
 });

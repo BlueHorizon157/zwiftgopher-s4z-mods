@@ -59,9 +59,29 @@ export function dropTwins(plans, code, raw) {
 /**
  * The plans that came from the shelf (entry.shelf) and are not in its listing any more: a newer
  * plan for the course took their place, or the rider took them off in the planner. codes: the
- * listing's. A plan loaded by its code (not from the shelf) stays.
+ * listing's. A plan loaded by its code (not from the shelf) stays, so does the active plan (a
+ * plan the rider is about to ride never goes by absence alone), and so does a plan that has
+ * expired: the shelf stops listing an expired plan, the mod keeps it ("expired (still usable
+ * here)"). now: the clock (ms), for the expiry.
  */
-export function shelfLeavers(plans, codes) {
+export function shelfLeavers(plans, codes, {activeCode = null, now = Date.now()} = {}) {
     const keep = new Set((codes ?? []).map(String));
-    return Object.entries(plans).filter(([code, entry]) => entry?.shelf && !keep.has(code)).map(([code]) => code);
+    return Object.entries(plans)
+        .filter(([code, entry]) => entry?.shelf && !keep.has(code) && code !== activeCode && !hasExpired(entry, now))
+        .map(([code]) => code);
+}
+
+/**
+ * Whether a library entry's expiresAt has passed: an ISO time (the shelf's listing), the SQL text
+ * the share endpoint gives (no zone: UTC), or epoch seconds or milliseconds. No expiry: no.
+ */
+export function hasExpired(entry, now = Date.now()) {
+    const at = entry?.expiresAt;
+    if (at == null || at === '') {
+        return false;
+    }
+    const text = String(at).trim();
+    const ms = typeof at === 'number' ? at * (at < 1e12 ? 1000 : 1)
+        : Date.parse(/(Z|[+-]\d{2}:?\d{2})$/i.test(text) ? text : `${text.replace(' ', 'T')}Z`);
+    return Number.isFinite(ms) && ms <= now;
 }
