@@ -61,7 +61,7 @@ window shares (`~zg-tt/*`), so they carry over either way.
 | `homeURL` | https://zwiftgopher.com/TT/sauce4zwift-mod.html |
 | `logoURL` | https://raw.githubusercontent.com/BlueHorizon157/zwiftgopher-s4z-mods/9963d78224455e7529b5787aeaed56e6a5d6ba3e/docs/brand/logo.png (512 × 512, pinned to a commit as Justin asks; source `docs/brand/logo.svg`) |
 | `authorName` | ZwiftGopher |
-| `authorAvatarURL` | To add: Dave's Discord avatar saved as `docs/brand/author-avatar.png` and linked pinned to its commit, like the logo (a Discord avatar link stops working when the avatar changes). Shown round, next to the author name. |
+| `authorAvatarURL` | https://raw.githubusercontent.com/BlueHorizon157/zwiftgopher-s4z-mods/d64667ef2a5c093628d739c08d43ea015c1441a6/docs/brand/author-avatar.webp (the ZwiftGopher bot's Discord avatar, 266 × 266, kept in the repo and pinned to a commit like the logo, since a Discord avatar link stops working when the avatar changes). Shown round, about 48 px, next to the author name. |
 | `authorURL` | https://zwiftgopher.com/TT/ |
 
 Each release:
