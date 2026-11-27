@@ -56,11 +56,12 @@ window shares (`~zg-tt/*`), so they carry over either way.
 |---|---|
 | `id` | `zwiftgopher-tt` if Justin agrees (above), else the tool's UUID |
 | `name` | ZwiftGopher TT |
-| `description` | Ride a ZwiftGopher TT plan in Zwift. A HUD (strip, dial or stack) shows the target now, the next change and when, the W′ you have left and the finish time you are on for. There is also an interval list, a field window, and a rivals strip showing whether you are gaining or losing on the riders around you. Link it to the planner at zwiftgopher.com/TT once and your plans arrive by themselves; Plan it builds one for the event you are in; a six-character code works too. |
-| `tags` | `tt`, `pacing`, `racing`, `hud` |
+| `description` | The markdown under "Store description" below, pasted into the release tool as it is |
+| `tags` | `time trial`, `tt`, `pacing`, `planner`, `racing`, `hud` (labels only: the store does not filter or search by them) |
 | `homeURL` | https://zwiftgopher.com/TT/sauce4zwift-mod.html |
 | `logoURL` | https://raw.githubusercontent.com/BlueHorizon157/zwiftgopher-s4z-mods/9963d78224455e7529b5787aeaed56e6a5d6ba3e/docs/brand/logo.png (512 × 512, pinned to a commit as Justin asks; source `docs/brand/logo.svg`) |
 | `authorName` | ZwiftGopher |
+| `authorAvatarURL` | To add: Dave's Discord avatar saved as `docs/brand/author-avatar.png` and linked pinned to its commit, like the logo (a Discord avatar link stops working when the avatar changes). Shown round, next to the author name. |
 | `authorURL` | https://zwiftgopher.com/TT/ |
 
 Each release:
@@ -70,7 +71,68 @@ Each release:
 | `version` | `manifest.json` version |
 | `minVersion` | 2.0.0. The page check passes on Sauce 2.0.0-beta.10 and 2.4.0-alpha.5; run it on 2.3.0 (newest stable) before submitting. |
 | `url`, `size`, `hash` | From the release tool, after it uploads the zip `scripts/release.sh` built. |
-| `notes` | One or two lines from `docs/releases/<version>.md`. |
+| `notes` | The card's release notes: the format under "Release notes on the card" below. |
+
+## How the card shows it
+
+The store page renders `description` and the newest release's `notes` as markdown with every
+line break kept as a break, so neither may be hard-wrapped: one line per paragraph and per
+bullet. Headings, bold, bullets and links render. Around them the card shows the logo, the
+version, size, last update, created date, install count, hearts (votes), tags, the author
+(avatar, name, link) and a "Website" link to `homeURL`. The list is sorted by install count,
+which rises on every download, automatic updates included. The release tool shows a live
+preview of the card: check it there before opening the PR.
+
+## Store description
+
+Paste as it is (Justin prefers "Features" to "Mods" as a heading):
+
+```markdown
+Ride a pacing plan from the ZwiftGopher TT planner, live in Zwift: the power to hold now, the next change and when it comes, the W′ you have left, and the finish time you are on for.
+
+### Features
+- **HUD** in three shapes (strip, dial or stack), each a window you place over the game
+- **Interval list**: every interval's target, time, gradient and W′, and how each one went
+- **Field**: the riders of your event, the gap at the same distance, your place and the time you gain or lose on each
+- **Rivals strip**: the riders nearest you on the clock, ahead and behind, and how the gaps move
+- **Plans arrive by themselves**: link once to the planner at [zwiftgopher.com/TT](https://zwiftgopher.com/TT/), or type a six-character plan code
+- **Plan it**: signed up but no plan? Once linked, the planner builds one for that event in a few seconds
+- **Plan from here**: dropped or on your own? Once linked, a new plan for the rest of the race from the W′ you have left
+
+Free to use. The guide, with pictures and a video, is on the website linked below.
+```
+
+## Release notes on the card
+
+Each release's `notes` are the card's "RELEASE NOTES" until the next release replaces them.
+The full notes stay in `docs/releases/<version>.md` and on the GitHub release.
+
+- 1 to 6 bullets, one line each, no wrapping; what the rider notices first, in plain words.
+- Bold the first few words when a bullet names a feature.
+- Nothing about tests, audits or internals; fixes say what was wrong in the ride, not why.
+- Last line: a link to the full notes on GitHub.
+
+Template:
+
+```markdown
+- **<What is new>**: <what the rider can do now>
+- <What was wrong in a ride> no longer happens: <what happens instead>
+- <A smaller change>
+
+[All changes in <version>](https://github.com/BlueHorizon157/zwiftgopher-s4z-mods/releases/tag/v<version>)
+```
+
+Example, from 0.9.9:
+
+```markdown
+- **Joining a race already under way** works: the HUD picks up the race 30 seconds after you join
+- A few seconds' gap in Zwift's data at an interval change no longer makes you look slow
+- One stray "0 m to go" reading no longer ends the race early
+- The finish shows its own time and ahead/behind, not the last reading before the line
+- A power dropout no longer drags an interval's average down
+
+[All changes in 0.9.9](https://github.com/BlueHorizon157/zwiftgopher-s4z-mods/releases/tag/v0.9.9)
+```
 
 ## The pull request
 
