@@ -1,7 +1,7 @@
-// Where the rider is in the plan (docs/REVAMP_PLAN.md 1.3, 6.2). In an event the game's
+// Where the rider is in the plan. In an event the game's
 // eventDistance and clock both sit at zero until the timing line, which is somewhere after
 // the gate and different on every route (50 m in, 150 m in: no rule). So the line's plan
-// metre comes from the end, as the 0.6 mod did: plan length minus the event's distance,
+// metre comes from the end: plan length minus the event's distance,
 // when the plan is for this race; else the file's start_line_m. Outside an event, ride
 // distance from the arm. The rider's manual offset is added. The plan is never rescaled to
 // the event: a length mismatch is reported.
@@ -24,9 +24,9 @@ export function subgroupOf(tick) {
 /**
  * At the start of an event: in its pen (or rolling out of a mass start's pen to the line), where
  * Zwift's race timer and event distance both sit at zero. Every event begins here, whatever the
- * rider did before: on 2026-11-18 (The Fan Flats TT) the pen's first tick had time, event distance
- * and ride distance all 0, after three seconds of ticks that already carried the event's subgroup
- * but still the warm-up's road, distance and timer.
+ * rider did before: the pen's first tick has time, event distance and ride distance all 0, after
+ * a few seconds of ticks that already carry the event's subgroup but still the warm-up's road,
+ * distance and timer.
  */
 export function atEventStart(tick) {
     return inEvent(tick) && numberOrNull(tick?.state?.time) === 0 && numberOrNull(tick?.state?.eventDistance) === 0;

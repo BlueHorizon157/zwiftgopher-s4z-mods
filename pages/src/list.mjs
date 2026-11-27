@@ -1,4 +1,4 @@
-// The interval list window (docs/REVAMP_PLAN.md 4.5, Phase 4.1): every interval of the plan
+// The interval list window: every interval of the plan
 // with where it ends, its target, time, gradient and W′, and once ridden how it went. Rows are
 // built once per plan and their cells rewritten only when their text changes; the current row
 // sits a third of the way down so more of what is coming is in view.

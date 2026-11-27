@@ -1,16 +1,15 @@
 import {lineInPlanM} from './align.mjs';
-// The race clock (docs/REVAMP_PLAN.md 1.2). Three kinds of start, picked from the event:
+// The race clock. Three kinds of start, picked from the event:
 //
-//   tt     a TT event: the clock starts at the timing line. Which telemetry marks it is
-//          still to be read off a real recording, so the signal is a rule: 'time'
-//          (state.time leaves 0 while in the event; what the old mod relied on and what
-//          the synthetic recordings assume), 'distance' (the rider moves past the plan's
-//          line metre), or 'auto' (Zwift's own clock first, distance as the fallback).
+//   tt     a TT event: the clock starts at the timing line. The signal for it is a rule:
+//          'time' (state.time leaves 0 while in the event; what the synthetic recordings
+//          assume), 'distance' (the rider moves past the plan's line metre), or 'auto'
+//          (Zwift's own clock first, distance as the fallback).
 //   group  a mass-start event: the game's distance and timer start at a timing line too (102 m
-//          out of the pen on the Watopia Hilly Route, 19 s after the gun: race 5780317,
-//          2026-11-11), and the plan starts there, so this clock starts at the line as a TT's
-//          does. The result counts from the gun: the engine adds the seconds from the gun to
-//          the line (gunToLineS) for the official time.
+//          out of the pen on the Watopia Hilly Route, 19 s after the gun), and the plan starts
+//          there, so this clock starts at the line as a TT's does. The result counts from the
+//          gun: the engine adds the seconds from the gun to the line (gunToLineS) for the
+//          official time.
 //   manual a free ride: the clock runs from the arm.
 //   here   a plan from here: the clock runs from the moment it was asked for (its anchor).
 //
@@ -64,7 +63,7 @@ export function createClock() {
 }
 
 /**
- * The timing line in plan metres. Plan files from the 2026-10-27 planner say where the clock
+ * The timing line in plan metres. Newer plan files say where the clock
  * starts (route.start_line_m: 0, the pen, on most routes; ZwiftPower's time is the ride from
  * the pen). Older files were built on the 150 m start delay after the pen-to-route metres.
  */

@@ -1,4 +1,4 @@
-// What kind of event the rider is in and when it started (docs/REVAMP_PLAN.md 1.2), from
+// What kind of event the rider is in and when it started, from
 // Sauce's event RPCs, cached per subgroup (an answer that says nothing is not kept: Sauce may
 // not have had the event yet, and the next ask goes to it again). The engine takes it as
 // event('eventInfo').

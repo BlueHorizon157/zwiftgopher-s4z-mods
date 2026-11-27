@@ -1,35 +1,34 @@
-// Telemetry recorder (docs/REVAMP_PLAN.md Phase 0.2) and the races kept from it (race-keeper.mjs).
+// Telemetry recorder, and the kept race recordings built from it (race-keeper.mjs).
 //
 // Keeps the last two hours of the channels a window records through sauce.subscribe()
-// ('athlete/watching' from the dashboard, 'nearby' from the field window, RPC results from
-// sauce.rpc, and the mod's own view of the race, 'zg/state' and 'zg/log'), trimmed, in
-// IndexedDB, which every window of the mod shares. Two switches run it:
-//   Record telemetry (/zg-tt/recorder = {enabled, startedAt}): the whole ticks, for test
-//     fixtures and ?replay=idb; turning it on starts a fresh recording; Save writes it out.
-//   Keep race recordings (/zg-tt/race-keeper = {enabled}): slim ticks all the time, and each
-//     race the rider rides cut out of them when it is over, compressed, and kept 14 days
-//     (store 'races'); Settings lists them to save one to a file. ?replay=race-<key> replays one.
-// Rows carry the unix time they were written (at); exports count from the first.
+// ('athlete/watching', 'nearby', RPC results, and the mod's own 'zg/state' and 'zg/log'), trimmed,
+// in IndexedDB database 'zg-tt-recorder', shared by every window of the mod. Two switches:
+//   Record telemetry (/zg-tt/recorder = {enabled, startedAt}): whole ticks, for test fixtures and
+//     ?replay=idb; turning it on starts a fresh recording; Save writes it out.
+//   Keep race recordings (/zg-tt/race-keeper = {enabled}): slim ticks all the time; when a race
+//     ends it is cut out, gzipped into the 'races' store and kept 14 days. Settings lists them
+//     and saves one to a file; ?replay=race-<key> replays one.
+// Rows in 'ticks' are {at: unix ms, ch, d, bytes}; exports give each row a time counted from the
+// first.
 import {storage} from './mod-storage.mjs';
 import {VERSION} from './version.mjs';
 import {KEEP_KEY, MARKS_KEY, slimTick, keepFrom, raceWindow, racesToExpire} from './race-keeper.mjs';
 
 export const CONTROL_KEY = '/zg-tt/recorder';
 const DB_NAME = 'zg-tt-recorder';
-const DB_VERSION = 2;               // 2 (0.9.8): rows by unix time, an index on it, the saved races
+const DB_VERSION = 2;               // 2: rows have a unix time (indexed); adds the 'races' store
 const STORE = 'ticks';
 const RACES = 'races';
 const MAX_AGE_MS = 2 * 3600 * 1000;
-const MAX_USAGE_BYTES = 800 * 1024 * 1024;   // the whole store; past it the buffer keeps 30 minutes
+const MAX_USAGE_BYTES = 800 * 1024 * 1024;   // whole origin; above it the buffer keeps 30 minutes
 const SHORT_AGE_MS = 30 * 60 * 1000;
 const NEARBY_PERIOD_MS = 2000;
 const PRUNE_EVERY = 120;
 const WATCHING_DROP = new Set(['laps', 'segments', 'events', 'streams', 'timeInPowerZones']);
 const MAX_ARRAY = 24;
 
-// Several windows subscribe to the same channel (every engine window to athlete/watching,
-// the field and the rivals strip to nearby); one window per channel writes it. A window
-// takes a channel when nobody has written it for OWNER_STALE_MS.
+// Several windows subscribe to the same channel; only one writes it. A window takes a channel
+// over when nobody has written it for OWNER_STALE_MS.
 const OWNER_KEY = '/zg-tt/recorder-owner';
 const OWNER_STALE_MS = 6000;
 const OWNER_REFRESH_MS = 2000;
@@ -68,9 +67,8 @@ export function startedAt() {
     return Number(control?.startedAt) || null;
 }
 
-// Settings page: on starts a fresh recording, off keeps what was recorded for export. With
-// race keeping on, the buffer is the races' too: turning this on then clears only what no
-// race needs.
+// On starts a fresh recording; off keeps what was recorded for export. While race keeping is on
+// the buffer is also the races' source, so turning this on clears only what no race needs.
 export async function setEnabled(enabled) {
     if (enabled) {
         await clear({keepRaces: isKeeping()});
@@ -84,7 +82,7 @@ export function setKeeping(enabled) {
     storage.set(KEEP_KEY, keep);
 }
 
-// owner: the channel whose writer writes this one (the mod's view and log go together).
+// owner: the channel whose writer also writes this one (the mod's view and log go together).
 export async function record(channel, data, {owner = channel} = {}) {
     if (!isActive()) {
         return;
@@ -99,7 +97,7 @@ export async function record(channel, data, {owner = channel} = {}) {
         }
         lastNearbyMs = now;
     }
-    // The whole tick while Record telemetry is on; the slim one when only races are kept.
+    // Whole tick while Record telemetry is on; slim when only races are kept.
     const d = isEnabled() ? trim(channel, data) : channel === 'athlete/watching' ? slimTick(data) : trim(channel, data);
     const row = {at: now, ch: channel, d, bytes: JSON.stringify(d).length};
     try {
@@ -127,7 +125,6 @@ function ownsChannel(channel, now) {
     return true;
 }
 
-/** This window writes the channel now (the one that saves the races writes the ticks). */
 export function writesChannel(channel, now = Date.now()) {
     const o = (storage?.get(OWNER_KEY) || {})[channel];
     return Boolean(o && o.id === ownerId && now - o.at < OWNER_STALE_MS);
@@ -152,7 +149,7 @@ export async function stats() {
     };
 }
 
-/** The buffer as JSONL (Save recording) since the recording started, t counted from then. */
+/** The buffer since the recording started, as JSONL; t is ms from the start. */
 export async function exportJsonl() {
     const rows = await rowsBetween(startedAt(), null);
     const t0 = startedAt() ?? rows[0]?.at ?? Date.now();
@@ -168,7 +165,7 @@ function jsonlParts(rows, t0, meta) {
     return parts;
 }
 
-/** Clears the buffer; keepRaces leaves what a race not yet saved still needs. */
+/** Clears the buffer; keepRaces keeps what a race not yet saved still needs. */
 export async function clear({keepRaces = false} = {}) {
     const db = await openDb();
     const from = keepRaces ? keepFrom(storage?.get(MARKS_KEY)) : null;
@@ -258,9 +255,9 @@ function trimNearbyEntry(e) {
     };
 }
 
-// The buffer keeps two hours, and what a race not yet saved needs (its marks), however old: a
-// race Sauce was closed during is saved when Sauce next starts. Past MAX_USAGE_BYTES for the
-// whole store it keeps 30 minutes (and the races' needs) instead.
+// Keeps two hours, plus whatever a race not yet saved needs (its marks), however old, so a race
+// that ended while Sauce was closed is saved on the next start. Above MAX_USAGE_BYTES it keeps
+// 30 minutes (plus the races' needs) instead.
 async function prune() {
     const db = await openDb();
     const now = Date.now();
@@ -303,11 +300,11 @@ async function rowsBetween(fromAt, toAt) {
     return request(index.getAll(range));
 }
 
-// ---- the races kept (race-keeper.mjs) ----
+// ---- kept races ----
 
 /**
- * Cuts a race out of the buffer (raceWindow), compresses it and keeps it under the race's key.
- * Returns the kept race's summary, or null when the buffer has nothing of it.
+ * Cuts a race out of the buffer (raceWindow), gzips it and stores it under the race's key.
+ * Returns the summary (the record without its blob), or null when the buffer has nothing of it.
  */
 export async function saveRace(mark) {
     const {fromAt, toAt} = raceWindow(mark);
@@ -373,7 +370,7 @@ export async function deleteRace(key) {
     await request(db.transaction(RACES, 'readwrite').objectStore(RACES).delete(String(key)));
 }
 
-/** Deletes the kept races past their fortnight (or past the space they may take). */
+/** Deletes kept races past 14 days or over the space limit (racesToExpire). */
 export async function expireRaces(nowMs = Date.now()) {
     const keys = racesToExpire(await listRaces(), nowMs);
     for (const key of keys) {
@@ -392,7 +389,7 @@ function openDb() {
             const req = indexedDB.open(DB_NAME, DB_VERSION);
             req.onupgradeneeded = ev => {
                 const db = req.result;
-                // Version 1 rows counted from the recording's start, with no unix time: they go.
+                // Version 1 rows have no unix time and cannot be used: dropped.
                 if (ev.oldVersion < 2 && db.objectStoreNames.contains(STORE)) {
                     db.deleteObjectStore(STORE);
                 }

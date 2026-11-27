@@ -1,4 +1,4 @@
-// The TT HUD window (docs/REVAMP_PLAN.md 4.4): one page, three layouts, every number from
+// The TT HUD window: one page, three layouts, every number from
 // engine.view(). The layout comes from the manifest window's ?layout, or the settings
 // page's override; look settings are data attributes on <html> so the CSS does the rest.
 import {startWindow, statusWords} from './views/runtime.mjs';
@@ -156,7 +156,7 @@ function initControls() {
         }
         win.draw();
     });
-    // A plan from the planner, offered while another is active (TT/RIDE_DAY_PLAN.md 2.4).
+    // A plan from the planner, offered while another is active.
     els.toast.addEventListener('click', ev => {
         const action = ev.target.closest('[data-action]')?.dataset.action;
         if (action === 'use-offer') {
@@ -296,8 +296,8 @@ function render(v) {
     setText(els.fromHereText, hereText);
     setHidden(els.fromHerePlan, herePlanning);
     els.fromHerePlan.disabled = Boolean(planning);
-    // A plan that arrived for another course or pen: offered before the start, to load by hand
-    // (decision 3, revised 2026-11-09), over the plan being ridden or in the empty panel.
+    // A plan that arrived for another course or pen: offered before the start, to load by hand,
+    // over the plan being ridden or in the empty panel.
     const shelfOffer = win.offer();
     const showToast = Boolean(shelfOffer && (!plan || !showIdle) && beforeStart && !v.spectating);
     setHidden(els.toast, !showToast);
@@ -504,7 +504,7 @@ function openUpdate() {
     }
 }
 
-/** A newer TT HUD, said only while the rider is not racing (Dave, 2026-11-12). */
+/** A newer TT HUD, said only while the rider is not racing. */
 function updateToShow(v) {
     return v.status !== 'racing' && !v.spectating ? win.update() : null;
 }
@@ -512,7 +512,7 @@ function updateToShow(v) {
 function setBanner(v, now) {
     const layout = document.documentElement.dataset.layout;
     // The strategy being ridden, as a chip that opens the plan panel: before the start and,
-    // since a strategy changes in place, while racing (Dave, 2026-11-09).
+    // since a strategy changes in place, while racing.
     const chip = (v.status === 'armed' || v.status === 'idle' || v.status === 'racing') && !v.spectating && strategyChoices(v.plan).length > 1
         ? `<button type="button" class="chip" data-action="strategy" title="Change the strategy or the plan">${escapeHtml((v.plan.strategyLabel ?? 'as shared').toLowerCase())}</button>` : '';
     const upcoming = v.status === 'idle' && v.plan ? win.nextTT() : null;

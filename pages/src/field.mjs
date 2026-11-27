@@ -1,4 +1,4 @@
-// The field window (docs/REVAMP_PLAN.md 4.5, Phase 4.2): the riders of your event, each at the
+// The field window: the riders of your event, each at the
 // same distance along the course as you on the clock: the gap now (or at the finish, predicted),
 // the place among the riders you can compare with, the distance done (or the time of a rider who
 // has finished), the speed, w/kg and W′, and what you gain or lose on each per minute. Riders you

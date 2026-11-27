@@ -8,16 +8,16 @@
 // road is, so it goes on moving until that rider reaches the line: over your time to go when it
 // is you, and over the rider's whole stretch to the line (your time over it) when they are
 // behind you on the road. 20 s up with 1 minute to go at 5 s a minute is out of reach when they
-// are ahead of you on the road, and caught when they still have 5 minutes to ride (Dave,
-// 2026-11-14). What it would take from you is on your own minutes: the rest of their stretch
-// is road you have already ridden. A rider who has finished is at their real finish time: the
+// are ahead of you on the road, and caught when they still have 5 minutes to ride. What it
+// would take from you is on your own minutes: the rest of their stretch is road you have
+// already ridden. A rider who has finished is at their real finish time: the
 // line they crossed on their own clock (field-model.mjs finishRaceOf).
 //
 // The places are the riders' order at the finish (1 + the riders finishing ahead of you), so
 // nothing is clamped and nothing comes from Zwift. They are shown only once the outlook is
 // settled: after OUTLOOK.gateElapsedS of racing, or with OUTLOOK.gateToGoS left (the first
-// minutes of a race gave wrong calls on 2026-11-10: a rider who ends up behind was called
-// beating you before the gate).
+// minutes of a race give wrong calls: a rider who ends up behind is called beating you before
+// the gate).
 //
 // States, on the clock (the rider's result against yours):
 //   beat      ahead now, and at this pace you finish ahead of them
@@ -145,7 +145,7 @@ export function finishOutlook(list, {remainingS = null, elapsedS = null, homeFin
  */
 function verdictOf(everyone, home, remainingS, settled) {
     const base = {rider: null, others: 0, lo: null, hi: null, spreadS: null, upS: null, backS: null};
-    // A rider is called once there is a pace for them, as on the rivals strip (0.9.2): one without
+    // A rider is called once there is a pace for them, as on the rivals strip: one without
     // is at their gap as it stands, which says nothing yet about the finish.
     const all = everyone.filter(x => x.paceSPerMin != null || x.finished);
     const ahead = all.filter(x => x.finishGapS > 0).sort((a, b) => a.finishGapS - b.finishGapS);

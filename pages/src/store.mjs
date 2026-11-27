@@ -1,8 +1,8 @@
-// Shared state between the mod's windows (docs/REVAMP_PLAN.md §4.3): the plan library,
-// the active plan, the rider's controls, the rider link and the shelf sync state
-// (TT/RIDE_DAY_PLAN.md 2.1, 2.4), under the mod's '/zg-tt/' keys (shared-storage.mjs keeps
-// them where Sauce's windows don't hear them), written when something changes, never per tick. Migrates what 0.6.x kept under
-// 'tt-dashboard-state' and '/tt-dashboards/shared-state' once.
+// State shared between the mod's windows: the plan library, the active plan, the rider's
+// controls, the planner link and the shelf sync state. Keys are '/zg-tt/...' (stored elsewhere,
+// see shared-storage.mjs); written when something changes, never per tick. Older versions kept
+// plan and controls under 'tt-dashboard-state' and '/tt-dashboards/shared-state'; migrate() copies
+// them across once.
 import {storage} from './sauce.mjs';
 import {dropTwins, shelfLeavers} from './plan-library.mjs';
 
@@ -17,7 +17,7 @@ export const KEYS = {
 };
 const LEGACY_SHARED = '/tt-dashboards/shared-state';
 const LEGACY_WINDOW = 'tt-dashboard-state';
-// A week of event plans from the shelf fits; each entry is a 6–17 KB plan file.
+// Each entry is a 6-17 KB plan file.
 export const MAX_PLANS = 10;
 
 export function library() {
@@ -41,16 +41,15 @@ export function getPlanEntry(code) {
 }
 
 /**
- * Keep a plan under its code (the newest ten), and make it active. A plan from the shelf
- * carries its event, source and publication, so the windows can pick it for the event and
- * tell a republished plan from the one they have.
+ * Keep a plan under its code and make it active. A plan from the shelf carries its event, source
+ * and publication, so windows can pick it for the event and tell a republished plan from the one
+ * they have.
  *
- * One plan per course (Dave, 2026-11-12): a plan for a course the library already has a plan
- * for replaces it, whatever its code; the replaced plan's place as the active plan passes to
- * the new one. Plans from here are kept apart.
+ * One plan per course: a plan for a course the library already has replaces it, whatever its
+ * code, and takes over its place as the active plan. Plans made from here are kept apart.
  *
- * Ten plans are kept (MAX_PLANS): the active plan is never the one to go, then plans from here,
- * then the oldest.
+ * At most MAX_PLANS are kept. The oldest go first, plans from here before others; never the
+ * active plan.
  */
 export function savePlan(code, raw, {activate = true, expiresAt = null, event = null, source = null, publishedAt = null, shelf = false} = {}) {
     const lib = library();
@@ -68,8 +67,8 @@ export function savePlan(code, raw, {activate = true, expiresAt = null, event = 
         publishedAt: publishedAt ?? raw?.meta?.published?.at ?? null,
         shelf,
     };
-    // Over the ten: plans from here go first, then the oldest; never the plan just saved nor the
-    // plan that is active once this is done (it may be the oldest, loaded long ago and chosen since).
+    // Over the limit: plans from here go first, then the oldest; never the plan just saved nor the
+    // one that will be active (it may be the oldest, chosen since).
     const active = activate || tookActive ? code : getActiveCode();
     const spare = Object.keys(lib.plans).length - MAX_PLANS;
     if (spare > 0) {
@@ -84,17 +83,14 @@ export function savePlan(code, raw, {activate = true, expiresAt = null, event = 
     if (activate) {
         setActive(code);
     } else if (tookActive) {
-        // The plan that was active is gone: its replacement is the plan, as shared.
+        // The active plan was replaced: its replacement takes over, as shared.
         storage.set(KEYS.active, {code, card: null, at: Date.now()});
     }
 }
 
 /**
- * The plans from the shelf that the shelf no longer has (replaced by a newer plan for their
- * course, or taken off in the planner) leave the library. codes: the shelf's listing.
- * Never the active plan, and never a plan that has expired (the shelf stops listing those: they
- * stay usable here). Returns the codes removed. A plan taken off by hand that the shelf no longer
- * lists is forgotten as such (removePlan).
+ * Remove shelf plans the shelf no longer lists. codes: the shelf's listing. Never removes the
+ * active plan or an expired one (shelfLeavers). Returns the codes removed.
  */
 export function pruneShelf(codes) {
     const lib = library();
@@ -123,9 +119,9 @@ export function removePlan(code) {
     }
 }
 
-// A plan the rider removed by hand stays removed while the shelf lists it as it was: the shelf
-// state keeps {code: its publication} for it, and a plan republished in the planner (a new
-// publication) comes back. Kept to the plans the shelf still lists (pruneShelf) and thirty.
+// A plan the rider removed by hand stays removed while the shelf lists the same publication; the
+// shelf state keeps {code: publication}. A republished plan comes back. Limited to MAX_DISMISSED
+// entries, and to codes the shelf still lists (pruneShelf).
 const MAX_DISMISSED = 30;
 
 function dismiss(code, publishedAt) {
@@ -150,7 +146,6 @@ function forgetDismissed(codes) {
     }
 }
 
-/** The rider removed this plan by hand and the shelf still lists the same publication of it. */
 export function isDismissed(code, publishedAt) {
     const removed = getShelf().removed;
     return Boolean(removed && Object.hasOwn(removed, code) && (publishedAt == null || String(publishedAt) === String(removed[code] ?? '')));
@@ -160,7 +155,7 @@ export function getActiveCode() {
     return storage?.get(KEYS.active)?.code ?? null;
 }
 
-/** The strategy card the rider chose for the active plan (5.2), or null for the plan as shared. */
+/** The strategy card the rider chose for the active plan, or null for the plan as shared. */
 export function getActiveCard() {
     return storage?.get(KEYS.active)?.card ?? null;
 }
@@ -169,7 +164,7 @@ export function getActiveCard() {
 export function setActive(code, card) {
     const same = (code ?? null) === getActiveCode();
     if (!same) {
-        // A different plan starts with neutral offset and bias, in every window.
+        // A different plan starts with neutral offset and bias.
         setControls({offsetM: 0, bias: 1});
     }
     const keep = card === undefined ? (same ? getActiveCard() : null) : card;
@@ -184,7 +179,6 @@ export function getActivePlanRaw() {
     return getPlanRaw(getActiveCode());
 }
 
-/** The plan in the library made for this route, if any. */
 export function planForRoute(routeId) {
     if (routeId == null) {
         return null;
@@ -192,7 +186,7 @@ export function planForRoute(routeId) {
     return listPlans().find(p => p.routeId === String(routeId)) ?? null;
 }
 
-/** The newest plan made for this event: by its pen first, then by the event (TT/RIDE_DAY_PLAN.md 2.4). */
+/** The newest plan made for this event: matched by pen (subgroup) first, then by event. */
 export function planForEvent(eventId, subgroupId = null) {
     const plans = listPlans();
     return (subgroupId != null ? plans.find(p => p.event?.subgroup_id != null && String(p.event.subgroup_id) === String(subgroupId)) : null)
@@ -200,7 +194,7 @@ export function planForEvent(eventId, subgroupId = null) {
         ?? null;
 }
 
-// ---- the rider link and the shelf (TT/RIDE_DAY_PLAN.md 2.1, 2.4) ----
+// ---- the planner link and the shelf ----
 
 /**
  * The link to the planner: {token, state: 'pending' | 'linked' | 'expired' | 'revoked', code,
@@ -213,8 +207,8 @@ export function getLink() {
 }
 
 export function setLink(link) {
-    // The planner makes a new link, with a shelf of its own, for every pairing: the plans the old
-    // link's shelf brought are ordinary plans from here on (its listing would call them gone).
+    // Every pairing gets a new link with its own shelf, so the old shelf's plans become ordinary
+    // plans (the new shelf's listing would otherwise remove them).
     const before = getLink();
     if (link?.linkId != null && before?.linkId != null && String(link.linkId) !== String(before.linkId)) {
         detachShelf();
@@ -228,9 +222,8 @@ export function clearLink() {
 }
 
 /**
- * The plans that came from a shelf become ordinary plans in the library (they leave by the ten
- * plans or a newer plan for their course, as a plan loaded by its code does), and the shelf's
- * listing state starts again. For when the link ends or a new one starts: "the plans here stay".
+ * Plans that came from a shelf become ordinary library plans, and the shelf's listing state is
+ * reset. For when the link ends or a new one starts.
  */
 export function detachShelf() {
     const lib = library();
@@ -250,8 +243,8 @@ export function detachShelf() {
 }
 
 /**
- * Shelf sync state every window shares: {etag, lastPollAt, lastPollBy, lastSyncAt, offer:
- * {code, routeName, timeText, at} | null, unsupportedAt}. One window polls a minute.
+ * Shelf sync state shared by all windows: {etag, lastPollAt, lastPollBy, lastSyncAt, offer:
+ * {code, routeName, timeText, at} | null, unsupportedAt, removed}. One window polls per minute.
  */
 export function getShelf() {
     const shelf = storage?.get(KEYS.shelf);
@@ -285,7 +278,7 @@ export function onChange(callback) {
     });
 }
 
-/** Bring a 0.6.x plan and controls across once; harmless when there is nothing. */
+/** Copy the plan and controls from the old storage keys, once. */
 export function migrate() {
     if (!storage || storage.get(KEYS.active) != null) {
         return false;

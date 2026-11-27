@@ -1,8 +1,8 @@
 // Time left in the interval: a clock that counts down a second a second and settles on
-// when the rider will reach the power change (Dave, 2026-11-10). It was the metres to the
-// change over the speed of the moment, so a hill inside an interval made it leap (half
-// the speed, twice the seconds) and a crest made it collapse: on four recorded TTs a
-// fifth of its ticks went up or dropped three seconds or more.
+// when the rider will reach the power change. It is not the metres to the change over the
+// speed of the moment: a hill inside an interval would make that leap (half the speed, twice
+// the seconds) and a crest collapse (on four recorded TTs a fifth of its ticks went up or
+// dropped three seconds or more).
 //
 // The estimate is the plan's time for the metres left in the interval (the planner timed
 // the interval's terrain), answered by:
@@ -13,7 +13,7 @@
 //     minutes (a draft, a planner a little off), leaning on the plan's for the first one.
 // The shown figure counts down in real time and eases onto the estimate.
 //
-// Back-test (2026-11-10): four recorded TTs (TT/fixtures/rides in the planner) with plans
+// Back-test: four recorded TTs with plans
 // optimised for them, every tick against when the interval really ended. Mean error 12.7 s
 // → 6.1 s; ticks where the figure went up or dropped 3 s or more 21 % → under 1 %. Ridden
 // 20 % faster than recorded (a draft): 10.6 s → 8.6 s, where the plan's time alone is 26.5 s

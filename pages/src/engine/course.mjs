@@ -1,12 +1,11 @@
-// Where the rider is on the plan's own course (docs/prediction-pipeline.md, "How the plan metre
-// is found"). The plan file carries the planner's course points on the plan's metre axis
-// (route.course, format zg-course/1). The rider's lat/lng is matched onto those points, which
-// places the rider on the road, and the Sauce odometer (eventDistance x k) carries the position
-// between matches. Pure: no DOM, no storage, no timers. The tracker is state the caller steps
-// once per tick; nothing here reads a clock.
+// Where the rider is on the plan's own course. The plan file carries the planner's course points
+// on the plan's metre axis (route.course, format zg-course/1). The rider's lat/lng is matched
+// onto those points, which places the rider on the road, and the Sauce odometer (eventDistance x
+// k) carries the position between matches. Pure: no DOM, no storage, no timers. The tracker is
+// state the caller steps once per tick; nothing here reads a clock.
 //
 // Why: the game's eventDistance starts at the timing line, which sits 0 to 160 m into the route
-// data (no rule places it: measured per route, 2026-11-10 and before). The plan metre is the
+// data (no rule places it: it is measured per route). The plan metre is the
 // route data's metre, so the line must be found, and the plan's route data can be longer than
 // the game's raced distance by a lead-in and a lap scale. Matching the rider's position against
 // the course finds both at once, on every route measured: the residual is 2.4 to 2.9 m median.
@@ -32,10 +31,10 @@ export const LOCK_SPAN_M = 30;      // ... spread over this much of the odometer
 export const LOCK_TOL_M = 8;        // a fix agrees with a line when its road metre is within this
 export const LOCK_WINDOW_M = 300;   // the fixes kept for locking: this much odometer
 export const LINE_MIN_M = -150;     // a plausible timing line: the route data starts up to this
-export const LINE_MAX_M = 1500;     //   before the line and no more than this after. It was 300 until a
-                                    //   plan 429 m out of step with its race (padding the planner drew
-                                    //   before the start, 2026-11-11) was refused and raced on distance
-                                    //   alone, every target 425 m late. The planner padded up to 1400 m.
+export const LINE_MAX_M = 1500;     //   before the line and no more than this after. A smaller window
+                                    //   refuses a plan 429 m out of step with its race (padding the
+                                    //   planner draws before the start) and races it on distance
+                                    //   alone, every target 425 m late. The planner pads up to 1400 m.
                                     //   A multi-lap course repeats the road a lap apart: the window is
                                     //   shorter than the shortest lap (1.9 km), and ties go to the hint.
 export const UNLOCK_M = 600;        // this much odometer with no accepted fix: lost; the metre is then carried

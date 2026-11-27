@@ -89,7 +89,7 @@ export function fmtDelta(seconds) {
     return `${sign}${fmtTime(Math.abs(seconds))}`;
 }
 
-/** Words, not signs, for the finish delta (docs/REVAMP_PLAN.md §2). */
+/** Words, not signs, for the finish delta. */
 export function deltaWords(seconds) {
     if (!Number.isFinite(seconds)) {
         return '';

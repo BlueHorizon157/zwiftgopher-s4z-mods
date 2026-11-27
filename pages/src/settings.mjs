@@ -1,4 +1,4 @@
-// The one settings page (docs/REVAMP_PLAN.md 2.2, 4.6). ?for=hud|list|field picks the
+// The one settings page. ?for=hud|list|field picks the
 // window's settings store (the page is opened as that window's child, so it shares its
 // storage id); the plan library and the recorder are shared by every window.
 import * as common from '/pages/src/common.mjs';
@@ -58,7 +58,7 @@ export async function main() {
     initVersion();
 }
 
-// ---- the rider link (TT/RIDE_DAY_PLAN.md 2.1) ----
+// ---- the rider link ----
 
 async function initLink() {
     const el = id => document.getElementById(id);
@@ -231,7 +231,7 @@ async function initLink() {
     }, 30000);
 }
 
-// ---- the next time trials (TT/RIDE_DAY_PLAN.md 2.4) ----
+// ---- the next time trials ----
 
 function initNextTimeTrials() {
     const box = document.getElementById('next-tts');

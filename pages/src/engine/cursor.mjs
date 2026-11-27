@@ -1,4 +1,4 @@
-// Where a plan distance falls in the plan (docs/REVAMP_PLAN.md 1.4): O(log n) from
+// Where a plan distance falls in the plan: O(log n) from
 // scratch, O(1) with the previous index as a hint, which is every tick.
 
 export const BEFORE = -1;

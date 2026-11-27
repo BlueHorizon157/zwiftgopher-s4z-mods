@@ -1,11 +1,6 @@
-// The plan library's rules that need no Sauce (store.mjs keeps the library in the mod's shared storage):
-// one plan per course, and which plans from the shelf have left it. Pure, so test/plan-library
-// .test.mjs runs them in Node.
-//
-// One plan per course (Dave, 2026-11-12): "only the last one and only one should show up in the
-// list of plans ... any plan on the same course and length should replace". The planner's shelf
-// keeps one plan per course too (TTShelf::publish), with the same rule (TTShelf::courseOf,
-// sameCourse).
+// Plan library rules that need no Sauce (store.mjs keeps the library): one plan per course, and
+// which shelf plans have left the shelf. Pure, so test/plan-library.test.mjs runs them in Node.
+// The planner's shelf applies the same course rule server-side.
 
 /**
  * A plan's course: its route and either the custom distance (metres) or the laps; null for a
@@ -57,12 +52,10 @@ export function dropTwins(plans, code, raw) {
 }
 
 /**
- * The plans that came from the shelf (entry.shelf) and are not in its listing any more: a newer
- * plan for the course took their place, or the rider took them off in the planner. codes: the
- * listing's. A plan loaded by its code (not from the shelf) stays, so does the active plan (a
- * plan the rider is about to ride never goes by absence alone), and so does a plan that has
- * expired: the shelf stops listing an expired plan, the mod keeps it ("expired (still usable
- * here)"). now: the clock (ms), for the expiry.
+ * Shelf plans (entry.shelf) that are no longer in the shelf's listing: a newer plan for the
+ * course replaced them, or the rider took them off in the planner. codes: the listing's. Plans
+ * loaded by code stay, as do the active plan and expired plans (the shelf stops listing those but
+ * they remain usable). now: the clock (ms), for the expiry.
  */
 export function shelfLeavers(plans, codes, {activeCode = null, now = Date.now()} = {}) {
     const keep = new Set((codes ?? []).map(String));

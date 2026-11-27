@@ -1,4 +1,4 @@
-// Plan from here (README "Plan from here"; the planner's TT/docs/plan-from-here.md): with no
+// Plan from here (README "Plan from here"): with no
 // plan for the ride, the planner plans the rest of a race, or of a free ride's route lap,
 // from where the rider is, with the W' and the CP the ride so far has left them. Pure: the
 // window gives it the tick, the event info, Sauce's streams and the settings.
@@ -10,7 +10,7 @@ export const SHORT_GAP_S = 3;            // a gap in Sauce's samples up to this 
 export const DRAFTED_S = 10;             // seconds of draft that make it a road bike (TT bikes get none)
 export const NO_DRAFT_RACE_S = 180;      // this long into a draft-legal race with no draft at all: a TT bike
 export const PAUSED = -1;
-// The strategy a plan from here starts on (Dave, 2026-11-09): Balanced unless the setting says
+// The strategy a plan from here starts on: Balanced unless the setting says
 // otherwise, the tiredness from the ride so far being a model not yet calibrated.
 export const HERE_STRATEGIES = ['fastest', 'balanced', 'safe_finish'];
 export const HERE_STRATEGY_DEFAULT = 'balanced';
@@ -151,7 +151,7 @@ export function powerHistory(streams, {eventDistanceM = null} = {}) {
 }
 
 /**
- * The bike for the plan (Dave, 2026-11-09): a road bike unless something says TT. The
+ * The bike for the plan: a road bike unless something says TT. The
  * setting wins; else a no-draft event is a TT; draft in the ride is a road bike (TT bikes
  * get none in Zwift); a draft-legal race ridden for a while with no draft at all is a TT;
  * anything else, a road bike. {bike: 'road'|'tt', reason}.
@@ -175,8 +175,8 @@ export function chooseBike({setting = 'auto', target = null, draftS = 0, raceS =
 /**
  * Whether the HUD offers Plan from here: linked, the rider's own ride, a target, and no plan
  * running for this ride (nothing loaded, a plan waiting for another ride, a plan for another
- * distance being raced), or a plan from here, to make again later in the ride (Dave,
- * 2026-11-09): the planner replays the whole ride, so the new one starts from the W' left now.
+ * distance being raced), or a plan from here, to make again later in the ride: the planner
+ * replays the whole ride, so the new one starts from the W' left now.
  * A plan the rider wants gone for good: Clear plan, then this.
  */
 export function hereOffered({linked, spectating = false, status, plan = null, mismatchM = null, spent = false, target}) {

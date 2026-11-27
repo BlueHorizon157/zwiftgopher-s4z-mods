@@ -1,13 +1,10 @@
-// The mod's one door to Sauce4Zwift: subscribe, rpc and storage from /pages/src/common.mjs,
-// with two additions (docs/REVAMP_PLAN.md Phase 0):
-//   ?replay=<name>[&speed=N]  plays pages/fixtures/<name>.jsonl (or the recorder's own
-//                             buffer with ?replay=idb, a kept race with ?replay=race-<key>)
-//                             instead of live data, and runs the
-//                             window's clock (Date.now) on the recording's time;
+// The mod's access point to Sauce4Zwift: subscribe, rpc and storage from /pages/src/common.mjs,
+// plus replay and recording:
+//   ?replay=<name>[&speed=N]  plays pages/fixtures/<name>.jsonl instead of live data
+//                             (?replay=idb: the recorder's own buffer; ?replay=race-<key>: a kept
+//                             race) and runs the window's clock (Date.now) on the recording's time;
 //   subscribe(..., {record: true})  feeds the telemetry recorder from that subscription.
-// A replay window keeps the mod's shared state (plans, active plan, controls, link) in memory,
-// copied from the real one when it opens: what it does never reaches the real windows
-// (mod-storage.mjs).
+// A replay window works on an in-memory copy of the mod's shared state (mod-storage.mjs).
 import * as common from '/pages/src/common.mjs';
 import * as recorder from './recorder.mjs';
 import {parseJsonl, createReplayer, rpcCacheOf, rpcKey} from './replay.mjs';
@@ -15,10 +12,10 @@ import {parseJsonl, createReplayer, rpcCacheOf, rpcKey} from './replay.mjs';
 const params = new URLSearchParams(window.location.search);
 export const replayName = params.get('replay');
 export const replaySpeed = Math.max(0.1, Number(params.get('speed')) || 1);
-// ?seek=<seconds> fast-forwards the recording to that point before playing (page-check.mjs).
+// ?seek=<seconds> fast-forwards the recording to that point before playing.
 export const replaySeekS = Math.max(0, Number(params.get('seek')) || 0);
 export const isReplay = Boolean(replayName);
-// ?plan=<name> with ?replay= loads pages/fixtures/<name>.json as the plan (page-check.mjs).
+// ?plan=<name> with ?replay= loads pages/fixtures/<name>.json as the plan.
 export const replayPlan = params.get('plan');
 
 const listeners = new Map();
@@ -71,7 +68,7 @@ export const rpc = new Proxy({}, {
     },
 });
 
-export {storage} from './mod-storage.mjs';  // shared-storage.mjs: the mod's keys out of Sauce's windows' way
+export {storage} from './mod-storage.mjs';
 export {common};
 
 export function replayState() {
@@ -79,7 +76,7 @@ export function replayState() {
 }
 
 async function startReplay() {
-    // idb: the recorder's buffer; race-<key>: a kept race (Settings → Keep race recordings).
+    // idb: the recorder's buffer; race-<key>: a kept race.
     const text = replayName === 'idb' ? await recorder.exportJsonl()
         : replayName.startsWith('race-') ? await recorder.raceJsonl(replayName.slice(5))
             : await loadFixture(replayName);
@@ -93,7 +90,7 @@ async function startReplay() {
         onRow: row => dispatch(row.ch, row.d),
         onDone: () => console.info('[replay] done'),
     });
-    // The window's clock follows the recording, so interval timing is right at any speed.
+    // The window's clock follows the recording, so timing is right at any speed.
     Date.now = () => replayer.now();
     document.documentElement.classList.add('replay-mode');
     console.info(`[replay] ${replayName}: ${replayer.length} rows at ${replaySpeed}x`);

@@ -1,31 +1,26 @@
-// Race recordings kept for a fortnight (Settings → Advanced → Keep race recordings).
+// Kept race recordings (Settings > Advanced > Keep race recordings), off by default.
 //
-// Dave, 2026-11-22, after a Seafoam Circuit TT with the recorder off: "I don't want to have to
-// remember to turn it on and then save at the end ... auto clear after a week or something".
-// With this on, the recorder (recorder.mjs) runs all the time on slim ticks, every window notes
-// the events the rider rides in shared marks, and when a race is over (two minutes after the
-// finish, or after leaving the event, or when Sauce was closed during it) the window that writes
-// the recording cuts that race out of it: from ten minutes before joining the event to two minutes
-// after the end, compressed. Saved races are listed in Settings, kept fourteen days, and saved to a
-// file only when the rider wants to report something. Off by default: a rider who never reports a
-// problem never needs it.
+// With this on, the recorder (recorder.mjs) runs all the time on slim ticks, and every window
+// notes the events the rider is in as shared marks. When a race is over (two minutes after the
+// finish or after leaving the event, or when Sauce was closed during it) the window that writes the
+// recording cuts the race out of it (LEAD_MS before joining to TAIL_MS after the end) and stores
+// it gzipped for KEEP_DAYS.
 //
-// Everything here is pure (no storage, no IndexedDB, no timers), so node's tests run it; the
-// recorder and the runtime do the rest.
+// Everything here is pure (no storage, IndexedDB or timers), so Node's tests run it.
 
 export const KEEP_KEY = '/zg-tt/race-keeper';     // {enabled}
 export const MARKS_KEY = '/zg-tt/race-marks';     // {[key]: mark}
 
-export const LEAD_MS = 10 * 60 * 1000;            // kept before joining the event (the warm-up, the join)
+export const LEAD_MS = 10 * 60 * 1000;            // kept before joining the event
 export const TAIL_MS = 2 * 60 * 1000;             // kept after the finish or leaving
-export const STALE_MS = 15 * 60 * 1000;           // a race not seen this long ended unseen (Sauce closed)
+export const STALE_MS = 15 * 60 * 1000;           // a race not seen this long ended unseen
 export const MAX_RACE_MS = 4 * 3600 * 1000;       // the longest stretch kept from the start
-export const SEEN_EVERY_MS = 60 * 1000;           // how often a window says the race is still on
-export const LATE_JOIN_MS = 10 * 1000;            // ticks this soon after joining may still be the free ride's
+export const SEEN_EVERY_MS = 60 * 1000;           // how often a window refreshes a mark's seenAt
+export const LATE_JOIN_MS = 10 * 1000;            // ticks this soon after joining may still be pre-event
 export const MIN_RACE_MS = 2 * 60 * 1000;         // shorter: not kept
 export const KEEP_DAYS = 14;
 export const KEEP_MAX_BYTES = 300 * 1024 * 1024;  // the saved races together (oldest go first)
-export const MARK_FORGET_MS = 24 * 3600 * 1000;   // a saved or dropped mark is forgotten after this
+export const MARK_FORGET_MS = 24 * 3600 * 1000;   // a saved or dropped mark is deleted after this
 
 /** The subgroup of a tick, or null (Zwift reports no event as 0 or nothing). */
 export function subgroupOfTick(tick) {
@@ -35,14 +30,13 @@ export function subgroupOfTick(tick) {
 
 /**
  * One window's view of one tick. local is this window's memory ({sg, joinedAt, penSeen,
- * started, finished, seenAt}, null at first); the result is the new memory and the patches for
- * the shared marks (mergeMark). A race starts on Zwift's event timer (after the pen, or 10 s
- * after joining when the pen was missed: the first ticks after a join can still be the free
- * ride's) or when the engine starts racing; it finishes when the event's distance to go reaches
- * zero or the engine says finished; it ends when the rider leaves the event.
+ * started, finished, seenAt}, null at first); returns {local, patches}: the new memory and the
+ * patches for the shared marks (mergeMark). A race starts on Zwift's event timer (once the pen
+ * has been seen, or LATE_JOIN_MS after joining if it was missed) or when the engine starts
+ * racing; it finishes when the event's distance to go reaches zero or the engine says finished;
+ * it ends when the rider leaves the event.
  *
- * info: {engineStatus, raceS (the race time at the finish), name (the event), code (the plan),
- * routeId}.
+ * info: {engineStatus, raceS (race time at the finish), name (event), code (plan), routeId}.
  */
 export function observeTick(local, tick, nowMs, info = {}) {
     const patches = [];
@@ -58,7 +52,7 @@ export function observeTick(local, tick, nowMs, info = {}) {
     const s = tick.state ?? {};
     if (mem.sg !== sg) {
         mem = {sg, joinedAt: nowMs, penSeen: false, started: false, finished: false, seenAt: nowMs};
-        // backAt: in the event now, so a leaving before this (and back) no longer ends the race.
+        // backAt: in the event now, which cancels an earlier leftAt (see mergeMark).
         patches.push({key: sg, subgroupId: sg, joinedAt: nowMs, backAt: nowMs, seenAt: nowMs});
     }
     const patch = {};
@@ -107,10 +101,10 @@ const earliest = (a, b) => a == null ? (b ?? null) : b == null ? a : Math.min(a,
 const latest = (a, b) => a == null ? (b ?? null) : b == null ? a : Math.max(a, b);
 
 /**
- * Two windows' notes of the same race, in either order, give the same mark: the earliest join,
- * start and finish, the latest sighting, the first name, a plan code (the latest seen). The
- * leaving is the latest one, and none when the rider has been back in the event since (backAt):
- * leaving the pen and joining it again, or one tick without the event, is not the end of the race.
+ * Merges two windows' notes of the same race; the result does not depend on the order. Takes the
+ * earliest join, start and finish, the latest sighting, the first name and the latest plan code.
+ * leftAt is the latest one, or none if the rider has been back in the event since (backAt), so
+ * leaving the pen and rejoining, or one tick without the event, does not end the race.
  */
 export function mergeMark(a, b) {
     if (!a) {
@@ -140,7 +134,7 @@ export function mergeMark(a, b) {
     };
 }
 
-/** The shared marks with these patches merged in (a new object; null when nothing changed). */
+/** The marks with these patches merged in (a new object), or null when there are none. */
 export function applyPatches(marks, patches) {
     if (!patches?.length) {
         return null;
@@ -165,9 +159,9 @@ export function raceWindow(mark) {
 }
 
 /**
- * What to do with each mark now: 'save' (the race is over), 'drop' (no race to keep: never
- * started, too short, or gone without a start), 'forget' (saved or dropped a day ago) or nothing.
- * A mark still running is left alone. Returns {save: [mark], drop: [key], forget: [key]}.
+ * What to do with each mark now. Returns {save: [mark], drop: [key], forget: [key]}: save = the
+ * race is over; drop = nothing to keep (never started, or shorter than MIN_RACE_MS); forget =
+ * saved or dropped MARK_FORGET_MS ago. A mark still running is left alone.
  */
 export function marksDue(marks, nowMs) {
     const out = {save: [], drop: [], forget: []};
@@ -199,7 +193,7 @@ export function marksDue(marks, nowMs) {
 }
 
 /**
- * The saved races to delete: older than KEEP_DAYS, then the oldest until the rest fit in
+ * Keys of the saved races to delete: older than KEEP_DAYS, then the oldest until the rest fit in
  * KEEP_MAX_BYTES. races: [{key, savedAt, bytes}].
  */
 export function racesToExpire(races, nowMs, {days = KEEP_DAYS, maxBytes = KEEP_MAX_BYTES} = {}) {
@@ -223,7 +217,7 @@ export function racesToExpire(races, nowMs, {days = KEEP_DAYS, maxBytes = KEEP_M
     return out;
 }
 
-/** The earliest moment of recording a race not yet saved needs (the recorder keeps it), or null. */
+/** The earliest recording time (unix ms) a race not yet saved needs, or null. */
 export function keepFrom(marks) {
     let from = null;
     for (const mark of Object.values(marks ?? {})) {
@@ -234,9 +228,9 @@ export function keepFrom(marks) {
     return from;
 }
 
-// A watching tick as kept: what the mod's windows read (the engine reads the whole state, the
-// event's distance to go and position, the rider; the field and rivals take 'nearby'), the mod's
-// own live state (zgtt), and none of Sauce's statistics (stats, lap: 6 of the 11 KB of a tick).
+// A slim 'athlete/watching' tick: the fields the mod's windows read (state, event distance to go
+// and position, the rider) and the mod's own live state, without Sauce's statistics (stats, laps:
+// about 6 of the 11 KB of a tick).
 const TICK_DROP = new Set(['stats', 'lap', 'lastLap', 'segmentData', 'laps', 'segments', 'events', 'streams', 'timeInPowerZones']);
 const ATHLETE_KEEP = ['id', 'name', 'fullname', 'sanitizedFullname', 'firstName', 'lastName', 'team', 'weight', 'height', 'ftp', 'cp', 'wPrime', 'gender', 'type', 'age'];
 const STATE_DROP = new Set(['playerVFXs']);
@@ -273,7 +267,7 @@ export function slimTick(data) {
     return out;
 }
 
-/** The mod's own view of the race once a second, for the recording (the engine's view()). */
+/** The engine's view() reduced to the fields worth recording. */
 export function viewSnapshot(v, extra = {}) {
     if (!v) {
         return null;
@@ -300,7 +294,7 @@ export function viewSnapshot(v, extra = {}) {
     };
 }
 
-/** A saved race's file name: zg-tt-race-2026-11-22-1822-seafoam-circuit.jsonl.gz (local time). */
+/** A saved race's file name: zg-tt-race-YYYY-MM-DD-HHMM-<event name>.jsonl.gz (local time). */
 export function raceFileName(race) {
     const d = new Date(race.startAt ?? race.savedAt ?? 0);
     const pad = n => String(n).padStart(2, '0');

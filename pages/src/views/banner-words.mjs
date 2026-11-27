@@ -90,12 +90,12 @@ export function bannerWords(v, {narrow = false, now = Date.now(), idleStatus = '
         text = narrow ? 'from here' : hereWords(v.plan.fromHere);
         tip = narrow ? hereWords(v.plan.fromHere) : '';
     } else if (v.status === 'racing' && Number.isFinite(v.event?.mismatchM)) {
-        // A plan for another distance (the 2026-10-27 race: one lap planned, 16 km raced)
+        // A plan for another distance (say one lap planned, 16 km raced)
         // stays flagged for the whole race; the finish is predicted to the event's end.
         text = narrow ? MISMATCH_SHORT : mismatchWords(v);
         tip = narrow ? mismatchTip(v) : '';
     } else if (v.status === 'racing' && Number.isFinite(v.race?.alignment?.outOfStepM)) {
-        // The plan was laid out with its timing line elsewhere (2026-11-11: 429 m of padding the
+        // The plan was laid out with its timing line elsewhere (say 429 m of padding the
         // planner drew before the start). The road places the targets; the rider is told.
         text = outOfStepWords(v.race.alignment.outOfStepM);
         tip = outOfStepTip(v.race.alignment.outOfStepM);

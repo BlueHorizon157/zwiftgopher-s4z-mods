@@ -1,5 +1,5 @@
-// The plan as the engine reads it (docs/REVAMP_PLAN.md 1.1): one shape in metres and
-// seconds from either a plan file (zg-tt-plan/1, TT/docs/plan-file-v1.md) or a share
+// The plan as the engine reads it: one shape in metres and
+// seconds from either a plan file (zg-tt-plan/1) or a share
 // payload saved before the file (the whole planner plan, km fields). Plan metre 0 is the
 // pen (the planner's start_offset_m padding is inside the plan).
 
@@ -57,7 +57,7 @@ export function normalisePlan(raw, {code = null, card = null} = {}) {
         routeMPerGameM: scaleOf(route.route_m_per_game_m),
         lineSource: route.line_source === 'measured' || route.line_source === 'rule' ? route.line_source : null,
         finishM: num(route.finish_m) > 0 ? num(route.finish_m) : null,
-        // The finish measured from races, not only the line (planner 2026-11-23): the race ends at finishM.
+        // The finish measured from races, not only the line: the race ends at finishM.
         finishSource: route.finish_source === 'measured' ? 'measured' : null,
         leadInM: km(route.lead_in_km),
         cp,
@@ -150,8 +150,8 @@ export function normaliseIntervals(rows) {
 
 /**
  * The plan's seconds from an interval's start to metre m (plan metres) inside it: by the
- * file's time marks when it has them (planner 2026-11-10: where in the interval the time
- * goes, a climb at the end of a flat interval), otherwise spread evenly over its metres.
+ * file's time marks when it has them (where in the interval the time goes: a climb at the end
+ * of a flat interval), otherwise spread evenly over its metres.
  */
 export function timeInto(iv, m) {
     const x = m - iv.startM;
@@ -203,8 +203,8 @@ function marksOf(raw, lengthM, durationS) {
     return out;
 }
 
-// A strategy card: its figures, its own plan when the file carries plan_intervals (planner
-// 2026-10-27 on), and whether it is the plan as shared (same point spans and watts).
+// A strategy card: its figures, its own plan when the file carries plan_intervals (older files
+// do not), and whether it is the plan as shared (same point spans and watts).
 function normaliseCard(card, sharedRows) {
     if (!card || typeof card !== 'object' || !card.key) {
         return null;

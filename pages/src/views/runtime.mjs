@@ -1,8 +1,7 @@
-// What every engine window does the same way (docs/REVAMP_PLAN.md 1.8, 2.2, 2.4): one
-// engine on its own subscription, the plan library and controls from store.mjs, the window's
-// preferences from Sauce's settingsStore, event info on a new subgroup, the shelf sync with
-// the planner (TT/RIDE_DAY_PLAN.md 2.4), replay support and no work while the window is
-// hidden. The window supplies render(view).
+// What every engine window does the same way: one engine on its own subscription, the plan
+// library and controls from store.mjs, the window's preferences from Sauce's settingsStore, event
+// info on a new subgroup, the shelf sync with the planner, replay support and no work while the
+// window is hidden. The window supplies render(view).
 import * as common from '/pages/src/common.mjs';
 import * as sauce from '../sauce.mjs';
 import * as store from '../store.mjs';
@@ -100,7 +99,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         }
     };
 
-    // A new plan applies at once. A strategy changes any time (Dave, 2026-11-09): racing, in
+    // A new plan applies at once. A strategy changes any time: racing, in
     // place, the clock and the W' carrying on. The same plan republished by the planner during
     // a race, or a strategy chosen after the finish, waits until this window's race is over.
     const beforeStart = () => engine.state.status === 'idle' || engine.state.status === 'armed';
@@ -222,7 +221,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
     }, {record: true});
     setInterval(draw, 1000);
 
-    // ---- the plan for the event (TT/RIDE_DAY_PLAN.md 2.4, rules 1 and 2) ----
+    // ---- the plan for the event ----
     // Joining a subgroup: the plan made for this pen, else for this event, else for this route
     // with the same laps or length, arms itself before the start; once per subgroup, for every
     // window (the shelf state keeps which pen), so a plan the rider then chooses by hand stays,
@@ -295,8 +294,8 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             return;
         }
         claim();
-        // Nothing fits this pen: a plan for another course is put away rather than raced here
-        // (Dave, 2026-11-09). Only when the event's course is known; a plan from here looks
+        // Nothing fits this pen: a plan for another course is put away rather than raced here.
+        // Only when the event's course is known; a plan from here looks
         // after itself; the rider can load it again by hand and it stays (once per pen).
         const active = activeCode ? eventPlans().find(p => p.code === activeCode) : null;
         if (active && info.routeId != null && !fitsEvent(active, event)) {
@@ -306,7 +305,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         }
     };
     // A free ride on a route with no plan: the newest plan for that route comes up, once per
-    // route, so a plan the rider puts away stays away (Dave, 2026-11-09).
+    // route, so a plan the rider puts away stays away.
     let pickedRoute = null;
     const pickForRoute = data => {
         const routeId = data?.state?.routeId;
@@ -508,7 +507,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
         };
     };
 
-    // ---- the shelf: plans from the planner arrive by themselves (TT/RIDE_DAY_PLAN.md 2.4) ----
+    // ---- the shelf: plans from the planner arrive by themselves ----
     // One window polls a minute for all of them (store.getShelf().lastPollAt is the guard),
     // only while idle or armed and visible, never while racing. A pending pairing is checked
     // every few seconds, so the planner's claim is seen even with the settings page closed.
@@ -716,7 +715,7 @@ export function startWindow({render, onReady = null, onSettings = null, onReset 
             engine.control('bias', bias);
             draw();
         },
-        // The link and the shelf (TT/RIDE_DAY_PLAN.md 2.4).
+        // The link and the shelf.
         link: () => store.getLink(),
         shelf: () => store.getShelf(),
         /** A plan that arrived while another was active: offered until used or dismissed. */
@@ -788,7 +787,7 @@ export function enginePrefs(p = {}) {
 /** Plain words for the engine's status, for any window. */
 export function statusWords(v) {
     switch (v.status) {
-        // A plan waits for its pen or its route (0.8.1); with no ticks at all, for Zwift.
+        // A plan waits for its pen or its route; with no ticks at all, for Zwift.
         case 'idle': return v.plan ? (v.rider ? 'not on its route yet' : 'waiting for Zwift') : (store.getLink()?.state === 'linked' ? 'waiting for a plan from the planner' : 'no plan loaded');
         case 'armed': return v.event?.inEvent ? 'ready, waiting for the start' : 'ready on the route';
         case 'racing': return 'racing';

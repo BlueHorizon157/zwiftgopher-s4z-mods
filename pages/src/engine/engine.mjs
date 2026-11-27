@@ -1,4 +1,4 @@
-// The one engine (docs/REVAMP_PLAN.md 1.7): plan + telemetry + controls in, a view model
+// The one engine: plan + telemetry + controls in, a view model
 // out. Pure: no DOM, no storage, no timers; the window feeds ticks and the wall clock in.
 // Every window runs its own copy on the same ticks and reaches the same numbers.
 //
@@ -13,11 +13,11 @@
 // clears statistics.
 //
 // Joining an event from a free ride, Sauce gives the subgroup a few ticks before Zwift moves the
-// rider to the pen: those ticks still carry the warm-up's road, distance and timer (2026-11-18:
-// 12.8 km and 26 minutes in, which 0.9.6 took for a race 12.8 km along). So after the subgroup
+// rider to the pen: those ticks still carry the warm-up's road, distance and timer (say 12.8 km
+// and 26 minutes in, which must not be taken for a race 12.8 km along). So after the subgroup
 // arrives nothing is placed or started until the rider is seen at the start (align.mjs
 // atEventStart). And a race whose rider is back at the start for PEN_HOLD_MS is armed again.
-// The wait is not for ever (2026-11-26 audit): a rider who joins a race in progress, or whose
+// The wait is not for ever: a rider who joins a race in progress, or whose
 // subgroup drops out and returns, is never seen at the start. It ends when the ticks show
 // another course than the one the join began on, or after JOIN_WAIT_MS; and the same subgroup
 // back within REJOIN_MS is the same race, not a join.
@@ -51,10 +51,9 @@ const OUT_OF_STEP_MOVE_M = 25;      // the kept out-of-step figure moves only fo
 // rejoin, or a clock started by mistake. Longer than one stray tick; the pen's own ticks can be
 // 17 s apart while Zwift loads the course.
 export const PEN_HOLD_MS = 2000;
-// Joined and never seen at the start: the ticks are taken as the race's after this long. The Fan
-// Flats warm-up ticks (2026-11-18) were 3 s of the subgroup and then 17 s of nothing before the
-// pen, so they are over long before this; and if a stale tick did get through, the pen arms the
-// race again (PEN_HOLD_MS).
+// Joined and never seen at the start: the ticks are taken as the race's after this long. Warm-up
+// ticks can be 3 s of the subgroup and then 17 s of nothing before the pen, so they are over long
+// before this; and if a stale tick did get through, the pen arms the race again (PEN_HOLD_MS).
 export const JOIN_WAIT_MS = 30000;
 // The same subgroup seen again this soon after it was lost is the same race.
 export const REJOIN_MS = 20000;
@@ -64,7 +63,7 @@ export const REJOIN_MS = 20000;
 export const FINISH_SLACK_M = 50;
 // The file a plan came from, apart from its intervals (the signature): the course, the finish, the
 // timing line, CP and W'. A plan sent again with the same intervals and these changed (after the
-// planner's update, or the rider's numbers) is not the plan already loaded (2026-11-26 audit).
+// planner's update, or the rider's numbers) is not the plan already loaded.
 const inputsOf = p => `${p.course ? `${p.course.count}:${p.course.m[p.course.count - 1]}` : 0}|${p.startLineM}|${p.finishM}|${p.finishSource}|${p.cp}|${p.wPrimeJ}`;
 const samePlan = (a, b) => a?.signature === b?.signature && (!a || inputsOf(a) === inputsOf(b));
 // The alignment for the view: on the course, the out-of-step figure is the kept one.
@@ -255,7 +254,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             const subgroupId = (data.state?.eventSubgroupId ?? data.eventSubgroupId) || null;
             if (subgroupId !== state.event.subgroupId && state.status === 'finished' && !subgroupId) {
                 // Left the event after the finish: the result stays until a new event or a reset
-                // (the finished latch; Dave, 2026-11-10: Zwift drops the subgroup a few minutes on).
+                // (the finished latch: Zwift drops the subgroup a few minutes on).
                 state.event = {...state.event, subgroupId: null};
                 log('Left the event after the finish: the result is kept', nowMs);
             } else if (subgroupId !== state.event.subgroupId) {
@@ -291,7 +290,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             } else if (wasJoining && !state.joining && startNow) {
                 log('In the pen: the clock starts at the timing line', nowMs);
             }
-            // Back at the start while racing (Dave, 2026-11-18: detect the pen): the race so far
+            // Back at the start while racing: the race so far
             // was not this start's, so it is cleared and armed for the line.
             if (state.status === 'racing' && eventNow && state.atStartSinceMs != null && worldMs - state.atStartSinceMs >= PEN_HOLD_MS) {
                 clearRace('back at the start of the event (in the pen)', nowMs);
@@ -394,15 +393,15 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
         const index = (sauceLength || courseEndM != null) && rawIndex >= plan.intervals.length ? plan.intervals.length - 1 : rawIndex;
         const speedMs = (Number(data.state?.speed) || 0) / 3.6;
         // The shown interval is the one the rider is in: the target switches at the boundary,
-        // when the countdown reaches zero (Dave, 2026-10-27). The plan's boundaries are the
-        // optimum (REVAMP_PLAN 6.3), so nothing here anticipates them.
+        // when the countdown reaches zero. The plan's boundaries are the optimum, so nothing here
+        // anticipates them.
         state.displayIndex = index;
         if (state.status === 'racing' && clock.running && planM != null) {
             const before = state.tracking.lastIndex;
             // A boundary crossed between two ticks was crossed in between, not at this tick: with
             // a gap in the ticks (a dropout, a stall) the whole gap went to the interval left, whose
             // metres were counted in full, and the rider looked slow by the length of the gap for
-            // minutes (2026-11-26 audit: a 6 s gap over the first boundary of Crit Cross put the
+            // minutes (a 6 s gap over the first boundary of Crit Cross put the
             // prediction 24 s out). Not timed by when the metre moved by itself (the course's lock)
             // or further than any rider rides in the time.
             const lp = state.lastRacePoint;
@@ -461,7 +460,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
             // else the plan's end at this tick's time. The interval ridden closes there.
             const toGo = distanceToGoM(data);
             // Sauce's distance to go is spent, with the rider at the event's length (FINISH_SLACK_M):
-            // one stray reading of 0 mid-race (2026-11-26 audit) is not the finish.
+            // one stray reading of 0 mid-race is not the finish.
             const edM = eventDistanceM(data);
             const finished = courseEndM != null
                 ? planM >= courseEndM
@@ -541,7 +540,7 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
 
     // After a finish the rider is still in the event, with the timer running on and the distance
     // to go spent: clearing the race there must not start a new one on that timer (a Reset or a
-    // plan loaded after the finish gave a second finish, 30 s late, in the audit). The subgroup
+    // plan loaded after the finish would give a second finish, 30 s late). The subgroup
     // to wait out, or null.
     function spentEvent() {
         return state.status === 'finished' && state.tick && inEvent(state.tick) ? subgroupOf(state.tick) : null;
@@ -582,9 +581,8 @@ export function createEngine({plan = null, prefs = {}, controls = {}} = {}) {
                 break;
             }
             case 'strategy': {
-                // The same plan in another strategy, any time (Dave, 2026-11-09; decision 8 was
-                // before the start only). Not racing, it is a new plan. Racing, the targets
-                // change in place: the clock, the W', the position, the anchors and the
+                // The same plan in another strategy, any time. Not racing, it is a new plan. Racing,
+                // the targets change in place: the clock, the W', the position, the anchors and the
                 // rider's controls stay; the interval statistics start again (the strategies'
                 // intervals differ), the interval in progress as a partial one.
                 const next = payload?.plan ? (payload.plan.signature ? payload.plan : normalisePlan(payload.plan, {code: payload.code})) : null;
@@ -799,7 +797,7 @@ const COURSE_FINISH_TRUST_M = 500;
  * The finish of a course whose finish was measured from races (route.finish_source: metre 0 is
  * the timing line and finish_m the finish, past the course's last point when the finish is
  * beyond the route data), in plan metres, or null. Sauce's own event length comes from the route
- * data and can be wrong: 84 m long on Crit Cross (2026-11-23), so the mod finished 7 s after the
+ * data and can be wrong: 84 m long on Crit Cross, so the mod finished 7 s after the
  * line (24:15 for ZwiftPower's 24:08). A course measured for its line only (the Hilly Route) keeps
  * Sauce's finish, which was right there.
  */

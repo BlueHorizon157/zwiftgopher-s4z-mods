@@ -1,4 +1,4 @@
-// What the rider did against the plan (docs/REVAMP_PLAN.md 1.5): per-interval time and
+// What the rider did against the plan: per-interval time and
 // power on the race clock, the pacing ratio, and the finish prediction. Pure functions
 // over a tracking record; nothing here reads a clock or a store.
 
@@ -42,7 +42,7 @@ function advanceOne(stats, raceS, power) {
     }
     stats.elapsedS += dt;
     if (Number.isFinite(power)) {
-        // The average is over the seconds with a reading: a dropout is not 0 W (2026-11-26 audit).
+        // The average is over the seconds with a reading: a dropout is not 0 W.
         stats.workJ += power * dt;
         stats.powerS += dt;
         stats.avgPowerW = stats.workJ / stats.powerS;
@@ -102,7 +102,7 @@ export function advance(tracking, {index, raceS, power, planM, intervals, atStar
  * interval begun before then began on those metres, shiftM short of the course's. Their metres
  * are what the speed against the plan reads (speedAgainstPlan): left unshifted, a line found
  * 69 m on credits the rider with metres not ridden, and the finish prediction said 33 s ahead
- * a minute into a race finished 9 s behind (Crit Cross, 2026-11-23).
+ * a minute into a race finished 9 s behind (Crit Cross).
  */
 export function shiftStarts(tracking, shiftM) {
     if (!Number.isFinite(shiftM) || shiftM === 0) {
@@ -152,24 +152,23 @@ export function pacingRatio(tracking, intervals) {
     return Math.min(PACING_MAX, Math.max(PACING_MIN, actualS / planS));
 }
 
-// The finish prediction (docs/REVAMP_PLAN.md 6.1). The 2026-10-27 race: a clock that
-// started 10 s before the official timer put +11 s on a 46 s first interval, and the old
-// time ratio (actual / plan over the ridden intervals, extrapolated over the rest) turned
-// that into "2:15 behind" the moment the second interval closed. So: the clock deficit is
-// carried as the constant it is, and the rest of the race is timed from the rider's power
-// against the plan, through the physics of each interval.
+// The finish prediction. A time ratio (actual / plan over the ridden intervals, extrapolated
+// over the rest) is not used: a clock that started 10 s before the official timer put +11 s on
+// a 46 s first interval, and the ratio turned that into "2:15 behind" the moment the second
+// interval closed. So the clock deficit is carried as the constant it is, and the rest of the
+// race is timed from the rider's power against the plan, through the physics of each interval.
 //
-// 2026-11-18 (The Fan Flats TT: "38 s behind" after a first interval ridden on time): the power
-// ratio alone took 45 s at 241 W against 272 W for the next half hour, at 60 s of prior. The
-// rider had crossed the line at 34.6 km/h, so the plan's power to get up to speed was not needed:
-// on time, on less power. Now the rest of the race is also answered by the rider's speed against
-// the plan at the power they rode (speedAgainstPlan, the countdown's measure, over the whole race),
-// the first START_SKIP_S after the line count for neither, and the power ratio leans on the plan
-// longer. Back-test on four recorded races with their plans (Fan Flats, California Dreamin',
-// Scotland Smash, the Hilly mass start) and four made from them (the plan 4 % fast or slow, the
-// targets 8-10 % up for the second half or the last third, as a rider who fades): mean error
-// against the delta at the finish 11.3 → 7.2 s on the real races (first five minutes 19.5 →
-// 10.3 s, worst moment 47 → 27 s), plan 4 % off 40 → 8 s, fades 14-15 → 16-17 s.
+// The power ratio alone is not enough either: after a first interval ridden on time it took
+// 45 s at 241 W against 272 W for the next half hour (at 60 s of prior) and said "38 s behind".
+// The rider had crossed the line at 34.6 km/h, so the plan's power to get up to speed was not
+// needed: on time, on less power. So the rest of the race is also answered by the rider's speed
+// against the plan at the power they rode (speedAgainstPlan, the countdown's measure, over the
+// whole race), the first START_SKIP_S after the line count for neither, and the power ratio
+// leans on the plan longer. Back-test on four recorded races with their plans and four made
+// from them (the plan 4 % fast or slow, the targets 8-10 % up for the second half or the last
+// third, as a rider who fades): mean error against the delta at the finish 11.3 → 7.2 s on the
+// real races (first five minutes 19.5 → 10.3 s, worst moment 47 → 27 s), plan 4 % off 40 → 8 s,
+// fades 14-15 → 16-17 s.
 export const POWER_WINDOW_S = 600;      // the power ratio looks back this far
 export const POWER_PRIOR_S = 300;       // and counts for half after this much sample
 export const POWER_RATIO_MIN = 0.5;

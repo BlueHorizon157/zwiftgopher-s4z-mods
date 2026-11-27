@@ -1,4 +1,4 @@
-// Replay of a telemetry recording (docs/REVAMP_PLAN.md Phase 0.3).
+// Replay of a telemetry recording.
 //
 // A recording is JSONL: one row per line, {t, ch, d} with t in ms from the recording's
 // start, ch the Sauce channel ('athlete/watching', 'nearby'), or 'rpc' for a recorded RPC

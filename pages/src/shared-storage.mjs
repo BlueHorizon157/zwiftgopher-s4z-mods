@@ -1,23 +1,19 @@
-// The state the mod's windows share (the plan library, the active plan, the controls, the
-// planner link and shelf, the recorder, the update check, the live-state heartbeat), in the
-// browser's localStorage under keys Sauce's windows leave alone.
+// State shared between the mod's windows, kept in localStorage under keys Sauce ignores.
 //
-// Sauce's storage (common.mjs LocalStorage) makes every key that starts with '/' global, and
-// every Sauce window's settings store hears each write to a global key, from any window, as a
-// change to its own settings: the Watching (grid) window reloads its page, Nearby and Groups
-// redraw everything (Sauce pages/src/common.mjs SettingsStore, watching.mjs, nearby.mjs,
-// groups.mjs, as of 2026-11). The mod writes its shared keys often enough (the shelf sync
-// once a minute, heartbeats every couple of seconds) to make those windows flicker and reload.
+// Sauce's storage treats every key starting with '/' as global, and every Sauce window's settings
+// store hears a write to a global key as a change to its own settings: the Watching window
+// reloads, Nearby and Groups redraw. The mod writes shared keys often (heartbeats every couple of
+// seconds), so under '/zg-tt/' it would make those windows flicker.
 //
-// So the mod keeps them under '~zg-tt/' instead of '/zg-tt/'. Sauce's storage handler only
-// looks at keys that start with '/' or with a window's own '<window id>-', and Sauce's window
-// ids never start with '~', so no Sauce window wakes. The mod's windows hear each other through
-// the browser's storage event, as 'globalupdate' with the key in its '/zg-tt/' form, so the
-// callers keep their keys and listeners. Other keys go to Sauce's storage as before.
+// So the mod stores them under '~zg-tt/'. Sauce's storage handler only reacts to keys starting
+// with '/' or with a window's own '<window id>-', and window ids never start with '~'. The mod's
+// windows hear each other through the browser's 'storage' event, re-emitted as 'globalupdate'
+// with the key in its '/zg-tt/' form, so callers keep their keys and listeners. Keys outside the
+// mod's prefix go to Sauce's storage unchanged.
 //
-// A key not yet under '~zg-tt/' is read once from Sauce's storage and copied across (0.9.5 and
-// earlier kept them there); Sauce's copy is left as it was, so nothing is written there. A mod
-// key deleted here is kept as null, so the old copy never comes back.
+// Older versions stored the mod's keys in Sauce's storage under '/zg-tt/'. A key missing under
+// '~zg-tt/' is read from there once and copied across; Sauce's copy is left alone. A deleted key
+// is stored as null, so the old copy cannot come back.
 
 export const MOD_PREFIX = '/zg-tt/';
 export const LOCAL_PREFIX = '~zg-tt/';
@@ -25,9 +21,8 @@ export const LOCAL_PREFIX = '~zg-tt/';
 const localKey = key => LOCAL_PREFIX + key.slice(MOD_PREFIX.length);
 
 /**
- * A copy of the mod's keys in a localStorage, held in memory, as a localStorage itself: for a
- * replay window (?replay=), which reads what is there (the plans, the link) and writes only into
- * the copy, so a replay never changes the plans, the controls or the link the real windows share.
+ * An in-memory copy of the mod's keys in a localStorage, with the same interface. A replay window
+ * (?replay=) reads from it and writes only into the copy, so it never changes the real windows' state.
  */
 export function scratchLocal(local) {
     const copy = new Map();
@@ -44,7 +39,7 @@ export function scratchLocal(local) {
     };
 }
 
-/** Sauce's storage as the mod's storage reads it, with no writes (for the replay window's other keys). */
+/** Sauce's storage with writes ignored (a replay window's non-mod keys). */
 export function readOnlyStorage(sauce) {
     return {
         get: (key, def) => sauce?.get(key, def),
@@ -57,8 +52,8 @@ export function readOnlyStorage(sauce) {
 const isMod = key => typeof key === 'string' && key.startsWith(MOD_PREFIX);
 
 /**
- * local: a localStorage (getItem/setItem/removeItem); win: where 'storage' events arrive (a
- * window); sauce: Sauce's storage (common.storage) for every other key, and the old copies.
+ * local: a localStorage; win: where 'storage' events arrive; sauce: Sauce's storage
+ * (common.storage), used for keys outside the mod's prefix and for the old copies.
  */
 export function createModStorage({local, win = null, sauce = null} = {}) {
     const listeners = new Set();
@@ -84,7 +79,7 @@ export function createModStorage({local, win = null, sauce = null} = {}) {
         }
         emit(MOD_PREFIX + ev.key.slice(LOCAL_PREFIX.length), value);
     });
-    // Sauce's own global updates (keys outside the mod's) pass through to the same listeners.
+    // Sauce's global updates for keys outside the mod's prefix pass through to the same listeners.
     sauce?.addEventListener?.('globalupdate', ev => {
         if (!isMod(ev?.data?.key)) {
             for (const fn of listeners) {

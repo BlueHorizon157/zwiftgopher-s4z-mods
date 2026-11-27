@@ -1,10 +1,9 @@
-// Loading a plan by share code into the library (docs/REVAMP_PLAN.md 2.3): a timeout,
-// one retry, upper-case codes, and a planner URL pasted instead of a code.
+// Loads a plan by share code into the library: GET share-plan.php?action=load&code=... (only the
+// code is sent), a timeout and one retry; a planner URL is accepted in place of a code.
 import * as store from '../store.mjs';
 import * as sauce from '../sauce.mjs';
 
-// The planner's share endpoint; window.ZG_PLANNER_BASE (set by the Sauce stand-in for a local
-// planner) moves it with the link and the shelf (views/shelf-sync.mjs).
+// The planner's share endpoint; window.ZG_PLANNER_BASE (local stand-in) overrides the base.
 export const SHARE_URL = 'https://zwiftgopher.com/TT/share-plan.php';
 const shareUrl = () => (typeof window !== 'undefined' && window.ZG_PLANNER_BASE ? `${window.ZG_PLANNER_BASE}/share-plan.php` : SHARE_URL);
 const TIMEOUT_MS = 8000;
@@ -16,13 +15,12 @@ export function parseCode(text) {
     return /^[A-Z0-9]{6}$/.test(code) ? code : null;
 }
 
-// The planner's share codes (TTSharedPlans::CODE_CHARS): no I, O, 0 or 1.
+// The planner's share-code alphabet: no I, O, 0 or 1.
 const SHARE_CODE = /^[A-HJ-NP-Z2-9]{6}$/;
 
 /**
- * A share code on the clipboard (5.3): the code as the planner shows it (upper case), or a
- * planner link holding one; else null. Reading needs the window focused, and any failure
- * (no permission, not focused, a browser outside Sauce) is just no offer.
+ * A share code on the clipboard: the code as the planner shows it (upper case), or a planner
+ * link holding one; else null. Reading needs the window focused; any failure is just no offer.
  */
 export async function clipboardCode() {
     let text = '';
@@ -58,8 +56,7 @@ export async function fetchPlanByCode(text) {
         const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
         try {
             const resp = await fetch(`${shareUrl()}?action=load&code=${code}`, {signal: ctl.signal});
-            // Text that is not JSON (a page from a proxy) is an answer with no plan; a body that
-            // fails to arrive (the abort, a dropped connection) is no answer, said as such below.
+            // Non-JSON text (a proxy page) counts as no plan; a body lost mid-read is rethrown.
             const body = await resp.json().catch(err => {
                 if (err?.name === 'SyntaxError') {
                     return {};

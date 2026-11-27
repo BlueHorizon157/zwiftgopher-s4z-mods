@@ -1,19 +1,16 @@
-// Is there a newer TT HUD? (Dave, 2026-11-12: the HUD says so before a ride, not only the
-// settings page.) The latest GitHub release, else the highest version among the tags, checked at
-// most once a day for every window together (Sauce's shared storage). Pure apart from the fetch
-// and the storage it is given, so test/update-check.test.mjs runs it in Node.
+// Is there a newer release? The latest GitHub release, else the highest tag version, checked at
+// most once a day for all windows (shared storage). Unauthenticated GETs to api.github.com;
+// nothing about the rider is sent. Pure: fetch and storage are arguments.
 
 export const REPO = 'BlueHorizon157/zwiftgopher-s4z-mods';
 export const RELEASES_URL = `https://github.com/${REPO}/releases/latest`;
 export const UPDATE_CHECK_MS = 24 * 3600 * 1000;
 export const STORAGE_KEY = '/zg-tt/update-check';
 export const TIMEOUT_MS = 8000;
-// A window that starts a check says so at once, for this long: the others (they start together
-// with Sauce) read it and wait for its answer instead of asking too.
+// A check in progress is claimed for this long, so windows starting together don't all ask.
 export const CLAIM_MS = 60 * 1000;
 const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
-// The tags come sorted by name as text (v0.9.3 before v0.10.0), so all of them are read and the
-// highest version taken.
+// Tags are sorted as text (v0.9.3 before v0.10.0): read up to 100, take the highest version.
 const TAGS_API = `https://api.github.com/repos/${REPO}/tags?per_page=100`;
 const VERSION_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:-([\w.]+))?$/;
 
@@ -71,17 +68,15 @@ export async function fetchLatest(fetchFn, timeoutMs = TIMEOUT_MS) {
 }
 
 /**
- * {latest, available}: the newest version known (from the day's check, or a new one when that is
- * older than UPDATE_CHECK_MS) and whether it is newer than current. storage: {get(key), set(key,
- * value)}. A failed check keeps what was known and is not tried again for an hour; a check under
- * way (CLAIM_MS) is not started again by another window.
+ * {latest, available}: the newest version known (cached for UPDATE_CHECK_MS) and whether it is
+ * newer than current. storage: {get(key), set(key, value)}. A failed check keeps the old answer
+ * and is retried after an hour.
  */
 export async function checkForUpdate({fetchFn, storage, current, now = Date.now()}) {
     const cached = storage?.get?.(STORAGE_KEY) || {};
     let latest = typeof cached.latest === 'string' ? cached.latest : null;
     if (!cached.at || now - cached.at > UPDATE_CHECK_MS) {
-        // The claim: no await between reading the answer and writing this, so of the windows that
-        // start together the first one asks and the rest see its claim.
+        // No await between reading the cache and writing the claim, so only the first window asks.
         storage?.set?.(STORAGE_KEY, {at: now - UPDATE_CHECK_MS + CLAIM_MS, latest});
         const fetched = await fetchLatest(fetchFn);
         if (fetched) {
@@ -103,9 +98,9 @@ export function modIdFromPath(pathname) {
 }
 
 /**
- * 'store' (packed, from Sauce's mod store), 'folder' (unpacked) or null when the list does not
- * have this id. mods: Sauce's getAvailableMods answer. The id is the top-level one Sauce reports,
- * never the manifest's: a store install ignores the manifest id.
+ * 'store' (packed, from Sauce's mod store), 'folder' (unpacked) or null when mods
+ * (getAvailableMods) lacks this id. The id is Sauce's top-level one: a store install ignores the
+ * manifest id.
  */
 export function installKindOf(mods, id) {
     const mine = id && Array.isArray(mods) ? mods.find(m => m?.id === id) : null;
@@ -128,7 +123,6 @@ export async function askInstallKind(rpc, pathname) {
     return null;
 }
 
-/** askInstallKind for this page, asked once. */
 let kindAsked = null;
 export function installKind(rpc, pathname) {
     kindAsked ??= askInstallKind(rpc, pathname);

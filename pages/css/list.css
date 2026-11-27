@@ -1,4 +1,4 @@
-/* The interval list (docs/REVAMP_PLAN.md 4.5, Phase 4.1): a compact plan table over the
+/* The interval list: a compact plan table over the
  * game, on the shared tokens. Sizes come from --u with the 11 px floor. */
 html {
   padding: 0;

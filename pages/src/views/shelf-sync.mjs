@@ -1,23 +1,21 @@
-// The rider link and the shelf, as the mod sees them (TT/RIDE_DAY_PLAN.md 2.1, 2.4): pairing
-// with the planner (link.php), reading the rider's shelf (shelf.php) and deciding what a new
-// plan does. Pure: the network, the clock, the library and the link state all come in as
-// arguments, so the rules run in Node (test/shelf-sync.test.mjs); views/runtime.mjs wires
-// them to Sauce. No API keys anywhere: the token is made by pairing and never shown.
+// The rider link and the shelf: pairing with the planner (link.php), reading the rider's shelf
+// (shelf.php), deciding what a new plan does. Pure (network, clock, library and link state are
+// arguments); views/runtime.mjs wires it to Sauce. The only credential is the device token
+// that pairing returns.
 
 export const PLANNER_BASE = 'https://zwiftgopher.com/TT';
-export const POLL_MS = 60000;          // the shelf, while idle or armed and the window is visible
-export const POLL_GUARD_MS = 50000;    // another window polled this recently: let it be
-export const PENDING_POLL_MS = 5000;   // the pairing status, while a code waits for the planner
+export const POLL_MS = 60000;          // shelf poll, while idle or armed and the window is visible
+export const POLL_GUARD_MS = 50000;    // another window polled this recently: skip
+export const PENDING_POLL_MS = 5000;   // pairing status poll, while a code waits for the planner
 export const TIMEOUT_MS = 8000;
-export const PLAN_TIMEOUT_MS = 30000;   // Plan it and Plan from here: a rider lookup and an optimise (1-8 s) behind the gate
+export const PLAN_TIMEOUT_MS = 30000;  // Plan it / Plan from here: rider lookup and optimise (1-8 s)
 
 const base = () => (typeof window !== 'undefined' && window.ZG_PLANNER_BASE) || PLANNER_BASE;
 
 async function request(fetchFn, url, {method = 'GET', token = null, body = null, headers = {}, timeoutMs = TIMEOUT_MS} = {}) {
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctl ? setTimeout(() => ctl.abort(), timeoutMs) : null;
-    // Ask for JSON: the planner keeps PHP's error text out of a JSON request (a CORS-safelisted
-    // header, so no preflight of its own).
+    // Accept: JSON keeps PHP error text out of the reply; the header is CORS-safelisted.
     const h = {Accept: 'application/json', ...headers};
     if (token) {
         h.Authorization = `Bearer ${token}`;
@@ -34,8 +32,7 @@ async function request(fetchFn, url, {method = 'GET', token = null, body = null,
     }
     try {
         const resp = await fetchFn(url, {method, headers: h, body: data ? data.toString() : undefined, signal: ctl?.signal});
-        // A body that fails to arrive (the abort, a dropped connection) is a failed request, not an
-        // empty answer: the catch below gives it status 0.
+        // A body that fails to arrive (abort, dropped connection) is a failed request (status 0).
         const text = await resp.text();
         let json = null;
         try {
@@ -63,7 +60,7 @@ export async function serverSupportsLink(fetchFn) {
     return Boolean(r.ok && r.json?.link);
 }
 
-/** Ask for a pairing code: {code, token, expiresAt, linkId, deviceId}. */
+/** Ask for a pairing code (sends athlete id, name, label): {code, token, expiresAt, linkId, deviceId} */
 export async function linkStart(fetchFn, {athleteId, name = null, label = 'Sauce4Zwift'}) {
     const r = await request(fetchFn, `${base()}/link.php`, {method: 'POST', body: {action: 'start', athlete_id: athleteId, name, label}});
     if (!r.ok || !r.json?.code) {
@@ -72,7 +69,7 @@ export async function linkStart(fetchFn, {athleteId, name = null, label = 'Sauce
     return {code: r.json.code, token: r.json.token, expiresAt: r.json.expires_at, linkId: r.json.link_id, deviceId: r.json.device_id};
 }
 
-/** {state: pending|linked|expired|revoked|unknown, code?, expiresAt?, link?}. */
+/** {state: pending|linked|expired|revoked|unknown|offline|error, code?, expiresAt?, link?}. */
 export async function linkStatus(fetchFn, token) {
     const r = await request(fetchFn, `${base()}/link.php?action=status`, {token});
     if (r.status === 0) {
@@ -90,19 +87,16 @@ export async function linkRevoke(fetchFn, token, deviceId = null) {
 // ---- the shelf (shelf.php) ----
 
 /**
- * One sync: the listing (304 when nothing changed), the plans the library lacks or that were
- * republished, each fetched by its code and acknowledged.
- *
- * library: {has(code) -> entry|null, save(code, raw, meta), prune?(codes) -> removed codes,
- * dismissed?(listing entry) -> whether the rider removed this plan by hand (it is not fetched);
- * loadPlan(code) -> {raw, meta}. The shelf keeps one plan per course; a plan from it that it no
- * longer lists (replaced, or taken off in the planner) leaves the library (prune).
- * canApply?() -> whether the library may change now (the caller's engine is before the start):
- * asked before the library is touched and before each plan is saved, so a sync that began before
- * the start changes nothing once the race is on; what was left is for the next poll.
- * Returns {status: 'unchanged'|'ok'|'revoked'|'unsupported'|'error'|'unpaired', etag, plans, added, removed, link, error, incomplete}.
- * incomplete: a plan could not be fetched or applied now; the etag is null then, so the next poll
- * reads the listing again instead of being told 304.
+ * One sync: list the shelf (304 when unchanged), fetch each plan the library lacks or that was
+ * republished, and acknowledge it ('fetched').
+ * library: {has(code) -> entry|null, save(code, raw, meta), prune?(codes) -> removed codes (plans
+ * the shelf no longer lists), dismissed?(entry) -> true when the rider removed the plan by hand}.
+ * loadPlan(code) -> {raw, meta}. canApply?() -> whether the library may change now (engine before
+ * the start): checked before each change, so a sync begun before the start does nothing once the
+ * race is on.
+ * Returns {status: 'unchanged'|'ok'|'revoked'|'unsupported'|'error', etag, plans, added, removed,
+ * link, error, incomplete}. incomplete: a plan was not fetched or applied; etag is null
+ * so the next poll re-reads the listing instead of getting a 304.
  */
 export async function syncOnce({fetchFn, token, etag = null, library, loadPlan, canApply = null}) {
     const r = await request(fetchFn, `${base()}/shelf.php?action=list`, {token, headers: etag ? {'If-None-Match': etag} : {}});
@@ -122,7 +116,7 @@ export async function syncOnce({fetchFn, token, etag = null, library, loadPlan, 
     if (canApply && !canApply()) {
         return {status: 'ok', etag: null, plans, added: [], removed: [], link: r.json.link ?? null, incomplete: true};
     }
-    // First the plans the shelf no longer has, so a replacement under a new code takes the place.
+    // Prune first, so a replacement under a new code takes the old plan's place.
     const removed = library.prune ? library.prune(plans.map(p => p.code)) : [];
     const added = [];
     let incomplete = false;
@@ -146,8 +140,7 @@ export async function syncOnce({fetchFn, token, etag = null, library, loadPlan, 
             added.push(p.code);
             await request(fetchFn, `${base()}/shelf.php`, {method: 'POST', token, body: {action: 'fetched', code: p.code}});
         } catch (err) {
-            // The next poll tries again, so the listing does not count as read: with its etag a 304
-            // would say nothing changed and the plan would never come.
+            // Retried next poll; the etag is withheld (incomplete), or a 304 would hide the plan.
             incomplete = true;
             console.warn('[shelf] plan', p.code, err);
         }
@@ -168,13 +161,11 @@ export function needsFetch(entry, have) {
 }
 
 /**
- * What a window does with the active plan after a change in the store: 'same' (nothing to do),
- * 'apply' (hand it to the engine), 'swap' (racing: another strategy of the same plan, its
- * targets in place, the clock and the W' carrying on; Dave, 2026-11-09, any plan) or 'wait'
- * (the same plan republished during a race, or a strategy chosen after the finish: for the next
- * ride). A plan is its code, its strategy card and when the library saved it: the planner
- * republishes an edited plan under the same code, so the save time tells the new file from the
- * old one. {code, card, savedAt} each; status: the engine's.
+ * What a window does with the active plan after a store change: 'same', 'apply' (hand it to the
+ * engine), 'swap' (racing: another strategy of the same plan; targets change in place, clock and
+ * W' carry on) or 'wait' (same plan republished mid-race, or a strategy chosen after the finish:
+ * for the next ride). A plan is {code, card, savedAt}: an edited plan is republished under the
+ * same code, so the save time tells new from old. status: the engine's.
  */
 export function activePlanStep(now, had, status) {
     if (now.code === had.code && now.card === had.card && now.savedAt === had.savedAt) {
@@ -187,13 +178,10 @@ export function activePlanStep(now, had, status) {
 }
 
 /**
- * What a new plan does (decision 3, revised by Dave 2026-11-09: a plan comes up on its course
- * or in its pen, not wherever the rider happens to be). Before the start, the newest arrival
- * that fits where the rider is (planForPlace) becomes the plan; any other arrival is offered,
- * to load by hand. While racing nothing moves (the caller does not sync then anyway).
- * entries: planEntry()s for the library (code, routeId, laps, lengthM, event), newest first;
- * where: {event: {eventId, subgroupId, routeId, laps, distanceM}} in a pen, {routeId} on a
- * free ride, or null.
+ * What a new plan does. Before the start, the newest arrival that fits where the rider is
+ * (planForPlace) becomes the plan and any other is offered; while racing nothing moves.
+ * entries: planEntry()s (code, routeId, laps, lengthM, event), newest first; where: {event:
+ * {eventId, subgroupId, routeId, laps, distanceM}} in a pen, {routeId} on a free ride, or null.
  */
 export function chooseActivation({added, plans, entries = [], activeCode, where = null, beforeStart}) {
     if (!added.length || !beforeStart) {
@@ -209,11 +197,7 @@ export function chooseActivation({added, plans, entries = [], activeCode, where 
     return {activate: null, offer: newest !== activeCode && newest !== fit ? newest : null};
 }
 
-/**
- * The plan for where the rider is, from entries (newest first): in a pen, choosePlanForEvent's
- * (the pen's, the event's, the route's with the same laps or length); on a free ride, the newest
- * plan for the route. Null when none fits.
- */
+/** The plan for where the rider is (entries newest first): the event's in a pen, else the route's. */
 export function planForPlace(entries, where) {
     if (!entries?.length || !where) {
         return null;
@@ -227,7 +211,6 @@ export function planForPlace(entries, where) {
     return null;
 }
 
-/** Whether a plan fits an event: what choosePlanForEvent would pick from it alone. */
 export function fitsEvent(entry, event) {
     return Boolean(entry && event) && choosePlanForEvent({plans: [entry], event}) === entry.code;
 }
@@ -246,7 +229,7 @@ export function shouldPoll({link, quiet, visible, lastPollAt, now, force = false
     return now - (lastPollAt ?? 0) > POLL_GUARD_MS;
 }
 
-/** The rider's signed-up time trials in Sauce's event cache (Phase 2 reads them; here for the toast). */
+/** The rider's signed-up time trials in Sauce's event cache, soonest first. */
 export function signedUpTimeTrials(events, now) {
     return (events ?? [])
         .filter(e => (e.eventType === 'TIME_TRIAL' || (e.rulesSet ?? []).includes('NO_DRAFTING')) && (e.eventSubgroups ?? []).some(sg => sg.signedUp))
@@ -264,13 +247,9 @@ export function signedUpTimeTrials(events, now) {
         });
 }
 
-// ---- events (TT/RIDE_DAY_PLAN.md 2.4) ----
-
 /**
- * The plan to arm for the event the rider is in (decision 3, rules 1 and 2): the plan made for
- * this pen, else for this event, else the plan for this route whose length (a distance event)
- * or laps (a laps event) match. Entries: {code, routeId, laps, lengthM, event}. Null when the
- * active plan already is the match, or nothing matches.
+ * The plan to arm for an event: the one made for this pen, else for this event, else for this
+ * route with matching length (distance event) or laps. Null when it is already active or none fits.
  */
 export function choosePlanForEvent({plans, event, activeCode = null}) {
     if (!event || !plans?.length) {
@@ -295,10 +274,7 @@ export function courseMatches(plan, event) {
     return laps <= 0 || plan.laps == null || Number(plan.laps) === laps;
 }
 
-/**
- * The next time trial for the HUD: the soonest signed-up TT Sauce knows (signedUpTimeTrials)
- * or the soonest event a shelf plan was made for, with the plan that fits it, if any.
- */
+/** The HUD's next time trial: the soonest signed-up TT or shelf-plan event, with its fitting plan. */
 export function nextTimeTrial({signedUp = [], plans = [], now}) {
     const candidates = [];
     for (const e of signedUp) {
@@ -337,13 +313,10 @@ export async function shelfSignups(fetchFn, token, rows) {
     return Boolean(r.ok && r.json?.success);
 }
 
-// ---- Plan it (TT/RIDE_DAY_PLAN.md 2.5) ----
-
 /**
- * An optimised plan for an event, built by the planner for the linked rider and put on the
- * shelf: {code, file, meta: {inputs_source, route_name, time_text, ...}}. target: {routeId,
- * laps, distanceM, eventId | id, subgroupId, ts | start, name, rules}. Throws an Error with
- * .status and .retryAfter (seconds) when the planner says no.
+ * Plan it: the planner builds an optimised plan for the linked rider and an event and shelves it:
+ * {code, file, meta}. target: {routeId, laps, distanceM, eventId | id, subgroupId, ts | start,
+ * name, rules}. Throws an Error with .status and .retryAfter (seconds) when the planner refuses.
  */
 export async function shelfPlan(fetchFn, token, target, {inputsSource = 'last'} = {}) {
     const body = {
@@ -369,10 +342,9 @@ export async function shelfPlan(fetchFn, token, target, {inputsSource = 'last'} 
 }
 
 /**
- * Plan from here (README "Plan from here"): the planner plans the rest of the race or route
- * lap for the linked rider from from-here.mjs's target, the ride's power (powerHistory) and
- * the bike (chooseBike), and puts it on the shelf: {code, file, meta: {from_here, ...}}.
- * Throws as shelfPlan does.
+ * Plan from here: the planner plans the rest of the race or route lap for the linked rider from
+ * from-here.mjs's target, the ride's power (powerHistory) and the bike (chooseBike), and puts it
+ * on the shelf: {code, file, meta: {from_here, ...}}. Throws as shelfPlan does.
  */
 export async function shelfPlanFromHere(fetchFn, token, req, {inputsSource = 'last'} = {}) {
     const body = {

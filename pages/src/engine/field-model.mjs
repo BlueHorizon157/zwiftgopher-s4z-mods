@@ -1,4 +1,4 @@
-// The riders around you (docs/REVAMP_PLAN.md 4.5, Phase 4.2 and 4.4). Pure: Sauce's `nearby`
+// The riders around you. Pure: Sauce's `nearby`
 // list goes in with the time, rows come out; no DOM, storage or timers.
 //
 // Every rider gets a checkpoint every 50 m of event distance holding the world time they
@@ -299,7 +299,7 @@ export function ingest(field, entries, nowMs, {lineM = null, kind = null, gunMs 
  * the category of the tick that reported it as the event's (lengthFor), and the line follows that
  * tick while the home rider is in the category. A free ride reports its route's length too, and
  * the nearby list and the home tick can be a second out of step: joining a pen from a warm-up
- * (2026-11-14, CTT on Scotland Smash), the first list in the race's category came with the
+ * the first list in the race's category came with the
  * warm-up route's 15.37 km, and every rider "finished" 2.7 km early. A new category with no
  * length of its own yet has no line. Once the home rider has left the event (no category), the
  * game reports the ride on: the line stays where it was. Callers that pass no lengthFor (tests,
@@ -678,7 +678,7 @@ export function drift(r) {
 // ---- the rivals track's range and the field's gap mode (settings) ----
 
 export const TRACK_RANGES = ['30', '60', '120', '300', 'field'];
-export const DEFAULT_TRACK_RANGE = '30';   // Dave, 2026-11-18: ±30 s either side of your marker
+export const DEFAULT_TRACK_RANGE = '30';   // ±30 s either side of your marker
 export const GAP_MODES = ['clock', 'finish'];
 const FIELD_STEPS_S = [15, 30, 60, 120, 300, 600];
 

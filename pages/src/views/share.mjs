@@ -1,17 +1,15 @@
-// The mod's live state, shared through Sauce: once a tick, the target, the next change and
-// where the rider is in the plan go into the rider's athlete data (Sauce's updateAthleteData
-// RPC) as `zgtt`, where anything that reads Sauce can see them: athlete/v2/self over HTTP,
-// the athlete/self and athlete/watching streams, other Sauce windows.
+// The mod's live state, shared through Sauce: once a tick the target, the next change and the
+// rider's place in the plan go into the rider's athlete data (updateAthleteData RPC) as `zgtt`,
+// visible to anything that reads Sauce: athlete/v2/self, the athlete/self and watching streams.
 //
-// Every engine window has its own engine, and one opened mid-race may not agree with the
-// rest, so one window shares at a time: the first to start, holding a heartbeat under
-// '/zg-tt/share' in the mod's storage (shared-storage.mjs: kept where Sauce's windows don't
-// hear it, and not one of store.mjs's keys, so no window redraws for it). When it closes, the
-// heartbeat goes stale and the next window takes over.
+// One window shares at a time (each engine window has its own engine; one opened mid-race may
+// disagree): the first to start holds a heartbeat under '/zg-tt/share' in the mod's storage
+// (shared-storage.mjs; not a store.mjs key, so no window redraws for it). When that window closes
+// the heartbeat goes stale and another takes over.
 //
 // zgtt (version 1):
 //   v          1
-//   wt         the world time (ms) of the tick it was made from: compare with state.worldTime
+//   wt         world time (ms) of the tick it was made from: compare with state.worldTime
 //   status     idle | armed | racing | finished
 //   code, card, routeId, routeName     the plan (code null with no plan)
 //   targetW    the target now, with the rider's bias (the first interval's before the plan)
@@ -19,14 +17,14 @@
 //   number, intervals                  the interval (from 1) and how many
 //   bias, offsetM                      the rider's controls
 //   planM, remainingM                  where the rider is in the plan, and to the finish
-//   raceS, deltaS                      the race clock from the line, and the finish predicted against the plan's (+ slower)
+//   raceS, deltaS                      race clock from the line; predicted finish against the plan's (+ slower)
 //   next       {w, planW, inM, inS} the next change, or null on the last interval
 
 export const SHARE_KEY = '/zg-tt/share';
 export const HEARTBEAT_MS = 2000;   // the sharing window writes its heartbeat this often
 export const STALE_MS = 5000;       // a heartbeat older than this: another window takes over
 export const VERSION = 1;
-export const RETRY_MS = 60000;      // after a failed call, the next try
+export const RETRY_MS = 60000;      // wait after a failed updateAthleteData call
 
 const round1 = x => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);
 
@@ -60,10 +58,7 @@ export function sharedState(view, worldMs = null) {
     };
 }
 
-/**
- * One window's sharer: tick(viewFn, data) each tick. viewFn is only called when this window
- * shares. rpc is Sauce's (updateAthleteData), storage the mod's (shared-storage.mjs; get/set).
- */
+/** One window's sharer: tick(viewFn, data) each tick (viewFn runs only while this window shares). */
 export function createSharer({rpc, storage, id = Math.random().toString(36).slice(2), now = () => Date.now()}) {
     let lastBeat = 0;
     let failedAt = null;
@@ -96,13 +91,12 @@ export function createSharer({rpc, storage, id = Math.random().toString(36).slic
                 return null;
             }
             Promise.resolve(rpc.updateAthleteData('self', {zgtt: state})).catch(err => {
-                // Sauce without the call, or not answering: wait a minute (one warning, not one a second).
+                // Sauce lacks the call or is not answering: back off (one warning, not one a second).
                 failedAt = now();
                 console.warn('[share] updateAthleteData', err);
             });
             return state;
         },
-        /** Let go of the heartbeat now (the window is closing). */
         stop() {
             if (storage?.get(SHARE_KEY)?.id === id) {
                 storage.set(SHARE_KEY, null);

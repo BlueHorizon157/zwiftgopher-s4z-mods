@@ -5,7 +5,7 @@ import {remainingOf} from './race-time.mjs';
 /**
  * What the field model needs from the window's view (and its plan) with each nearby list. Every
  * rider's eventDistance sits at zero until the timing line, so in event metres the line is 0,
- * whatever the route (docs/REVAMP_PLAN.md 6.2). The event's length is the line you finish at: a
+ * whatever the route. The event's length is the line you finish at: a
  * rider who passes it is finished (field-model.mjs). lengthFor is the category it was read for
  * (null when the tick has none, as on a warm-up route). The plan's finish takes the place of
  * Sauce's length where it is better (finishLineOf). spectating: your race is paused for another

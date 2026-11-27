@@ -1,14 +1,14 @@
-// The rivals strip (docs/REVAMP_PLAN.md 4.5, Phase 4.4): the riders nearest you on the clock,
+// The rivals strip: the riders nearest you on the clock,
 // ahead and behind, at the same distance along the course as you: how far (the gap now) and how
 // fast the gap moves (the last minutes). In the middle your place among the riders you can
 // compare with, and the verdict on the finish once the outlook is settled (finish-outlook.mjs).
 // Below, every comparable rider on a track by the same gap. Colour is for the riders in play
-// only (Dave, 2026-11-10), on the dot and the name: green a target (ahead, and you beat them or
+// only, on the dot and the name: green a target (ahead, and you beat them or
 // finish close at this pace), red a threat (behind, and they beat you or finish close); everyone
 // else stays plain. The call comes from the finish outlook, needs the rider's pace (90 s of
 // shared history), and is faint until the outlook settles; called dots sit on top of the rest.
-// The rate is coloured by its sign, as the field's trend (Dave, 2026-11-18: good or bad at a
-// glance): green when you gain on the rider, red when you lose.
+// The rate is coloured by its sign, as the field's trend (good or bad at a glance): green when
+// you gain on the rider, red when you lose.
 import {startWindow} from './views/runtime.mjs';
 import {startFieldFeed, boundariesOf, fmtGap, shortName, outlookInputsOf, playCall, playWords} from './views/field-feed.mjs';
 import {rows as fieldRows, rivalsOf, trackScale, trackRangeOf, drift, migrateFieldPrefs} from './engine/field-model.mjs';

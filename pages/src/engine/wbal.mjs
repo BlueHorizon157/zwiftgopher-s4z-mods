@@ -1,6 +1,6 @@
 // The planner's W'bal kernel (inc/wprimebalance.class.php, WPrimeBalance::update with the
 // TT planner's recovery cap, TT::RECOVERY_CAP = 1.0), so the live W'bal spends and refills
-// exactly as the plan's wbal_kj figures were computed (decision 3, 2026-10-27).
+// exactly as the plan's wbal_kj figures were computed.
 //
 // Depletion above CP is (P - CP) * dt. Below CP the deficit refills on the Bartram 2018
 // time constant tau = 2287.2 * DCP^-0.688 divided by the calibrated gain, with the refill

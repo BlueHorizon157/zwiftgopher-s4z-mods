@@ -1,4 +1,4 @@
-/* The TT HUD (docs/REVAMP_PLAN.md 4.4): one page, three layouts (html[data-layout]).
+/* The TT HUD: one page, three layouts (html[data-layout]).
  * Everything is sized from --u, which each layout derives from the window with an 11 px floor. */
 html {
   font-family: var(--font);
@@ -173,7 +173,7 @@ html[data-band-words="false"] .live .word { display: none; }
 .banner .name { color: var(--ink); }
 .hud.spectating .hud-grid { opacity: 0.45; }
 
-/* a plan from the planner, offered before the start (TT/RIDE_DAY_PLAN.md 2.4) */
+/* a plan from the planner, offered before the start */
 .toast {
   position: absolute;
   left: 50%;
@@ -444,7 +444,7 @@ html[data-bg="smoke"] .dial-svg .disc { fill: rgba(4, 8, 14, 0.34); }
 html[data-bg="dark"] .dial-svg .disc { fill: rgba(4, 8, 14, 0.2); }
 .dial-svg .track { fill: none; stroke: rgba(245, 247, 250, 0.2); stroke-width: 12; stroke-linecap: round; }
 .dial-svg .target-arc { fill: none; stroke: rgba(245, 247, 250, 0.3); stroke-width: 18; stroke-linecap: butt; }
-/* the current target is green (Dave, 2026-11-10), apart from the next one (dashed white, amber when soon) */
+/* the current target is green, apart from the next one (dashed white, amber when soon) */
 .dial-svg .target-tick { fill: none; stroke: var(--on); stroke-width: 4; stroke-linecap: round; filter: drop-shadow(0 0 1.5px var(--halo)); }
 .dial-svg .under-stroke { fill: none; stroke: var(--halo); stroke-width: 14; stroke-linecap: round; }
 .dial-svg .live-arc { fill: none; stroke: var(--ink-2); stroke-width: 10; stroke-linecap: round; }
